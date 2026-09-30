@@ -37,18 +37,37 @@ export const fieldHints = {
   uninsuredMotorist: 'In NC, UM/UIM limits cannot be higher than the Bodily Injury limits.',
   deductibles: 'Lower deductibles cost more each month. Collision coverage requires Comprehensive coverage on the same vehicle.',
   reports: 'The MVR (driving record) and CLUE (claims history) verify what the customer told you. Undisclosed findings change the premium.',
+  continuousInsurance: 'Continuous prior insurance is one of the biggest rating factors. Point of Sale reports will verify this answer with the vendor.',
+  allDriversListed: 'Every licensed household member and regular operator must be listed or excluded. Answering No stops the quote.',
+  priorCancellation: 'Cancellations for non-payment are excluded from this question. Other cancellations in the past 5 years add a surcharge.',
+  jointOwnership: 'Vehicles owned by a business or jointly with someone outside the household are not eligible for a personal auto policy.',
+  primaryResidence: 'Single Family Home, Condo and Townhouse residences qualify for the Homeowner discount.',
+  crossSell: 'Any additional product the customer has or will buy in the next month earns the Multi Policy discount. Choose No additional risks apply if none.',
+  snapshot: 'Snapshot is a usage-based program. Enrolling earns an upfront participation discount; good driving can earn more at renewal.',
+  customEquipment: 'The first $1,000 of aftermarket equipment is included. Enter the total value of custom parts, up to $5,000.',
+  umpd: 'Uninsured Motorist Property Damage pays for damage caused by an uninsured driver, after a $100 deductible.',
+  clue: 'Auto CLUE returns the customer’s claims history and prior insurance record. It should always be ordered.',
+  mvr: 'MVR returns the driving record for each rated driver. MVRs can carry agency fee charges, so uncheck MVR if it is not required.',
+  garaging: 'The garaging address is where the vehicle is parked overnight. If it differs from the mailing address, enter it here.',
   billPlan: 'Paid in Full saves 8% on the 12-month premium. EFT is the most reliable monthly option.',
 } as const;
 
 export type HintKey = keyof typeof fieldHints;
 
 export const stepHints: string[] = [
-  'Collect the principal named insured\'s identity, contact details and mailing address, then read the consumer disclosure before moving on.',
+  'Collect the principal named insured’s identity, contact details and mailing address, then read the consumer disclosure before moving on.',
   'Add every vehicle garaged at the household. Use the VIN when possible: it fills the ISO symbols and build data automatically.',
   'List every household member age 15+. Each person must be Rated or Excluded, and every incident in the last 5 years must be disclosed.',
-  'Prior insurance and residence details affect eligibility. Paperless is a quick $10/month savings if the customer has email.',
-  'Build the coverage package, then order MVR & CLUE reports. The Safe Driver discount only applies once the reports clear.',
-  'Review the full portfolio with the customer. Make sure reports have been ordered before heading to Point of Sale.',
-  'Pick the bill plan and payment method, then complete each acknowledgment with the customer on the line.',
-  'Bind the policy to generate a policy number, then print or save the binder for the customer file.',
+  'Answer the underwriting questions exactly as the customer states them, then capture paperless, residence and any other products for bundling discounts.',
+  'Adjust coverages with the customer, then click RECALCULATE to get a preliminary rate and choose a bill plan. The rate is final only after Point of Sale reports.',
+  'Review the quoted product portfolio and confirm any bundle opportunities before running Point of Sale.',
+  'Confirm VINs, garaging and license numbers, choose which reports to order, then click ORDER POINT OF SALE. Resolve any vendor discrepancies with the customer.',
+  'Collect payment authorization, complete the checklist and bind the policy. Print or email the documents from OPTIONS > Print/Email/Fax.',
+];
+
+export const productGuides: { title: string; points: string[] }[] = [
+  { title: 'Auto Product Guide', points: ['Policy term is 6 months; premiums shown are for the full term.', 'Liability limits are shown as per-person / per-accident bodily injury / property damage, in thousands.', 'North Carolina requires UM/UIM limits no higher than the bodily injury limits.', 'Collision coverage requires Other Than Collision (comprehensive) coverage on the same vehicle.'] },
+  { title: 'Point of Sale Reports', points: ['Auto CLUE returns claims history and prior insurance; MVR returns driving records.', 'Rates before Point of Sale are preliminary. Report results can raise or lower the premium.', 'When vendor data differs from what the insured provided, confirm with the customer before clicking Continue.'] },
+  { title: 'Bill Plans & Fees', points: ['Pay In Full receives the Paid in Full discount and has no installment fees.', 'EFT and Automatic Card plans carry a .00 fee per future payment; Pay By Mail carries .00.', 'Use VIEW ALL AVAILABLE PLANS to show 2-payment options.'] },
+  { title: 'Snapshot Reference Card', points: ['Customers save for signing up and can earn more at every renewal based on driving habits.', 'Mobile App and Plug-In Device enrollment both qualify for the participation discount.'] },
 ];

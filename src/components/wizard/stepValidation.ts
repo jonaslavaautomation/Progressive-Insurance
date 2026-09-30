@@ -5,9 +5,15 @@ export interface StepValidationState {
   errors: FieldErrors;
   /** Errors only surface after the VA tries to leave the step. */
   show: boolean;
+  /** Shows the error summary and highlights (used by RECALCULATE as well as Next). */
+  reveal: () => void;
 }
 
-export const StepValidationContext = createContext<StepValidationState>({ errors: {}, show: false });
+export const StepValidationContext = createContext<StepValidationState>({ errors: {}, show: false, reveal: () => undefined });
+
+export function useStepValidation(): StepValidationState {
+  return useContext(StepValidationContext);
+}
 
 export function useFieldError(id: string | undefined, explicit?: string): string | undefined {
   const { errors, show } = useContext(StepValidationContext);

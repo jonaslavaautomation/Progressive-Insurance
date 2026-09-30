@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  font-family: Inter, Roboto, Arial, sans-serif;
+  font-family: Roboto, Arial, sans-serif;
   color: #101820;
   background: #f3f4f6;
   font-synthesis: none;
@@ -19,10 +19,22 @@ button, a { transition: color 160ms ease, background-color 160ms ease, border-co
   .app-zoom { zoom: 1.25; }
 }
 
+.font-slab { font-family: "Roboto Slab", Georgia, serif; }
+
+/* Wizard selects draw their own chevron. */
+.wizard-select { appearance: none; -webkit-appearance: none; }
+
 /* Final Sale binder: print only the quote sheet at natural size. */
 @media print {
   @page { margin: 12mm; }
   .app-zoom { zoom: 1; }
   :root, body { background: #fff; }
   .print-area { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* Document Center preview: when open, print only the previewed document. */
+@media print {
+  body:has(.print-portal) #root { display: none; }
+  .print-portal { position: static !important; overflow: visible !important; background: none !important; padding: 0 !important; }
+  .print-portal .no-print { display: none !important; }
 }

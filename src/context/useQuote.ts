@@ -1,10 +1,15 @@
 import { createContext, useContext } from 'react';
-import type { AdditionalDetails, Coverages, Driver, Incident, MailingAddress, NamedInsured, PointOfSale, PolicyInfo, QuoteSummary, RatingResult, Vehicle } from '@/types/quote';
+import type { AdditionalDetails, AgentProfile, BillPlanQuote, Coverages, Driver, Incident, MailingAddress, NamedInsured, PointOfSale, PolicyInfo, QuoteSummary, RatingResult, SimulatedReports, Vehicle } from '@/types/quote';
 import type { QuoteState } from '@/context/quoteStore';
+import type { PosOrderResult } from '@/utils/reportSimulator';
 
 export interface QuoteContextValue {
   state: QuoteState;
+  /** Live rating of the current inputs (shown only while `rated`). */
   rating: RatingResult;
+  /** True when the displayed premium matches the current inputs (no RECALCULATE needed). */
+  rated: boolean;
+  plan: BillPlanQuote;
   summary: QuoteSummary;
   updatePolicy: (patch: Partial<PolicyInfo>) => void;
   updateInsured: (patch: Partial<NamedInsured>) => void;
@@ -21,12 +26,21 @@ export interface QuoteContextValue {
   updateAdditional: (patch: Partial<AdditionalDetails>) => void;
   updateCoverages: (patch: Partial<Coverages>) => void;
   updatePointOfSale: (patch: Partial<PointOfSale>) => void;
-  calculatePremium: () => RatingResult;
-  orderSimulatedReports: () => Promise<void>;
+  recalculate: () => void;
+  updateReports: (patch: Partial<Pick<SimulatedReports, 'orderClue' | 'orderMvr'>>) => void;
+  /** Places the POS order; resolves with vendor results, or null if the order was superseded. */
+  orderPointOfSale: () => Promise<PosOrderResult | null>;
+  applyPosOrder: (result: PosOrderResult, priorSource: 'vendor' | 'insured') => void;
+  cancelPosOrder: () => void;
+  dismissPremiumChange: () => void;
   bindPolicy: () => void;
+  duplicateQuote: () => string;
+  updateAgent: (agent: AgentProfile) => void;
   goToStep: (step: number) => void;
   showDashboard: () => void;
+  showDocuments: () => void;
   toggleHints: () => void;
+  toggleKeyboardHelp: () => void;
   loadSampleQuote: () => void;
   resetQuote: () => void;
 }
