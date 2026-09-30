@@ -18,3 +18,11 @@ button, a { transition: color 160ms ease, background-color 160ms ease, border-co
 @media (min-width: 1024px) {
   .app-zoom { zoom: 1.25; }
 }
+
+/* Final Sale binder: print only the quote sheet at natural size. */
+@media print {
+  @page { margin: 12mm; }
+  .app-zoom { zoom: 1; }
+  :root, body { background: #fff; }
+  .print-area { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
