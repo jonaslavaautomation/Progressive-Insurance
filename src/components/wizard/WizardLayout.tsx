@@ -1,13 +1,14 @@
 // Wizard chrome matching the FAO quote screens: fixed 60px header, fixed 200px stepper,
 // fixed 57px action bar, and a scrolling content pane between them.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AlertTriangle, ArrowLeft, ArrowRight, ChevronDown, Lightbulb, Menu } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Lightbulb } from 'lucide-react';
 import { useQuote } from '@/context/useQuote';
 import { LAST_STEP, STEPS } from '@/context/quoteStore';
 import { incompleteSteps, validateStep } from '@/utils/validation';
 import { stepHints } from '@/data/trainingHints';
 import { StepValidationContext } from '@/components/wizard/stepValidation';
 import { DoneCheck } from '@/components/wizard/primitives';
+import { OptionsMenu } from '@/components/wizard/OptionsMenu';
 
 const focusable = 'outline-none focus-visible:shadow-[0_0_0_2px_#fff,0_0_0_4px_#e87722]';
 
@@ -25,26 +26,6 @@ function KeyboardToggle() {
   return <div className="flex items-center gap-[10px] text-[12.5px]"><span>Keyboard Access to Help Buttons</span><button type="button" role="switch" aria-checked={on} aria-label="Keyboard Access to Help Buttons" onClick={toggleKeyboardHelp} className={`relative flex h-[26px] w-[54px] items-center rounded-full text-[11px] font-bold transition-colors ${on ? 'bg-[#0f7a52]' : 'bg-[#7b858a]'} ${focusable}`}><span className={`absolute ${on ? 'left-[8px]' : 'right-[7px]'}`}>{on ? 'ON' : 'OFF'}</span><span className={`absolute top-[3px] h-[20px] w-[20px] rounded-full bg-white shadow transition-all ${on ? 'left-[31px]' : 'left-[3px]'}`} /></button></div>;
 }
 
-function OptionsMenu() {
-  const { state, showDashboard, loadSampleQuote, resetQuote, toggleHints } = useQuote();
-  const [open, setOpen] = useState(false);
-  const menu = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: MouseEvent) => { if (!menu.current?.contains(event.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [open]);
-  const run = (action: () => void) => () => { setOpen(false); action(); };
-  const items: [string, () => void][] = [
-    ['Return to Dashboard', showDashboard],
-    [`Training Hints: ${state.ui.hintMode ? 'ON' : 'OFF'}`, toggleHints],
-    ['Load Sample Customer (Jonnie James)', loadSampleQuote],
-    ['Start New Quote', () => { if (window.confirm('Discard this quote and start a new one?')) resetQuote(); }],
-  ];
-  return <div ref={menu} className="relative"><button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className={`flex items-center gap-[12px] ${focusable}`}><Menu size={28} strokeWidth={2} /><span className="text-[14px] font-bold underline underline-offset-2">OPTIONS</span><ChevronDown size={18} strokeWidth={2.4} /></button>{open && <ul className="absolute right-0 top-[40px] z-40 w-[260px] overflow-hidden rounded-[3px] border border-[#cfdbe3] bg-white text-[14px] text-[#003865] shadow-[0_4px_14px_rgba(0,0,0,.22)]">{items.map(([label, action]) => <li key={label}><button type="button" onClick={run(action)} className="block w-full border-b border-[#edf1f3] px-4 py-[11px] text-left font-medium hover:bg-[#e8f4fa]">{label}</button></li>)}</ul>}</div>;
-}
-
 export function FormHeader({ keyboardToggle = false }: { keyboardToggle?: boolean }) {
   const { state, showDashboard } = useQuote();
   const { insured } = state;
@@ -53,12 +34,12 @@ export function FormHeader({ keyboardToggle = false }: { keyboardToggle?: boolea
   return <header className="flex h-[60px] shrink-0 items-center bg-[#003865] pl-[24px] pr-[26px] text-white print:hidden">
     <button type="button" onClick={showDashboard} title="Return to dashboard" className={`w-[195px] shrink-0 text-left ${focusable}`}><Logo /></button>
     {name ? <><HeaderItem label="Customer" value={name} /><HeaderItem label="Phone" value={phone} /><HeaderItem label="Email" value={insured.email} /></> : <HeaderItem label="Product(s) Selected:" value="Auto" />}
-    <div className="ml-auto flex shrink-0 items-center gap-[26px]">{keyboardToggle && <KeyboardToggle />}{state.ui.hintMode && <span className="flex items-center gap-1 rounded-full bg-[#e87722] px-2 py-[2px] text-[11px] font-bold"><Lightbulb size={12} /> TRAINING HINTS</span>}<OptionsMenu /></div>
+    <div className="ml-auto flex shrink-0 items-center gap-[26px]"><span className="text-[12.5px] font-medium">Hello, {state.agent.name}</span>{keyboardToggle && <KeyboardToggle />}{state.ui.hintMode && <span className="flex items-center gap-1 rounded-full bg-[#e87722] px-2 py-[2px] text-[11px] font-bold"><Lightbulb size={12} /> TRAINING HINTS</span>}<OptionsMenu /></div>
   </header>;
 }
 
-function Stepper({ current, maxStep, incomplete, onNavigate }: { current: number; maxStep: number; incomplete: number[]; onNavigate: (step: number) => void }) {
-  return <aside className="w-[200px] shrink-0 overflow-y-auto border-r border-[#d0d8de] bg-white pt-[10px] print:hidden"><ol>{STEPS.map((step, index) => {
+function Stepper({ current, maxStep, incomplete, onNavigate, sidebar }: { current: number; maxStep: number; incomplete: number[]; onNavigate: (step: number) => void; sidebar?: ReactNode }) {
+  return <aside className="w-[200px] shrink-0 overflow-y-auto border-r border-[#d0d8de] bg-white pb-[20px] pt-[10px] print:hidden"><ol>{STEPS.map((step, index) => {
     const isCurrent = index === current;
     const done = index < maxStep && !isCurrent && !incomplete.includes(index);
     const reachable = index <= maxStep && !isCurrent;
@@ -68,7 +49,7 @@ function Stepper({ current, maxStep, incomplete, onNavigate }: { current: number
       {reachable ? <button type="button" onClick={() => onNavigate(index)} className={`hover:underline ${focusable}`}>{text}</button> : text}
       {done ? <DoneCheck /> : <span className={`block h-[17px] w-[17px] rounded-full border-2 bg-white ${strong ? 'border-[#003865]' : 'border-[#5c6670]'}`} />}
     </li>;
-  })}</ol></aside>;
+  })}</ol>{sidebar}</aside>;
 }
 
 /** Sticky AUTO / Quote # strip shown on the Products step. */
@@ -81,15 +62,16 @@ export function StepHeader() {
   </div>;
 }
 
-function ActionBar({ backLabel, nextLabel, onBack, onNext }: { backLabel?: string; nextLabel?: string; onBack?: () => void; onNext?: () => void }) {
+export function ActionBar({ backLabel, nextLabel, onBack, onNext, center, centered = false }: { backLabel?: string; nextLabel?: string; onBack?: () => void; onNext?: () => void; center?: ReactNode; centered?: boolean }) {
   const base = `flex h-[40px] items-center gap-[8px] rounded-[3px] px-[16px] text-[12.5px] font-bold uppercase ${focusable}`;
-  return <div className="flex h-[57px] shrink-0 items-center justify-end gap-[11px] border-t border-[#d7dfe4] bg-white px-[15px] shadow-[0_-2px_5px_rgba(0,0,0,.05)] print:hidden">
+  return <div className={`relative flex h-[57px] shrink-0 items-center gap-[11px] border-t border-[#d7dfe4] bg-white px-[15px] shadow-[0_-2px_5px_rgba(0,0,0,.05)] print:hidden ${centered ? 'justify-center' : 'justify-end'}`}>
+    {center && <div className="absolute left-[340px] top-1/2 -translate-y-1/2">{center}</div>}
     {onBack && backLabel && <button type="button" onClick={onBack} className={`${base} border-2 border-[#0073cf] bg-white text-[#003865] hover:bg-[#e8f4fa]`}><ArrowLeft size={16} strokeWidth={2.4} />{backLabel}</button>}
     {onNext && nextLabel && <button type="button" onClick={onNext} className={`${base} border-2 border-[#0073cf] bg-[#0073cf] text-white hover:border-[#003865] hover:bg-[#003865] focus-visible:border-[#003865] focus-visible:bg-[#003865]`}>{nextLabel}<ArrowRight size={16} strokeWidth={2.4} /></button>}
   </div>;
 }
 
-function PageLinks() {
+export function PageLinks() {
   const links = ['Privacy Statement', 'Terms of Use', 'Contact Us', 'Site Map', 'Do Not Sell or Share My Personal Information (CA Residents Only)'];
   return <footer className="mx-[20px] mb-[18px] mt-[18px] flex max-w-[1070px] flex-wrap items-center gap-x-[8px] gap-y-1 border-t border-[#cfd8de] pt-[14px] text-[11px] text-[#2e3a43] print:hidden">{links.map((link, index) => <span key={link} className="flex items-center gap-[8px]">{index > 0 && <span className="text-[#7b858a]">|</span>}<a href="#" onClick={(event) => event.preventDefault()} className="underline">{link}</a></span>)}<span className="ml-[12px]">Copyright 1997-{new Date().getFullYear()} Progressive Casualty Insurance Company. All rights reserved.</span></footer>;
 }
@@ -111,7 +93,7 @@ function focusField(id: string) {
   return true;
 }
 
-export function WizardLayout({ children, stepHeader = false, keyboardToggle = false, contentClassName = 'pt-[30px]', onRevealField }: { children: ReactNode; stepHeader?: boolean; keyboardToggle?: boolean; contentClassName?: string; onRevealField?: (id: string) => void }) {
+export function WizardLayout({ children, stepHeader = false, keyboardToggle = false, contentClassName = 'pt-[30px]', onRevealField, sidebar, actionCenter }: { children: ReactNode; stepHeader?: boolean; keyboardToggle?: boolean; contentClassName?: string; onRevealField?: (id: string) => void; sidebar?: ReactNode; actionCenter?: ReactNode }) {
   const { state, goToStep } = useQuote();
   const { step, maxStep, hintMode } = state.ui;
   const errors = useMemo(() => validateStep(step, state), [step, state]);
@@ -124,7 +106,7 @@ export function WizardLayout({ children, stepHeader = false, keyboardToggle = fa
 
   const leave = (target: number) => {
     // Moving backward never blocks; moving forward requires the current step to be valid.
-    if (target > step && errorCount) { setShowErrors(true); main.current?.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (target > step && errorCount) { reveal(); return; }
     goToStep(target);
   };
 
@@ -135,11 +117,12 @@ export function WizardLayout({ children, stepHeader = false, keyboardToggle = fa
     window.setTimeout(() => focusField(id), 50);
   };
 
-  return <StepValidationContext.Provider value={{ errors, show: showErrors }}>
+  const reveal = () => { setShowErrors(true); main.current?.scrollTo({ top: 0, behavior: 'smooth' }); };
+  return <StepValidationContext.Provider value={{ errors, show: showErrors, reveal }}>
     <div className="flex h-screen flex-col bg-[#f1f6f9] text-[#2e3a43] print:block print:h-auto print:bg-white">
       <FormHeader keyboardToggle={keyboardToggle} />
       <div className="flex min-h-0 flex-1 print:block">
-        <Stepper current={step} maxStep={maxStep} incomplete={incomplete} onNavigate={leave} />
+        <Stepper current={step} maxStep={maxStep} incomplete={incomplete} onNavigate={leave} sidebar={sidebar} />
         <main ref={main} className="min-w-0 flex-1 overflow-auto print:overflow-visible">
           {stepHeader && <StepHeader />}
           <div className={`px-[20px] print:p-0 ${contentClassName}`}>
@@ -150,7 +133,7 @@ export function WizardLayout({ children, stepHeader = false, keyboardToggle = fa
           <PageLinks />
         </main>
       </div>
-      <ActionBar backLabel={STEPS[step - 1]} nextLabel={STEPS[step + 1]} onBack={step > 0 ? () => leave(step - 1) : undefined} onNext={step < LAST_STEP ? () => leave(step + 1) : undefined} />
+      <ActionBar backLabel={STEPS[step - 1]} nextLabel={STEPS[step + 1]} onBack={step > 0 ? () => leave(step - 1) : undefined} onNext={step < LAST_STEP ? () => leave(step + 1) : undefined} center={actionCenter} />
     </div>
   </StepValidationContext.Provider>;
 }

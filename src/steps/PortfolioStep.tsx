@@ -1,46 +1,31 @@
-import { Building2, Car, UserRound } from 'lucide-react';
-import { BI_LIMITS, DEDUCTIBLES, PD_LIMITS, UM_LIMITS, tierFor } from '@/data/options';
+import { Building2, Car } from 'lucide-react';
 import { useQuote } from '@/context/useQuote';
-import { driverName, vehicleLabel } from '@/utils/ratingEngine';
+import { formatCurrency } from '@/utils/masks';
+import { TERM_MONTHS, vehicleName } from '@/utils/ratingEngine';
 import { WizardLayout } from '@/components/wizard/WizardLayout';
-import { WizardCard, WizardRow } from '@/components/wizard/primitives';
-import { RatePanel } from '@/components/quote/RatePanel';
-import { ReportsPanel } from '@/components/quote/ReportsPanel';
+import { WizardCard } from '@/components/wizard/primitives';
 
-const OWNS_HOME = ['Own home', 'Own condo', 'Own mobile home'];
+function PortfolioContent() {
+  const { state, rated, plan, summary, goToStep } = useQuote();
+  const { additional } = state;
+  const cell = 'border-b border-[#edf1f3] px-[16px] py-[12px] text-left';
+  return <div className="w-[880px] space-y-[20px]">
+    <WizardCard title="Portfolio" split={false} subtitle={<span className="font-medium">Quote #: {summary.quoteNumber}</span>}>
+      <table className="w-full border-collapse text-[14px]"><thead><tr className="text-[12px] uppercase tracking-[.3px] text-[#5c6670]"><th className={cell}>Product</th><th className={cell}>Vehicles</th><th className={cell}>Policy Term</th><th className={cell}>Bill Plan</th><th className={cell}>Status</th><th className={`${cell} text-right`}>Premium</th></tr></thead><tbody>
+        <tr><td className={cell}><span className="flex items-center gap-2 font-bold text-[#003865]"><Car size={20} strokeWidth={1.5} />AUTO</span></td><td className={cell}>{state.vehicles.map(vehicleName).join(', ')}</td><td className={cell}>{TERM_MONTHS} months<div className="text-[12px] text-[#5c6670]">{summary.effectiveDate} – {summary.expirationDate}</div></td><td className={cell}>{plan.name}</td><td className={cell}>{state.policy.policyNumber ? 'Sold' : 'Quoted'}</td><td className={`${cell} text-right font-bold`}>{rated ? formatCurrency(plan.total) : <button type="button" onClick={() => goToStep(4)} className="font-bold text-[#c2185b] underline">Recalculate</button>}</td></tr>
+      </tbody></table>
+      <div className="flex items-center justify-end gap-3 px-[16px] py-[12px] text-[14px]"><span className="text-[#5c6670]">Total Portfolio Premium:</span><span className="text-[18px] font-bold">{rated ? formatCurrency(plan.total) : '$ --.--'}</span></div>
+    </WizardCard>
+    <WizardCard title="Bundle Opportunities" split={false}>
+      <div className="px-[21px] py-[16px] text-[14px] leading-[21px]">
+        {additional.crossSell.length
+          ? <><p>The customer has or will purchase these products. The <b>Multi Policy</b> discount is applied to the Auto quote:</p><ul className="mt-2 grid grid-cols-3 gap-2">{additional.crossSell.map((product) => <li key={product} className="flex items-center gap-2 rounded-[3px] border border-[#cfdbe3] px-3 py-2"><Building2 size={17} strokeWidth={1.5} className="text-[#003865]" />{product}</li>)}</ul></>
+          : <p>No additional products were selected on Additional Details. Ask whether the customer rents or owns a motorcycle, boat, RV or business to earn the <b>Multi Policy</b> discount. <button type="button" onClick={() => goToStep(3)} className="font-bold text-[#0073cf] underline underline-offset-2">Update products</button></p>}
+      </div>
+    </WizardCard>
+  </div>;
+}
 
 export function PortfolioStep() {
-  const { state, summary, goToStep } = useQuote();
-  const { insured, vehicles, drivers, coverages, additional } = state;
-  const edit = (step: number) => <button type="button" onClick={() => goToStep(step)} className="text-[13px] font-bold text-[#003865] underline">Edit</button>;
-  const bundle = OWNS_HOME.includes(additional.residenceType)
-    ? 'Customer owns their residence: offer a Homeowners quote to bundle for a multi-policy discount.'
-    : additional.residenceType === 'Rent' ? 'Customer rents: add a Renters (HO4) quote to the portfolio.' : '';
-
-  return <WizardLayout>
-    <div className="flex items-start gap-[20px]">
-      <div className="w-[450px] shrink-0 space-y-[20px]">
-        <WizardCard title="Portfolio" subtitle={<>AUTO<br />Quote #: {summary.quoteNumber}</>}>
-          <WizardRow label="Principal Named Insured" value={[insured.firstName, insured.middleInitial, insured.lastName, insured.suffix].filter(Boolean).join(' ')} />
-          <WizardRow label="Mailing Address" value={`${insured.address.line1}, ${insured.address.city}, ${insured.address.state} ${insured.address.zip}`} />
-          <WizardRow label="Policy Term" value={`${summary.effectiveDate} to ${summary.expirationDate}`} />
-          <WizardRow label="Monthly Premium" strong value={`$${summary.monthlyPremium.toFixed(2)}`} />
-        </WizardCard>
-        <WizardCard title="Vehicles" split={false} subtitle={edit(1)}>
-          {vehicles.map((vehicle, index) => <div key={vehicle.id} className="flex items-start gap-2 border-b border-[#edf1f3] px-[21px] py-2 text-[13px]"><Car size={16} strokeWidth={1.6} className="mt-0.5 shrink-0 text-[#003865]" /><div className="flex-1"><div className="font-bold">{vehicleLabel(vehicle, index)} {vehicle.bodyStyle}</div><div className="text-[#52616c]">VIN {vehicle.vin || 'not provided'} · Garaged {vehicle.garagingZip} · {vehicle.primaryUse} · {vehicle.annualMiles} mi/yr</div><div className="text-[#52616c]">Comp {tierFor(DEDUCTIBLES, vehicle.compDeductible)?.label} · Coll {tierFor(DEDUCTIBLES, vehicle.collDeductible)?.label}</div></div></div>)}
-        </WizardCard>
-        <WizardCard title="Drivers" split={false} subtitle={edit(2)}>
-          {drivers.map((driver) => <div key={driver.id} className="flex items-start gap-2 border-b border-[#edf1f3] px-[21px] py-2 text-[13px]"><UserRound size={16} strokeWidth={1.6} className="mt-0.5 shrink-0 text-[#003865]" /><div className="flex-1"><div className="font-bold">{driverName(driver)} <span className="font-semibold text-[#52616c]">({driver.relationship})</span></div><div className="text-[#52616c]">DOB {driver.dob} · {driver.driverStatus} · {driver.licenseType} {driver.licenseState && `(${driver.licenseState})`}</div><div className={driver.incidents.length ? 'font-semibold text-[#c8102e]' : 'text-[#52616c]'}>{driver.incidents.length ? `${driver.incidents.length} incident(s) disclosed` : 'No incidents disclosed'}</div></div></div>)}
-        </WizardCard>
-        <WizardCard title="Coverages" split={false} subtitle={edit(4)}>
-          <WizardRow label="Bodily Injury" value={tierFor(BI_LIMITS, coverages.bodilyInjury)?.label} />
-          <WizardRow label="Property Damage" value={tierFor(PD_LIMITS, coverages.propertyDamage)?.label} />
-          <WizardRow label="UM/UIM Bodily Injury" value={tierFor(UM_LIMITS, coverages.uninsuredMotorist)?.label} />
-          <WizardRow label="Discounts Applied" value={summary.discountsApplied.join(', ') || 'None'} />
-        </WizardCard>
-        {bundle && <div className="flex items-start gap-2 rounded border border-[#a5c8d8] bg-[#dbf3fc] px-[21px] py-2 text-[14px] text-[#1d5e80]"><Building2 size={16} className="mt-px shrink-0" /><span><b>Bundle opportunity:</b> {bundle}</span></div>}
-      </div>
-      <div className="w-[300px] shrink-0 space-y-[20px]"><RatePanel breakdownOpen /><ReportsPanel /></div>
-    </div>
-  </WizardLayout>;
+  return <WizardLayout><PortfolioContent /></WizardLayout>;
 }

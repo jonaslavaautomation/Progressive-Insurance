@@ -3,6 +3,13 @@
 
 export type YesNo = '' | 'Yes' | 'No';
 
+/** The logged-in agent for this browser session (never taken from reference data). */
+export interface AgentProfile {
+  name: string;
+  agencyName: string;
+  agencyCode: string;
+}
+
 export interface Phone {
   type: 'Cell' | 'Home' | 'Work';
   number: string;
@@ -51,8 +58,17 @@ export interface Vehicle {
   originalCostNew: string;
   passiveRestraint: string;
   annualMiles: string;
+  // Vehicle-level coverages (Coverages/Bill Plans).
   compDeductible: string;
   collDeductible: string;
+  rental: string;
+  roadside: string;
+  customEquipment: string;
+  // Point of Sale garaging details.
+  garagingSameAsMailing: YesNo;
+  garagingStreet: string;
+  garagingStreet2: string;
+  garagingCity: string;
 }
 
 export interface Incident {
@@ -93,41 +109,58 @@ export interface Driver {
   incidents: Incident[];
 }
 
+export const CROSS_SELL_PRODUCTS = ['Renters', 'Motorcycle', 'Boat', 'Motor Home', 'Travel Trailer', 'Commercial Lines'] as const;
+export type CrossSellProduct = (typeof CROSS_SELL_PRODUCTS)[number];
+
 export interface AdditionalDetails {
-  priorInsurance: YesNo;
-  priorCarrier: string;
-  priorBiLimits: string;
-  yearsWithPrior: string;
-  residenceType: string;
-  yearsAtResidence: string;
+  /** Insured/Spouse had liability coverage for the past 6 months with no more than a 31-day lapse. */
+  continuousInsurance: YesNo;
+  allDriversListed: YesNo;
+  priorCancellation: YesNo;
+  jointOwnership: YesNo;
   paperless: YesNo;
-  eSignature: YesNo;
+  primaryResidence: string;
+  crossSell: CrossSellProduct[];
+  noAdditionalRisks: boolean;
 }
 
-// Comprehensive/collision deductibles are rated per vehicle and live on `Vehicle`.
+// Policy-level coverages. Physical damage, rental, roadside and equipment are per vehicle.
 export interface Coverages {
-  bodilyInjury: string;
-  propertyDamage: string;
-  uninsuredMotorist: string;
+  bodilyInjuryPd: string;
   medicalPayments: string;
-  roadside: YesNo;
-  rentalReimbursement: string;
+  uninsuredMotorist: string;
+  umpd: string;
+  snapshot: string;
 }
 
-export type ReportStatus = 'pending' | 'ordered' | 'cleared' | 'flagged';
+export type ReportStatus = 'not-ordered' | 'ordering' | 'cleared' | 'flagged';
+
+/** What the prior-insurance vendor returned for the principal named insured. */
+export interface VendorHistory {
+  liabilityStatus: 'Yes, currently insured' | 'Yes, not currently insured' | 'No';
+  carrier: string;
+  biLimits: string;
+  length: string;
+}
 
 export interface SimulatedReports {
-  mvrStatus: ReportStatus;
+  orderClue: boolean;
+  orderMvr: boolean;
   clueStatus: ReportStatus;
-  verificationDate: string;
-  mvrFindings: string[];
+  mvrStatus: ReportStatus;
   clueFindings: string[];
-  /** Set when driver data changed after a report came back, so the VA knows to re-order. */
+  mvrFindings: string[];
+  vendor: VendorHistory | null;
+  /** Which answer the agent accepted in the Auto Insurance History dialog. */
+  priorSource: '' | 'vendor' | 'insured';
+  /** Simulated insurance-score tier returned with the POS order (0 = best). */
+  scoreTier: number;
+  orderedAt: string;
   staleReason: string;
   requestId: number;
 }
 
-export type BillPlan = '' | 'Monthly - EFT' | 'Monthly - Direct Bill' | 'Paid in Full';
+export type BillPlan = '' | 'PIF' | 'EFT' | 'CARD' | 'MAIL' | 'EFT2' | 'MAIL2';
 
 export interface PolicyInfo {
   agentCode: string;
@@ -137,6 +170,7 @@ export interface PolicyInfo {
   namedOperator: YesNo;
   policyNumber: string;
   boundAt: string;
+  comment: string;
 }
 
 export interface PointOfSale {
@@ -158,6 +192,10 @@ export interface QuoteData {
   coverages: Coverages;
   reports: SimulatedReports;
   pointOfSale: PointOfSale;
+  /** Signature of the rating inputs at the last RECALCULATE; the premium shows only while it matches. */
+  ratedSignature: string;
+  /** Set when report results re-rated the quote, so the agent can see the change. */
+  premiumChange: { from: number; to: number } | null;
 }
 
 export interface QuoteSummary {
@@ -165,27 +203,47 @@ export interface QuoteSummary {
   policyNumber: string;
   effectiveDate: string;
   expirationDate: string;
-  monthlyPremium: number;
-  paidInFullPremium: number;
+  totalPremium: number;
+  billPlanName: string;
   discountsApplied: string[];
 }
 
-export type RatingCategory = 'base' | 'vehicle' | 'driver' | 'coverage' | 'discount';
+export type CoverageKey = 'bipd' | 'medpay' | 'otc' | 'coll' | 'ete' | 'towing' | 'cec';
 
-export interface RatingLine {
+export interface VehiclePremium {
+  vehicleId: string;
   label: string;
-  amount: number;
-  category: RatingCategory;
+  coverages: Record<CoverageKey, number>;
+  total: number;
+}
+
+export interface RatingFactor {
+  label: string;
+  value: string;
+}
+
+export interface BillPlanQuote {
+  id: Exclude<BillPlan, ''>;
+  name: string;
+  detail: string;
+  dueToday: number;
+  payments: number;
+  paymentAmount: number;
+  total: number;
+  percentDown: number;
+  feePerPayment: number;
+  savings: number;
 }
 
 export interface RatingResult {
-  lines: RatingLine[];
-  subtotal: number;
-  discounts: RatingLine[];
-  monthlyPremium: number;
-  annualPremium: number;
-  paidInFullPremium: number;
-  paidInFullSavings: number;
-  discountsApplied: string[];
-  safeDriver: 'applied' | 'pending' | 'ineligible';
+  vehicles: VehiclePremium[];
+  umbi: number;
+  umpd: number;
+  /** 6-month premium before the Paid-in-Full discount. */
+  fullTermPremium: number;
+  billPlans: BillPlanQuote[];
+  appliedDiscounts: string[];
+  eligibleDiscounts: string[];
+  factors: RatingFactor[];
+  reportsApplied: boolean;
 }

@@ -57,64 +57,80 @@ export const OWNERSHIP_LENGTHS = ['Less than 1 month', 'At least 1 month but les
 export const PRIMARY_USES = ['1A - Pleasure', '2A - Commute', '3A - Business', '4A - Farm'];
 export const ANNUAL_MILES = ['0 - 3,999', '4,000 - 5,999', '6,000 - 7,999', '8,000 - 9,999', '10,000 - 11,999', '12,000 - 14,999', '15,000 - 19,999', '20,000 or more'];
 
-export const PRIOR_CARRIERS = ['Allstate', 'GEICO', 'Nationwide', 'NC Farm Bureau', 'State Farm', 'USAA', 'Other carrier'];
-export const PRIOR_BI_LIMITS = ['30/60', '50/100', '100/300', '250/500', 'Greater than 250/500'];
-export const YEARS_WITH_PRIOR = ['Less than 6 months', '6 months to 1 year', '1 to 3 years', '3 to 5 years', '5 years or more'];
-export const RESIDENCE_TYPES = ['Own home', 'Own condo', 'Own mobile home', 'Rent', 'Live with parents', 'Other'];
-export const YEARS_AT_RESIDENCE = ['Less than 1 year', '1 to 2 years', '3 to 5 years', 'More than 5 years'];
+export const PRIMARY_RESIDENCES = ['Single Family Home', 'Condo', 'Apartment/Rented', 'Townhouse'];
+/** Residences that qualify for the Homeowner discount. */
+export const OWNED_RESIDENCES = ['Single Family Home', 'Condo', 'Townhouse'];
 
-// Coverage tiers carry their monthly surcharge so the rating engine and UI stay in sync.
-export interface CoverageTier { value: string; label: string; monthly: number }
-export const BI_LIMITS: CoverageTier[] = [
-  { value: '50/100', label: '$50,000/$100,000 (NC minimum)', monthly: 0 },
-  { value: '100/200', label: '$100,000/$200,000', monthly: 20 },
-  { value: '100/300', label: '$100,000/$300,000', monthly: 35 },
-  { value: '250/500', label: '$250,000/$500,000', monthly: 50 },
-];
-export const PD_LIMITS: CoverageTier[] = [
-  { value: '50000', label: '$50,000 (NC minimum)', monthly: 0 },
-  { value: '100000', label: '$100,000', monthly: 20 },
-  { value: '250000', label: '$250,000', monthly: 35 },
-  { value: '500000', label: '$500,000', monthly: 50 },
-];
-export const UM_LIMITS: CoverageTier[] = [
-  { value: '50/100', label: '$50,000/$100,000', monthly: 0 },
-  { value: '100/200', label: '$100,000/$200,000', monthly: 4 },
-  { value: '100/300', label: '$100,000/$300,000', monthly: 6 },
-  { value: '250/500', label: '$250,000/$500,000', monthly: 9 },
-];
-export const MED_PAY: CoverageTier[] = [
-  { value: 'None', label: 'No Coverage', monthly: 0 },
-  { value: '1000', label: '$1,000', monthly: 3 },
-  { value: '2000', label: '$2,000', monthly: 5 },
-  { value: '5000', label: '$5,000', monthly: 8 },
-];
-export const DEDUCTIBLES: CoverageTier[] = [
-  { value: 'None', label: 'No Coverage', monthly: -15 },
-  { value: '250', label: '$250 deductible', monthly: 30 },
-  { value: '500', label: '$500 deductible', monthly: 15 },
-  { value: '1000', label: '$1,000 deductible', monthly: 0 },
-];
-export const RENTAL: CoverageTier[] = [
-  { value: 'None', label: 'No Coverage', monthly: 0 },
-  { value: '30', label: '$30/day, $900 max', monthly: 5 },
-  { value: '40', label: '$40/day, $1,200 max', monthly: 7 },
-  { value: '50', label: '$50/day, $1,500 max', monthly: 9 },
-];
-export const ROADSIDE_MONTHLY = 4;
+// ------------------------------------------------------------- Coverages / Bill Plans
+// Each option carries its 6-month base premium per vehicle (before vehicle, driver and
+// territory factors) so the rating engine and the dropdowns stay in sync.
+export interface CoverageOption { value: string; label: string; base: number }
 
-export const BILL_PLANS = ['Monthly - EFT', 'Monthly - Direct Bill', 'Paid in Full'] as const;
+export const BI_PD: CoverageOption[] = [
+  { value: '50/100/50', label: '50/100/50', base: 380 },
+  { value: '100/300/100', label: '100/300/100', base: 461 },
+  { value: '250/500/100', label: '250/500/100', base: 538 },
+  { value: '250/500/250', label: '250/500/250', base: 577 },
+];
+export const MED_PAY: CoverageOption[] = [
+  { value: 'None', label: 'None', base: 0 },
+  { value: '1000', label: '$1,000', base: 16 },
+  { value: '2000', label: '$2,000', base: 25 },
+  { value: '5000', label: '$5,000', base: 42 },
+];
+export const OTC_DEDUCTIBLES: CoverageOption[] = [
+  { value: 'None', label: 'No Coverage', base: 0 },
+  { value: '100', label: '$100', base: 96 },
+  { value: '250', label: '$250', base: 75 },
+  { value: '500', label: '$500', base: 59 },
+  { value: '1000', label: '$1,000', base: 42 },
+];
+export const COLL_DEDUCTIBLES: CoverageOption[] = [
+  { value: 'None', label: 'No Coverage', base: 0 },
+  { value: '250', label: '$250', base: 307 },
+  { value: '500', label: '$500', base: 255 },
+  { value: '1000', label: '$1,000', base: 191 },
+];
+export const ETE: CoverageOption[] = [
+  { value: 'None', label: 'None', base: 0 },
+  { value: '30', label: '$30/day, $900 max', base: 16 },
+  { value: '40', label: '$40/day, $1,200 max', base: 21 },
+  { value: '50', label: '$50/day, $1,500 max', base: 27 },
+];
+export const TOWING: CoverageOption[] = [
+  { value: 'None', label: 'None', base: 0 },
+  { value: 'Roadside', label: 'Roadside Assistance', base: 7 },
+];
+export const UM_BI: CoverageOption[] = [
+  { value: '50/100', label: '50/100', base: 32 },
+  { value: '100/300', label: '100/300', base: 44 },
+  { value: '250/500', label: '250/500', base: 57 },
+];
+export const UMPD: CoverageOption[] = [
+  { value: '50', label: '50 w/$100 Ded', base: 1.88 },
+  { value: '100', label: '100 w/$100 Ded', base: 2.61 },
+];
+export const SNAPSHOT_OPTIONS = ['Do Not Participate', 'Enrolled - Mobile App', 'Enrolled - Plug-In Device'];
+export const CUSTOM_EQUIPMENT_MAX = 5000;
+
+export const COVERAGE_DEFAULTS = { bodilyInjuryPd: '100/300/100', medicalPayments: 'None', uninsuredMotorist: '100/300', umpd: '50', snapshot: '' };
+export const VEHICLE_COVERAGE_DEFAULTS = { compDeductible: '500', collDeductible: '500', rental: 'None', roadside: 'None', customEquipment: '0' };
+
 export const PAYMENT_METHODS = ['Bank account (EFT)', 'Credit/debit card via secure IVR', 'Customer pays online after binding'];
 export const DOCUMENT_DELIVERY = ['Email (e-Sign)', 'In person (print and sign)', 'Mail'];
 
-export function tierOptions(tiers: CoverageTier[]): Option[] {
-  return tiers.map(({ value, label }) => ({ value, label }));
+export function coverageOptions(options: CoverageOption[]): Option[] {
+  return options.map(({ value, label }) => ({ value, label }));
 }
 
-export function tierFor(tiers: CoverageTier[], value: string): CoverageTier | undefined {
-  return tiers.find((tier) => tier.value === value);
+export function optionFor(options: CoverageOption[], value: string): CoverageOption | undefined {
+  return options.find((option) => option.value === value);
 }
 
-export function tierIndex(tiers: CoverageTier[], value: string): number {
-  return tiers.findIndex((tier) => tier.value === value);
+export function optionIndex(options: CoverageOption[], value: string): number {
+  return options.findIndex((option) => option.value === value);
+}
+
+export function optionLabel(options: CoverageOption[], value: string): string {
+  return optionFor(options, value)?.label ?? '—';
 }

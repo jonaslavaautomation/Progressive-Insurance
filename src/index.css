@@ -31,3 +31,10 @@ button, a { transition: color 160ms ease, background-color 160ms ease, border-co
   :root, body { background: #fff; }
   .print-area { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* Document Center preview: when open, print only the previewed document. */
+@media print {
+  body:has(.print-portal) #root { display: none; }
+  .print-portal { position: static !important; overflow: visible !important; background: none !important; padding: 0 !important; }
+  .print-portal .no-print { display: none !important; }
+}

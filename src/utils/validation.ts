@@ -1,9 +1,10 @@
 // Step-level validation for the carrier's required fields. Each error is keyed by the
 // field id it belongs to so the UI can highlight the control and focus it from the summary.
 import type { Driver, QuoteData } from '@/types/quote';
-import { UM_LIMITS, BI_LIMITS, tierIndex } from '@/data/options';
+import { CUSTOM_EQUIPMENT_MAX } from '@/data/options';
+import { moneyToNumber } from '@/utils/masks';
 import { ageOn, daysBetween, parseDate, ratingDate, today } from '@/utils/dates';
-import { driverName, vehicleLabel } from '@/utils/ratingEngine';
+import { driverName, isRated, ratedDrivers, vehicleLabel } from '@/utils/ratingEngine';
 
 export type FieldErrors = Record<string, string>;
 
@@ -153,46 +154,61 @@ function validateHousehold(quote: QuoteData, errors: FieldErrors) {
 
 function validateAdditional(quote: QuoteData, errors: FieldErrors) {
   const { additional, insured } = quote;
-  required(errors, 'additional.priorInsurance', additional.priorInsurance, 'Answer whether the customer currently has auto insurance.');
-  if (additional.priorInsurance === 'Yes') {
-    required(errors, 'additional.priorCarrier', additional.priorCarrier, 'Current Carrier is required.');
-    required(errors, 'additional.priorBiLimits', additional.priorBiLimits, 'Current Bodily Injury Limits are required.');
-    required(errors, 'additional.yearsWithPrior', additional.yearsWithPrior, 'Years With Current Carrier is required.');
-  }
-  required(errors, 'additional.residenceType', additional.residenceType, 'Residence Type is required.');
-  required(errors, 'additional.yearsAtResidence', additional.yearsAtResidence, 'Years at Current Address is required.');
-  required(errors, 'additional.paperless', additional.paperless, 'Answer the Paperless Documents question.');
+  required(errors, 'additional.continuousInsurance', additional.continuousInsurance, 'Answer whether the Insured/Spouse had vehicle liability insurance for the past 6 months.');
+  required(errors, 'additional.allDriversListed', additional.allDriversListed, 'Answer whether all required drivers are listed.');
+  if (additional.allDriversListed === 'No') errors['additional.allDriversListed'] = 'All drivers required to be listed must be added in Household Members before continuing.';
+  required(errors, 'additional.priorCancellation', additional.priorCancellation, 'Answer whether an auto policy was canceled in the past 5 years.');
+  required(errors, 'additional.jointOwnership', additional.jointOwnership, 'Answer the vehicle ownership question.');
+  if (additional.jointOwnership === 'Yes') errors['additional.jointOwnership'] = 'Vehicles owned by a corporation/partnership or by people outside the household are not eligible. Refer to Commercial Lines.';
+  required(errors, 'additional.paperless', additional.paperless, 'Answer the Paperless question.');
   if (additional.paperless === 'Yes' && !insured.email) errors['additional.paperless'] = 'Paperless requires a Customer Email. Add one on the Named Insured page.';
-  required(errors, 'additional.eSignature', additional.eSignature, 'Answer the e-Signature question.');
-  if (additional.eSignature === 'Yes' && !insured.email) errors['additional.eSignature'] = 'e-Signature requires a Customer Email. Add one on the Named Insured page.';
+  required(errors, 'additional.primaryResidence', additional.primaryResidence, 'Primary Residence is required.');
+  if (!additional.crossSell.length && !additional.noAdditionalRisks) errors['additional.crossSell'] = 'Choose any additional products the Insured or Spouse has, or select "No additional risks apply".';
+}
+
+/** First number of a limit such as "100/300/100" (per-person bodily injury, in thousands). */
+function perPerson(limit: string): number {
+  return Number(limit.split('/')[0]) || 0;
 }
 
 function validateCoverages(quote: QuoteData, errors: FieldErrors) {
   const { coverages } = quote;
-  required(errors, 'coverages.bodilyInjury', coverages.bodilyInjury, 'Bodily Injury limits are required.');
-  required(errors, 'coverages.propertyDamage', coverages.propertyDamage, 'Property Damage limit is required.');
-  required(errors, 'coverages.uninsuredMotorist', coverages.uninsuredMotorist, 'Uninsured/Underinsured Motorist limits are required.');
-  if (tierIndex(UM_LIMITS, coverages.uninsuredMotorist) > tierIndex(BI_LIMITS, coverages.bodilyInjury)) errors['coverages.uninsuredMotorist'] = 'UM/UIM limits cannot be higher than Bodily Injury limits in North Carolina.';
-  required(errors, 'coverages.medicalPayments', coverages.medicalPayments, 'Medical Payments selection is required.');
-  required(errors, 'coverages.roadside', coverages.roadside, 'Roadside Assistance selection is required.');
-  required(errors, 'coverages.rentalReimbursement', coverages.rentalReimbursement, 'Rental Reimbursement selection is required.');
+  required(errors, 'coverages.bodilyInjuryPd', coverages.bodilyInjuryPd, 'Bodily Injury & Property Damage is required.');
+  required(errors, 'coverages.medicalPayments', coverages.medicalPayments, 'Medical Payment is required.');
+  required(errors, 'coverages.snapshot', coverages.snapshot, 'Snapshot Enrollment is required.');
+  required(errors, 'coverages.uninsuredMotorist', coverages.uninsuredMotorist, 'Uninsured/Underinsured Motorist Bodily Injury is required.');
+  if (perPerson(coverages.uninsuredMotorist) > perPerson(coverages.bodilyInjuryPd)) errors['coverages.uninsuredMotorist'] = 'UM/UIM Bodily Injury limits cannot be higher than Bodily Injury limits in North Carolina.';
+  required(errors, 'coverages.umpd', coverages.umpd, 'Uninsured Motorist Property Damage is required.');
   quote.vehicles.forEach((vehicle, index) => {
     const who = `${vehicleLabel(vehicle, index)}: `;
-    required(errors, `vehicle.${vehicle.id}.compDeductible`, vehicle.compDeductible, `${who}Comprehensive deductible is required.`);
-    required(errors, `vehicle.${vehicle.id}.collDeductible`, vehicle.collDeductible, `${who}Collision deductible is required.`);
-    if (vehicle.collDeductible && vehicle.collDeductible !== 'None' && vehicle.compDeductible === 'None') errors[`vehicle.${vehicle.id}.compDeductible`] = `${who}Collision coverage requires Comprehensive coverage.`;
+    if (vehicle.collDeductible !== 'None' && vehicle.compDeductible === 'None') errors[`vehicle.${vehicle.id}.compDeductible`] = `${who}Collision coverage requires Other Than Collision (Comprehensive) coverage.`;
+    if (moneyToNumber(vehicle.customEquipment) > CUSTOM_EQUIPMENT_MAX) errors[`vehicle.${vehicle.id}.customEquipment`] = `${who}Customizing Equipment Coverage cannot exceed $${CUSTOM_EQUIPMENT_MAX.toLocaleString('en-US')}.`;
   });
-}
-
-function validatePortfolio(quote: QuoteData, errors: FieldErrors) {
-  const { mvrStatus } = quote.reports;
-  if (mvrStatus === 'pending') errors.reports = 'Order MVR & CLUE reports before continuing to Point of Sale.';
-  else if (mvrStatus === 'ordered') errors.reports = 'MVR & CLUE reports are still processing. Wait for the results.';
+  if (!isRated(quote) && !Object.keys(errors).length) errors.rate = 'Click RECALCULATE to rate the quote before continuing to PORTFOLIO.';
+  required(errors, 'pos.billPlan', quote.pointOfSale.billPlan, 'Select a Bill Plan.');
 }
 
 function validatePointOfSale(quote: QuoteData, errors: FieldErrors) {
+  quote.vehicles.forEach((vehicle, index) => {
+    const who = `${vehicleLabel(vehicle, index)}: `;
+    const id = (field: string) => `vehicle.${vehicle.id}.${field}`;
+    if (!vehicle.vin) errors[id('vin')] = `${who}VIN is required at Point of Sale.`;
+    else if (!VIN.test(vehicle.vin)) errors[id('vin')] = `${who}VIN must be 17 characters (no I, O or Q).`;
+    if (vehicle.garagingSameAsMailing === 'No') {
+      required(errors, id('garagingStreet'), vehicle.garagingStreet, `${who}Garaging Street Address is required.`);
+      required(errors, id('garagingCity'), vehicle.garagingCity, `${who}Garaging City is required.`);
+    }
+  });
+  ratedDrivers(quote.drivers).filter(isLicensed).forEach((driver) => {
+    required(errors, `driver.${driver.id}.licenseNumber`, driver.licenseNumber, `${driverName(driver)}: Driver License Number is required at Point of Sale.`);
+  });
+  const { reports } = quote;
+  if (reports.clueStatus === 'ordering' || reports.mvrStatus === 'ordering') errors.pos = 'Point of Sale reports are still processing. Wait for the results.';
+  else if (!reports.priorSource) errors.pos = 'Click ORDER POINT OF SALE to order reports before continuing to FINAL SALE.';
+}
+
+function validateFinalSale(quote: QuoteData, errors: FieldErrors) {
   const pos = quote.pointOfSale;
-  required(errors, 'pos.billPlan', pos.billPlan, 'Bill Plan is required.');
   required(errors, 'pos.paymentMethod', pos.paymentMethod, 'Down Payment Method is required.');
   if (!pos.paymentAuthorized) errors['pos.paymentAuthorized'] = 'Confirm the customer authorized the payment.';
   else if (pos.paymentAuthorized === 'No') errors['pos.paymentAuthorized'] = 'The customer must authorize the payment before the policy can be bound.';
@@ -203,7 +219,7 @@ function validatePointOfSale(quote: QuoteData, errors: FieldErrors) {
   if (!pos.agreedToTerms) errors['pos.agreedToTerms'] = 'Confirm the customer agreed to the binding terms.';
 }
 
-const validators = [validateNamedInsured, validateProducts, validateHousehold, validateAdditional, validateCoverages, validatePortfolio, validatePointOfSale, () => undefined];
+const validators = [validateNamedInsured, validateProducts, validateHousehold, validateAdditional, validateCoverages, () => undefined, validatePointOfSale, validateFinalSale];
 
 export function validateStep(step: number, quote: QuoteData): FieldErrors {
   const errors: FieldErrors = {};
@@ -211,7 +227,7 @@ export function validateStep(step: number, quote: QuoteData): FieldErrors {
   return errors;
 }
 
-/** Indexes of steps (before Final Sale) that still have errors. */
+/** Indexes of steps that still have errors. */
 export function incompleteSteps(quote: QuoteData): number[] {
   return validators.map((_, step) => step).filter((step) => Object.keys(validateStep(step, quote)).length > 0);
 }

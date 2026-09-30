@@ -54,7 +54,7 @@ export function RemoveButton({ label, onClick, disabled = false }: { label: stri
   return <button type="button" aria-label={label} title={disabled ? 'This item cannot be removed' : label} disabled={disabled} onClick={onClick} className="flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded-full bg-[#6b7780] text-white outline-none hover:bg-[#c8102e] focus-visible:shadow-[0_0_0_2px_#fff,0_0_0_4px_#e87722] disabled:cursor-not-allowed disabled:hover:bg-[#6b7780]"><X size={11} strokeWidth={3.2} /></button>;
 }
 
-function SelectControl({ id, value, options, onChange, disabled, error, placeholder = '', className = 'w-full' }: { id?: string; value: string; options: readonly Option[]; onChange?: (value: string) => void; disabled?: boolean; error?: string; placeholder?: string; className?: string }) {
+export function SelectControl({ id, value, options, onChange, disabled, error, placeholder = '', className = 'w-full' }: { id?: string; value: string; options: readonly Option[]; onChange?: (value: string) => void; disabled?: boolean; error?: string; placeholder?: string; className?: string }) {
   const hasValue = options.some((option) => optionValue(option) === value);
   return <span className={`relative block shrink-0 ${className}`}>
     <select id={id} disabled={disabled} value={value} aria-invalid={!!error} onChange={(event) => onChange?.(event.target.value)} className={`wizard-select ${control} ${disabledControl} w-full overflow-hidden pl-[15px] pr-[34px] ${error ? errorRing : 'border-[#7b8a95]'} ${focusRing}`}>
@@ -66,7 +66,7 @@ function SelectControl({ id, value, options, onChange, disabled, error, placehol
   </span>;
 }
 
-function TextControl({ id, value, onChange, onBlur, placeholder = '', disabled, error, mask, money, icon, type = 'text', className = 'w-full' }: { id?: string; value: string; onChange?: (value: string) => void; onBlur?: () => void; placeholder?: string; disabled?: boolean; error?: string; mask?: Mask; money?: boolean; icon?: ReactNode; type?: string; className?: string }) {
+export function TextControl({ id, value, onChange, onBlur, placeholder = '', disabled, error, mask, money, icon, type = 'text', className = 'w-full' }: { id?: string; value: string; onChange?: (value: string) => void; onBlur?: () => void; placeholder?: string; disabled?: boolean; error?: string; mask?: Mask; money?: boolean; icon?: ReactNode; type?: string; className?: string }) {
   return <span className={`relative block shrink-0 ${className}`}>
     {money && <span className={`pointer-events-none absolute left-[15px] top-[9px] text-[14px] ${disabled ? 'text-[#7b858a]' : 'text-[#2e3a43]'}`}>$</span>}
     {mask === 'date' && value && <span className="pointer-events-none absolute -top-[7px] left-[10px] bg-white px-[3px] text-[11px] leading-[12px] text-[#2e3a43]">MM/DD/YYYY</span>}

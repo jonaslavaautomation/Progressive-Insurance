@@ -1,18 +1,23 @@
 // Quote state, factories and reducer. Kept framework-free so it can be unit tested.
-import type { AdditionalDetails, Coverages, Driver, Incident, MailingAddress, NamedInsured, PointOfSale, PolicyInfo, QuoteData, SimulatedReports, Vehicle } from '@/types/quote';
-import { VEHICLE_TYPES } from '@/data/options';
+import type { AdditionalDetails, AgentProfile, Coverages, Driver, Incident, MailingAddress, NamedInsured, PointOfSale, PolicyInfo, QuoteData, SimulatedReports, Vehicle } from '@/types/quote';
+import { COVERAGE_DEFAULTS, VEHICLE_COVERAGE_DEFAULTS, VEHICLE_TYPES } from '@/data/options';
 import { lookupVehicleDetails } from '@/data/vehicleCatalog';
-import { emptyReports } from '@/utils/reportSimulator';
-import { ratedDrivers } from '@/utils/ratingEngine';
+import { emptyReports, type PosOrderResult } from '@/utils/reportSimulator';
+import { rateQuote, ratedDrivers, ratingSignature, selectedPlan } from '@/utils/ratingEngine';
 import { addDays, formatDate, today } from '@/utils/dates';
 
 export const STEPS = ['NAMED INSURED', 'PRODUCTS', 'HOUSEHOLD MEMBERS', 'ADDITIONAL DETAILS', 'COVERAGES/BILL PLANS', 'PORTFOLIO', 'POINT OF SALE', 'FINAL SALE'] as const;
 export const LAST_STEP = STEPS.length - 1;
-export const AGENT_CODE = '029T9 (A JACKIE DEES INS)';
 export const QUOTE_STATE = 'North Carolina';
+/** Default logged-in agent until the user sets their own name (Dashboard header). */
+export const DEFAULT_AGENT: AgentProfile = { name: 'Training Agent', agencyName: 'Training Agency Ins', agencyCode: 'TRN01' };
+
+export function agentCodeFor(agent: AgentProfile): string {
+  return `${agent.agencyCode} (${agent.agencyName.toUpperCase()})`;
+}
 
 export interface UiState {
-  view: 'dashboard' | 'wizard';
+  view: 'dashboard' | 'wizard' | 'documents';
   step: number;
   maxStep: number;
   hintMode: boolean;
@@ -22,6 +27,7 @@ export interface UiState {
 
 export interface QuoteState extends QuoteData {
   ui: UiState;
+  agent: AgentProfile;
 }
 
 export function newId(prefix: string): string {
@@ -40,7 +46,7 @@ export function createVehicle(garagingZip = ''): Vehicle {
   return {
     id: newId('veh'), vehicleType: VEHICLE_TYPES[0], vin: '', year: '', make: '', model: '', bodyStyle: '', isoSymbol: '', isoSymbolOtc: '', isoSymbolCollision: '',
     garagingZip, ownershipLength: '', primaryUse: '', rideshare: '', delivery: '', marketValue: '', originalCostNew: '', passiveRestraint: '', annualMiles: '',
-    compDeductible: '500', collDeductible: '500',
+    ...VEHICLE_COVERAGE_DEFAULTS, garagingSameAsMailing: 'Yes', garagingStreet: '', garagingStreet2: '', garagingCity: '',
   };
 }
 
@@ -65,46 +71,48 @@ function createInsured(): NamedInsured {
   };
 }
 
-export function createQuoteData(): QuoteData {
+export function createQuoteData(agent: AgentProfile = DEFAULT_AGENT): QuoteData {
   return {
-    policy: { agentCode: AGENT_CODE, quoteState: QUOTE_STATE, quoteNumber: '', effectiveDate: '', namedOperator: 'No', policyNumber: '', boundAt: '' },
+    policy: { agentCode: agentCodeFor(agent), quoteState: QUOTE_STATE, quoteNumber: '', effectiveDate: '', namedOperator: 'No', policyNumber: '', boundAt: '', comment: '' },
     insured: createInsured(),
     vehicles: [createVehicle()],
     drivers: [createDriver({ relationship: 'Insured', operatorType: 'Principal' })],
-    additional: { priorInsurance: '', priorCarrier: '', priorBiLimits: '', yearsWithPrior: '', residenceType: '', yearsAtResidence: '', paperless: '', eSignature: '' },
-    coverages: { bodilyInjury: '50/100', propertyDamage: '50000', uninsuredMotorist: '50/100', medicalPayments: 'None', roadside: 'No', rentalReimbursement: 'None' },
+    additional: { continuousInsurance: '', allDriversListed: '', priorCancellation: '', jointOwnership: '', paperless: '', primaryResidence: '', crossSell: [], noAdditionalRisks: false },
+    coverages: { ...COVERAGE_DEFAULTS },
     reports: emptyReports(),
-    pointOfSale: { billPlan: '', paymentMethod: '', paymentAuthorized: '', documentDelivery: '', reviewedCoverages: false, confirmedHousehold: false, agreedToTerms: false },
+    pointOfSale: { billPlan: 'PIF', paymentMethod: '', paymentAuthorized: '', documentDelivery: '', reviewedCoverages: false, confirmedHousehold: false, agreedToTerms: false },
+    ratedSignature: '',
+    premiumChange: null,
   };
 }
 
-export function createInitialState(): QuoteState {
-  return { ...createQuoteData(), ui: { view: 'dashboard', step: 0, maxStep: 0, hintMode: false, keyboardHelp: true } };
+export function createInitialState(agent: AgentProfile = DEFAULT_AGENT): QuoteState {
+  return { ...createQuoteData(agent), agent, ui: { view: 'dashboard', step: 0, maxStep: 0, hintMode: false, keyboardHelp: true } };
 }
 
-/** Pre-filled customer matching the training screenshots, for demos and trainer walkthroughs. */
-export function createSampleQuote(): QuoteData {
-  const base = createQuoteData();
+/** Fictitious practice customer (no real person's details) for demos and trainer walkthroughs. */
+export function createSampleQuote(agent: AgentProfile = DEFAULT_AGENT): QuoteData {
+  const base = createQuoteData(agent);
   const vehicle: Vehicle = {
     ...createVehicle('27604'), year: '2019', make: 'Toyota', model: 'Camry', bodyStyle: 'Sedan 4D', ...lookupVehicleDetails('2019', 'Toyota', 'Camry', 'Sedan 4D'),
     ownershipLength: 'At least 1 year but less than 3 years', primaryUse: '1A - Pleasure', rideshare: 'No', delivery: 'No', annualMiles: '10,000 - 11,999',
   };
   const insured: NamedInsured = {
-    firstName: 'Jonnie', middleInitial: '', lastName: 'James', suffix: '', dob: '04/15/1957', gender: 'Male', email: 'umm_5100evb@yahoo.com',
-    phones: [{ type: 'Cell', number: '847-812-0874' }],
-    address: { line1: '412 Glenwood Ave', line2: '', city: 'Raleigh', state: QUOTE_STATE, zip: '27604', poBox: false }, movedRecently: 'No', disclosureAcknowledged: 'Yes',
+    firstName: 'Alex', middleInitial: '', lastName: 'Sample', suffix: '', dob: '06/12/1984', gender: 'Not Specified', email: 'alex.sample@example.com',
+    phones: [{ type: 'Cell', number: '919-555-0142' }],
+    address: { line1: '100 Training Way', line2: '', city: 'Raleigh', state: QUOTE_STATE, zip: '27604', poBox: false }, movedRecently: 'No', disclosureAcknowledged: 'Yes',
   };
   return {
     ...base,
-    policy: { ...base.policy, quoteNumber: '550012797337', effectiveDate: formatDate(addDays(today(), 7)) },
+    policy: { ...base.policy, quoteNumber: generateQuoteNumber(), effectiveDate: formatDate(addDays(today(), 7)) },
     insured,
     vehicles: [vehicle],
     drivers: [createDriver({
-      relationship: 'Insured', operatorType: 'Principal', firstName: 'Jonnie', lastName: 'James', dob: insured.dob, gender: 'Male', maritalStatus: 'Single',
-      education: 'High school diploma or GED', employment: 'Business/Sales/Office', occupation: 'Manager/Supervisor - Office', licenseType: 'Personal Auto',
-      licenseStatus: 'Valid', licenseState: 'Virginia', licenseNumber: 'T20458188', ageFirstLicensed: '16', internationalYears: 'None', primaryVehicleId: vehicle.id,
+      relationship: 'Insured', operatorType: 'Principal', firstName: insured.firstName, lastName: insured.lastName, dob: insured.dob, gender: insured.gender, maritalStatus: 'Single',
+      education: "Bachelor's degree", employment: 'Business/Sales/Office', occupation: 'Accountant/Auditor', licenseType: 'Personal Auto',
+      licenseStatus: 'Valid', licenseState: QUOTE_STATE, licenseNumber: '000000001', ageFirstLicensed: '16', internationalYears: 'None', primaryVehicleId: vehicle.id,
     })],
-    additional: { priorInsurance: 'Yes', priorCarrier: 'State Farm', priorBiLimits: '50/100', yearsWithPrior: '3 to 5 years', residenceType: 'Own home', yearsAtResidence: 'More than 5 years', paperless: 'Yes', eSignature: 'Yes' },
+    additional: { continuousInsurance: 'No', allDriversListed: 'Yes', priorCancellation: 'No', jointOwnership: 'No', paperless: 'Yes', primaryResidence: 'Single Family Home', crossSell: [], noAdditionalRisks: true },
   };
 }
 
@@ -124,8 +132,15 @@ export type QuoteAction =
   | { type: 'updateAdditional'; patch: Partial<AdditionalDetails> }
   | { type: 'updateCoverages'; patch: Partial<Coverages> }
   | { type: 'updatePointOfSale'; patch: Partial<PointOfSale> }
-  | { type: 'reportsOrdered'; requestId: number }
-  | { type: 'reportsReceived'; reports: SimulatedReports }
+  | { type: 'recalculate' }
+  | { type: 'updateReports'; patch: Partial<Pick<SimulatedReports, 'orderClue' | 'orderMvr'>> }
+  | { type: 'posOrderStarted'; requestId: number }
+  | { type: 'posOrderApplied'; result: PosOrderResult; priorSource: 'vendor' | 'insured' }
+  | { type: 'posOrderCancelled' }
+  | { type: 'dismissPremiumChange' }
+  | { type: 'updateAgent'; agent: AgentProfile }
+  | { type: 'duplicateQuote'; quoteNumber: string }
+  | { type: 'showDocuments' }
   | { type: 'bindPolicy'; policyNumber: string; boundAt: string }
   | { type: 'navigate'; step: number }
   | { type: 'showDashboard' }
@@ -202,12 +217,48 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
       return { ...state, coverages: { ...state.coverages, ...action.patch } };
     case 'updatePointOfSale':
       return { ...state, pointOfSale: { ...state.pointOfSale, ...action.patch } };
-    case 'reportsOrdered':
-      return { ...state, reports: { ...emptyReports(action.requestId), mvrStatus: 'ordered', clueStatus: 'ordered' } };
-    case 'reportsReceived':
+    case 'recalculate':
+      return { ...state, ratedSignature: ratingSignature(state), premiumChange: null };
+    case 'updateReports':
+      return { ...state, reports: { ...state.reports, ...action.patch } };
+    case 'posOrderStarted': {
+      const { orderClue, orderMvr } = state.reports;
+      return { ...state, reports: { ...emptyReports(action.requestId), orderClue, orderMvr, clueStatus: orderClue ? 'ordering' : 'not-ordered', mvrStatus: orderMvr ? 'ordering' : 'not-ordered' } };
+    }
+    case 'posOrderApplied': {
       // Ignore results for a request that was superseded (e.g. driver data changed mid-order).
-      if (action.reports.requestId !== state.reports.requestId || state.reports.mvrStatus !== 'ordered') return state;
-      return { ...state, reports: action.reports };
+      const { result, priorSource } = action;
+      if (result.requestId !== state.reports.requestId) return state;
+      const { orderClue, orderMvr } = state.reports;
+      const before = state.ratedSignature ? selectedPlan(rateQuote(state), state.pointOfSale.billPlan).total : null;
+      const reports: SimulatedReports = {
+        ...state.reports,
+        clueStatus: orderClue ? (result.clueFindings.length ? 'flagged' : 'cleared') : 'not-ordered',
+        mvrStatus: orderMvr ? (result.mvrFindings.length ? 'flagged' : 'cleared') : 'not-ordered',
+        clueFindings: orderClue ? result.clueFindings : [],
+        mvrFindings: orderMvr ? result.mvrFindings : [],
+        vendor: orderClue ? result.vendor : null,
+        priorSource: orderClue ? priorSource : 'insured',
+        scoreTier: result.scoreTier,
+        orderedAt: result.orderedAt,
+        staleReason: '',
+      };
+      // Report results re-rate the quote automatically, as the carrier does after Point of Sale.
+      const next = { ...state, reports };
+      const after = selectedPlan(rateQuote(next), state.pointOfSale.billPlan).total;
+      return { ...next, ratedSignature: ratingSignature(next), premiumChange: before !== null && before !== after ? { from: before, to: after } : null };
+    }
+    case 'posOrderCancelled':
+      return { ...state, reports: { ...emptyReports(state.reports.requestId + 1), orderClue: state.reports.orderClue, orderMvr: state.reports.orderMvr } };
+    case 'dismissPremiumChange':
+      return { ...state, premiumChange: null };
+    case 'updateAgent':
+      return { ...state, agent: action.agent, policy: state.policy.policyNumber ? state.policy : { ...state.policy, agentCode: agentCodeFor(action.agent) } };
+    case 'duplicateQuote':
+      // A duplicate keeps every answer but is a new, unsold quote that must be re-rated and re-ordered.
+      return { ...state, policy: { ...state.policy, quoteNumber: action.quoteNumber, policyNumber: '', boundAt: '' }, reports: emptyReports(state.reports.requestId + 1), ratedSignature: '', premiumChange: null };
+    case 'showDocuments':
+      return { ...state, ui: { ...state.ui, view: 'documents' } };
     case 'bindPolicy':
       return { ...state, policy: { ...state.policy, policyNumber: action.policyNumber, boundAt: action.boundAt } };
     case 'navigate': {
@@ -221,9 +272,9 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
     case 'toggleKeyboardHelp':
       return { ...state, ui: { ...state.ui, keyboardHelp: !state.ui.keyboardHelp } };
     case 'load':
-      return { ...action.data, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, maxStep: Math.max(state.ui.maxStep, action.maxStep) } };
+      return { ...action.data, agent: state.agent, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, maxStep: Math.max(state.ui.maxStep, action.maxStep) } };
     case 'reset':
-      return { ...createQuoteData(), reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, step: 0, maxStep: 0 } };
+      return { ...createQuoteData(state.agent), agent: state.agent, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, step: 0, maxStep: 0 } };
   }
 }
 
@@ -239,10 +290,11 @@ export function quoteReducer(state: QuoteState, action: QuoteAction): QuoteState
   const next = baseReducer(state, action);
   if (next === state || action.type === 'load' || action.type === 'reset') return next;
   const { reports } = next;
-  if (reports.mvrStatus !== 'pending' && reportSignature(state.drivers) !== reportSignature(next.drivers)) {
+  const ordered = reports.priorSource !== '' || reports.clueStatus === 'ordering' || reports.mvrStatus === 'ordering';
+  if (ordered && reportSignature(state.drivers) !== reportSignature(next.drivers)) {
     return {
       ...next,
-      reports: { ...emptyReports(reports.requestId + 1), staleReason: 'Driver information changed after reports were ordered. Re-order MVR & CLUE to verify the updated drivers.' },
+      reports: { ...emptyReports(reports.requestId + 1), orderClue: reports.orderClue, orderMvr: reports.orderMvr, staleReason: 'Driver information changed after reports were ordered. Click ORDER POINT OF SALE again to verify the updated drivers.' },
     };
   }
   return next;
