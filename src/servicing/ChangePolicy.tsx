@@ -6,6 +6,7 @@ import type { PolicyRecord, PolicySource } from '@/types/policy';
 import type { Driver, QuoteData, Vehicle } from '@/types/quote';
 import type { CommercialKey, OtherProductKey, ProductConfig, ProductQuote } from '@/products/types';
 import { useQuote } from '@/context/useQuote';
+import { runWithSpinner } from '@/services/processing';
 import { createDriver, createVehicle } from '@/context/quoteStore';
 import { ANNUAL_MILES, BI_PD, COLL_DEDUCTIBLES, ETE, GENDERS, MARITAL_STATUSES, MED_PAY, OTC_DEDUCTIBLES, PRIMARY_USES, RELATIONSHIPS, TOWING, UM_BI, US_STATES, coverageOptions } from '@/data/options';
 import { MODEL_YEARS, bodyStylesFor, lookupVehicleDetails, makesFor, modelsFor } from '@/data/vehicleCatalog';
@@ -408,9 +409,11 @@ export function ChangePolicyModal({ policy, onClose }: { policy: PolicyRecord; o
   };
   const submit = () => {
     if (!approved) { setError('Confirm the customer requested these changes and agrees to the premium change.'); return; }
-    const result = servicePolicy(policy.id, (record, today) => applyChange(record, { draft, effectiveDate, changes, vehiclesChanged, lienholders, newLienholders: added }, today));
-    if (result) { setError(result); return; }
-    onClose(`Policy change processed effective ${effectiveDate}. Amended declarations issued.`);
+    runWithSpinner('Submitting policy change...', () => {
+      const result = servicePolicy(policy.id, (record, today) => applyChange(record, { draft, effectiveDate, changes, vehiclesChanged, lienholders, newLienholders: added }, today));
+      if (result) { setError(result); return; }
+      onClose(`Policy change processed effective ${effectiveDate}. Amended declarations issued.`);
+    }, 1100);
   };
   const Editor = EDITORS[type];
   const backdated = engine.dayDiff(effectiveDate, day) > 0;

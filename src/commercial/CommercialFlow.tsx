@@ -5,6 +5,7 @@ import { BriefcaseBusiness, CheckCircle2, ClipboardList, Lightbulb, RotateCw, St
 import type { CommercialKey, ProductUnit } from '@/products/types';
 import type { CommercialDriver, CommercialQuote } from '@/commercial/types';
 import { useQuote } from '@/context/useQuote';
+import { runWithSpinner } from '@/services/processing';
 import { BUSINESS_FIELDS, COMMERCIAL_CONFIGS, DRIVER_ACCIDENTS, DRIVER_EXPERIENCE, DRIVER_LICENSE_TYPES, DRIVER_VIOLATIONS, SHARED_QUESTIONS } from '@/commercial/configs';
 import { COMMERCIAL_STEPS, addCommercialProducts, commercialContext, commercialTotals, createCommercialDriver, isCommercialRated, rateCommercial, recalculateCommercial } from '@/commercial/engine';
 import { incompleteCommercialSteps, validateCommercialStep } from '@/commercial/validation';
@@ -49,8 +50,8 @@ function CommercialHeader({ quote }: { quote: CommercialQuote }) {
     {b.name ? <>{item('Business', b.dba ? `${b.name} DBA ${b.dba}` : b.name)}{item('Contact', b.contact ?? '')}{item('Phone', b.phone ?? '')}</> : item('Commercial Lines Quote', quote.products.map((key) => COMMERCIAL_CONFIGS[key].name).join(', '))}
     <div className="ml-auto flex shrink-0 items-center gap-[14px]">
       <span className="text-[12.5px] font-medium">Hello, {state.agent.name}</span>
-      {!quote.boundPolicyIds.length && <button type="button" onClick={() => updateCommercial(sampleBusiness)} className={button} title="Fill the business page with a fictitious practice business">Load Sample Business</button>}
-      <button type="button" onClick={toggleHints} className={`${button} flex items-center gap-1 ${state.ui.hintMode ? 'bg-[#e87722] border-[#e87722]' : ''}`}><Lightbulb size={13} />Hints</button>
+      {state.trainerMode && !quote.boundPolicyIds.length && <button type="button" onClick={() => updateCommercial(sampleBusiness)} className={button} title="Fill the business page with a fictitious practice business">Load Sample Business</button>}
+      {state.trainerMode && <button type="button" onClick={toggleHints} className={`${button} flex items-center gap-1 ${state.ui.hintMode ? 'bg-[#e87722] border-[#e87722]' : ''}`}><Lightbulb size={13} />Hints</button>}
     </div>
   </header>;
 }
@@ -212,7 +213,7 @@ function FinalSaleContent({ quote }: { quote: CommercialQuote }) {
   const bind = () => {
     if (incomplete.length) { window.alert(`Complete ${incomplete.map((step) => COMMERCIAL_STEPS[step]).join(', ')} before binding.`); return; }
     if (Object.keys(errors).length) { reveal(); return; }
-    bindCommercial();
+    runWithSpinner('Binding commercial policies...', () => { bindCommercial(); }, 1400);
   };
   if (bound.length) return <div className="max-w-[880px] space-y-[20px]">
     <div role="status" className="flex items-start gap-3 rounded-[3px] border border-[#0f7a52] bg-[#eef8f3] px-[18px] py-[14px] text-[14px]"><CheckCircle2 size={22} className="shrink-0 text-[#0f7a52]" /><div><div className="font-slab text-[17px] font-bold">{bound.length} commercial polic{bound.length > 1 ? 'ies' : 'y'} issued</div><p className="mt-1 text-[#2e3a43]">Declarations, the application and a certificate of insurance are in each policy&rsquo;s Documents tab. Billing and servicing work the same as personal lines.</p></div></div>

@@ -11,7 +11,7 @@ import { formatCurrency } from '@/utils/masks';
 import { PaymentModal } from '@/servicing/PolicyView';
 import { Modal } from '@/components/wizard/Modal';
 import { modalButton } from '@/components/wizard/modalStyles';
-import { BackLink, PortalLayout } from '@/servicing/portal/PortalLayout';
+import { PortalLayout } from '@/servicing/portal/PortalLayout';
 
 const TABS: [PendingTab, string][] = [['nonpayment', 'Pending Cancellation Due to Non-Payment'], ['underwriting', 'Pending Cancellation Due to Underwriting Reasons'], ['renewals', 'Pending Renewals']];
 
@@ -68,7 +68,7 @@ function EmailModal({ policy, onClose }: { policy: PolicyRecord; onClose: () => 
   const [sent, setSent] = useState(false);
   const [message, setMessage] = useState(`Hello ${policy.insured.firstName || policy.insured.name},\n\nThis is a reminder about your ${policy.productName} policy #${policy.policyNumber}. Please contact our office or make a payment to keep your coverage active.\n\nThank you.`);
   const send = () => {
-    servicePolicy(policy.id, (record, day) => ({ ...record, history: [...record.history, { id: `his-${Math.random().toString(36).slice(2, 9)}`, date: day, event: 'Customer emailed', detail: `Reminder emailed to ${policy.insured.email} (training simulation, not delivered).` }] }));
+    servicePolicy(policy.id, (record, day) => ({ ...record, history: [...record.history, { id: `his-${Math.random().toString(36).slice(2, 9)}`, date: day, event: 'Customer emailed', detail: `Reminder emailed to ${policy.insured.email}.` }] }));
     setSent(true);
   };
   return <Modal title="Email Customer" width={620} onClose={onClose} footer={sent ? <button type="button" className={modalButton.primary} onClick={onClose}>Close</button> : <><button type="button" className={modalButton.secondary} onClick={onClose}>Cancel</button><button type="button" className={modalButton.primary} onClick={send}>Send Email</button></>}>
@@ -80,7 +80,7 @@ function EmailModal({ policy, onClose }: { policy: PolicyRecord; onClose: () => 
 }
 
 export function PendingList() {
-  const { state, openCustomer, showDashboard, loadPracticeBook, openPending, engine } = useQuote();
+  const { state, openCustomer, loadPracticeBook, openPending, engine, lastConfirmation } = useQuote();
   const tab = state.ui.pendingTab;
   const [agentFilter, setAgentFilter] = useState('All');
   const [appliedAgent, setAppliedAgent] = useState('All');
@@ -128,8 +128,7 @@ export function PendingList() {
   const button = 'h-[27px] rounded-[2px] bg-[#0073cf] px-[14px] text-[12px] font-bold text-white hover:bg-[#003865] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e87722]';
   const empty = rowsFor('nonpayment', state.policies, state.simDate, engine.minimumDue).length + rowsFor('underwriting', state.policies, state.simDate, engine.minimumDue).length + rowsFor('renewals', state.policies, state.simDate, engine.minimumDue).length === 0;
 
-  return <PortalLayout>
-    <BackLink label="Back to Dashboard" onClick={showDashboard} />
+  return <PortalLayout crumbs={[{ label: 'Manage Policies' }, { label: 'Pending Cancel & Renewals' }]}>
     <h1 className="text-[24px] font-light text-[#1b2a36]">Policies Pending Cancellation or Renewal</h1>
     <p className="mt-2 flex items-center gap-2 text-[12px]"><Info size={16} className="text-[#0073cf]" />Policies listed are pending cancellation. Some of these require payment and some require follow up to avoid cancellation.</p>
     {notice && <p role="status" className="mt-3 max-w-[900px] rounded-[3px] border border-[#0f7a52] bg-[#eef8f3] px-3 py-2 text-[12.5px]">{notice} <button type="button" onClick={() => setNotice('')} className="ml-2 underline">Dismiss</button></p>}
@@ -139,7 +138,7 @@ export function PendingList() {
     </div>
     {empty && <div className="mt-5 max-w-[900px] rounded-[3px] border border-[#cfdbe3] bg-[#f6f9fb] px-4 py-3 text-[12.5px] print:hidden">
       <b>No policies are pending cancellation or renewal.</b> Policies land here when a bill goes unpaid, underwriting schedules a cancellation, or a renewal offer is waiting for payment.
-      {!hasPracticeBook(state.policies) && <div className="mt-2"><button type="button" onClick={() => { loadPracticeBook(); openPending('nonpayment'); setNotice('Five fictitious practice customers were added to your book of business.'); }} className={button}>Load 5 Practice Customers</button><span className="ml-2 text-[#5c6670]">Adds made-up accounts in each status for training.</span></div>}
+      {state.trainerMode && !hasPracticeBook(state.policies) && <div className="mt-2"><button type="button" onClick={() => { loadPracticeBook(); openPending('nonpayment'); setNotice('Five fictitious practice customers were added to your book of business.'); }} className={button}>Load 5 Practice Customers</button><span className="ml-2 text-[#5c6670]">Adds made-up accounts in each status for training.</span></div>}
     </div>}
     <div className="mt-4 flex items-end justify-between text-[12px] print:hidden">
       <span>Showing {rows.length ? (current - 1) * pageSize + 1 : 0} to {Math.min(current * pageSize, rows.length)} of {rows.length} entries</span>
@@ -174,7 +173,7 @@ export function PendingList() {
       })}
       {!visible.length && <tr><td colSpan={columns.length} className="px-[8px] py-[18px] text-center text-[12.5px] text-[#5c6670]">No matching records found</td></tr>}
     </tbody></table>
-    {paying && <PaymentModal policy={state.policies.find((entry) => entry.id === paying.id) ?? paying} preset={tab === 'renewals' ? paying.renewal?.dueToday : undefined} onClose={(text) => { setPaying(null); if (text) setNotice(`${paying.insured.name}, policy #${paying.policyNumber}: ${text}`); }} />}
+    {paying && <PaymentModal policy={state.policies.find((entry) => entry.id === paying.id) ?? paying} preset={tab === 'renewals' ? paying.renewal?.dueToday : undefined} onClose={(text) => { setPaying(null); if (text) setNotice(`${paying.insured.name}, policy #${paying.policyNumber}: ${text} Confirmation #${lastConfirmation()}.`); }} />}
     {emailing && <EmailModal policy={emailing} onClose={() => setEmailing(null)} />}
   </PortalLayout>;
 }

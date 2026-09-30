@@ -51,9 +51,11 @@ export function OptionsMenu() {
       <Item icon={<SquarePen size={18} />} label="Quote Comment" onClick={run(openComment)} trailing={state.policy.comment ? <span className="h-[8px] w-[8px] rounded-full bg-[#e87722]" aria-label="Has comment" /> : undefined} />
       <Item icon={<BookOpen size={18} />} label="Product Guides" onClick={() => setGuidesOpen(!guidesOpen)} trailing={<ChevronDown size={16} className={`text-[#003865] ${guidesOpen ? 'rotate-180' : ''}`} />} />
       {guidesOpen && productGuides.map((entry, index) => <li key={entry.title}><button type="button" onClick={run(() => setDialog({ guide: index }))} className="flex w-full items-center gap-2 py-[7px] pl-[46px] pr-[16px] text-left text-[13px] text-[#003865] underline-offset-2 hover:bg-[#eef3f6] hover:underline"><ChevronRight size={13} />{entry.title}</button></li>)}
-      <li className="mt-[6px] border-t border-[#e4ecf1] px-[16px] pb-[2px] pt-[8px] text-[10px] font-bold uppercase tracking-[.6px] text-[#7b858a]">Training tools</li>
-      <Item icon={<Lightbulb size={18} />} label={`Training Hints: ${state.ui.hintMode ? 'ON' : 'OFF'}`} onClick={run(toggleHints)} />
-      <Item icon={<UserRoundPlus size={18} />} label="Load Practice Customer" onClick={run(loadSampleQuote)} />
+      {state.trainerMode && <>
+        <li className="mt-[6px] border-t border-[#e4ecf1] px-[16px] pb-[2px] pt-[8px] text-[10px] font-bold uppercase tracking-[.6px] text-[#7b858a]">Trainer mode</li>
+        <Item icon={<Lightbulb size={18} />} label={`Training Hints: ${state.ui.hintMode ? 'ON' : 'OFF'}`} onClick={run(toggleHints)} />
+        <Item icon={<UserRoundPlus size={18} />} label="Load Practice Customer" onClick={run(loadSampleQuote)} />
+      </>}
       <Item icon={<RotateCcw size={18} />} label="Start New Quote" onClick={run(() => { if (window.confirm('Discard this quote and start a new one?')) resetQuote(); })} />
     </ul>}
     {notice && <div role="status" className="fixed right-[24px] top-[72px] z-[95] rounded-[3px] border border-[#0f7a52] bg-[#e6f4ef] px-[16px] py-[10px] text-[14px] font-medium text-[#0b5d3f] shadow-lg">{notice}</div>}

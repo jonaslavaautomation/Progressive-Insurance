@@ -73,8 +73,7 @@ export function CustomerSummary() {
     updateInsured({ firstName: insured.firstName, middleInitial: insured.middleInitial, lastName: insured.lastName, suffix: insured.suffix, dob: insured.dob, gender: insured.gender, email: insured.email, phones: insured.phones });
     updateAddress(insured.address);
   };
-  return <PortalLayout>
-    <BackLink label="Back to Pending Cancellations & Renewals" onClick={() => openPending()} />
+  return <PortalLayout crumbs={[{ label: 'Manage Policies', onClick: () => openPending() }, { label: 'Customer Summary' }]}>
     <h1 className="text-[24px] font-light">Customer Summary</h1>
     <h2 className="mt-3 text-[15px] font-bold text-[#3d4b55]">{name}&rsquo;s Policies</h2>
     <p className="mt-3 text-[12.5px]">Thank you for keeping this valued customer since {customerSince(policies)}</p>

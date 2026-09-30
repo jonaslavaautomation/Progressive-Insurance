@@ -41,13 +41,14 @@ export function TrainingClock() {
     return () => window.clearTimeout(timer);
   }, [events, state.simDate]);
   const advance = (days: number) => { before.current = events; advanceClock(days); };
+  if (!state.trainerMode) return null;
   const chip = `h-[30px] rounded-[3px] border border-[#0073cf] bg-white px-[10px] text-[12px] font-bold text-[#003865] hover:bg-[#e8f4fa] ${focusable}`;
   return <div className="mb-[20px] flex flex-wrap items-center gap-[10px] rounded-[3px] border border-dashed border-[#e87722] bg-[#fff6ee] px-[16px] py-[10px] text-[13px] text-[#2e3a43] print:hidden">
     <CalendarClock size={18} className="text-[#e87722]" />
     <span><b>Training clock:</b> today is <b>{state.simDate}</b></span>
     <span className="text-[#5c6670]">Advance time to run bills, late fees, notices and renewals:</span>
     {[1, 7, 15, 30].map((days) => <button key={days} type="button" onClick={() => advance(days)} className={chip}>+{days} day{days > 1 ? 's' : ''}</button>)}
-    {state.policies.length > 0 && <button type="button" onClick={() => { if (window.confirm('Delete every training policy and its history from this browser?')) clearPolicies(); }} className={`ml-auto flex items-center gap-1 text-[12px] font-bold text-[#c8102e] underline ${focusable}`}><Trash2 size={13} />Clear training policies</button>}
+    {state.policies.length > 0 && <button type="button" onClick={() => { if (window.confirm('Reset the book of business? Every policy you issued is deleted and the reference accounts are rebuilt.')) clearPolicies(); }} className={`ml-auto flex items-center gap-1 text-[12px] font-bold text-[#c8102e] underline ${focusable}`}><Trash2 size={13} />Reset book of business</button>}
     {notice && <span role="status" className="flex w-full items-center gap-1 text-[12px] font-medium text-[#0b5d3f]"><Clock3 size={13} />{notice}</span>}
   </div>;
 }

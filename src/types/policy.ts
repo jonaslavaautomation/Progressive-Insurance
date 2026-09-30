@@ -76,6 +76,23 @@ export interface InsuredSnapshot {
   cityStateZip: string;
 }
 
+export type ClaimStatus = 'Open - Assigned' | 'Open - Under Review' | 'Closed - Paid' | 'Closed - No Payment';
+
+export interface ClaimRecord {
+  id: string;
+  claimNumber: string;
+  lossDate: string;
+  reportedOn: string;
+  type: string;
+  description: string;
+  status: ClaimStatus;
+  /** Amount paid on the claim to date. */
+  paid: number;
+  adjuster: string;
+  atFault: 'Yes' | 'No' | 'Undetermined';
+  unit: string;
+}
+
 export type CancelKind = 'nonpayment' | 'insured' | 'company';
 
 export interface PolicyRecord {
@@ -122,4 +139,6 @@ export interface PolicyRecord {
   source: PolicySource;
   /** Lienholders / loss payees by unit label. */
   lienholders: { id: string; unit: string; name: string; address: string; loanNumber: string; kind: 'Lienholder' | 'Lessor' }[];
+  /** Claims reported on this policy (First Notice of Loss and history). */
+  claims?: ClaimRecord[];
 }

@@ -94,7 +94,7 @@ function Hub({ policy, onPreview }: { policy: PolicyRecord; onPreview: (document
 }
 
 function SendModal({ policy, mode, onClose }: { policy: PolicyRecord; mode: 'mail' | 'fax'; onClose: (message?: string) => void }) {
-  const { servicePolicy } = useQuote();
+  const { servicePolicy, lastConfirmation } = useQuote();
   const [to, setTo] = useState(mode === 'mail' ? 'insured' : '');
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
@@ -104,14 +104,14 @@ function SendModal({ policy, mode, onClose }: { policy: PolicyRecord; mode: 'mai
     if (mode === 'fax') {
       if (!name.trim()) { setError('Enter who the fax is for.'); return; }
       if (!PHONE.test(fax)) { setError('Enter a valid 10-digit fax number (XXX-XXX-XXXX).'); return; }
-      servicePolicy(policy.id, (record, day) => withHistory(record, day, 'ID cards faxed', `Faxed to ${name.trim()} at ${fax} (training simulation, not sent).`));
-      onClose(`ID cards faxed to ${name.trim()} at ${fax}.`);
+      servicePolicy(policy.id, (record, day) => withHistory(record, day, 'ID cards faxed', `Faxed to ${name.trim()} at ${fax}.`));
+      onClose(`ID cards faxed to ${name.trim()} at ${fax}. Confirmation #${lastConfirmation()}.`);
       return;
     }
     const destination = to === 'insured' ? `${policy.insured.name}, ${policy.insured.street}, ${policy.insured.cityStateZip}` : `${name.trim()}, ${address.trim()}`;
     if (to !== 'insured' && (!name.trim() || !address.trim())) { setError('Enter the recipient name and mailing address.'); return; }
-    servicePolicy(policy.id, (record, day) => withHistory(record, day, 'ID cards mailed', `Mailed to ${destination}. Delivery in 5-7 business days (training simulation).`));
-    onClose(`ID cards will be mailed to ${destination} within 5-7 business days.`);
+    servicePolicy(policy.id, (record, day) => withHistory(record, day, 'ID cards mailed', `Mailed to ${destination}. Delivery in 5-7 business days.`));
+    onClose(`ID cards will be mailed to ${destination} within 5-7 business days. Confirmation #${lastConfirmation()}.`);
   };
   return <Modal title={mode === 'mail' ? 'Mail ID Cards' : 'Fax ID Cards'} width={600} onClose={() => onClose()} footer={<><button type="button" className={modalButton.secondary} onClick={() => onClose()}>Cancel</button><button type="button" className={modalButton.primary} onClick={submit}>{mode === 'mail' ? 'Mail ID Cards' : 'Send Fax'}</button></>}>
     <div className="space-y-3 text-[13px]">

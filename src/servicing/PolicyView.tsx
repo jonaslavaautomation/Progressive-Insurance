@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, FileText, Info, RotateCcw } from 'lucide-r
 import type { PolicyDocument, PolicyRecord } from '@/types/policy';
 import type { PolicyTab } from '@/context/quoteStore';
 import { useQuote } from '@/context/useQuote';
+import { runWithSpinner } from '@/services/processing';
 import { formatCurrency } from '@/utils/masks';
 import { parseDate } from '@/utils/dates';
 import { buildBillPlans } from '@/utils/ratingEngine';
@@ -46,9 +47,11 @@ export function PaymentModal({ policy, preset, onClose }: { policy: PolicyRecord
   const amount = choice === 'Other amount' ? Number(other.replace(/[^\d.]/g, '')) : choices.find(([label]) => label === choice)?.[1] ?? 0;
   const submit = () => {
     if (!(amount > 0)) { setError('Enter a payment amount greater than $0.00.'); return; }
-    const result = servicePolicy(policy.id, (record, today) => engine.makePayment(record, Math.round(amount * 100) / 100, method, today));
-    if (result) { setError(result); return; }
-    onClose(`Payment of ${formatCurrency(amount)} posted by ${method}.`);
+    runWithSpinner('Processing payment...', () => {
+      const result = servicePolicy(policy.id, (record, today) => engine.makePayment(record, Math.round(amount * 100) / 100, method, today));
+      if (result) { setError(result); return; }
+      onClose(`Payment of ${formatCurrency(amount)} posted by ${method}.`);
+    });
   };
   if (owed <= 0 && !preset) return <Modal title="Make a Payment" width={560} onClose={() => onClose()} footer={<button type="button" className={modalButton.blue} onClick={() => onClose()}>Close</button>}><p className="flex items-center gap-2 text-[14px]"><CheckCircle2 size={18} className="text-[#0f7a52]" />Policy #{policy.policyNumber} has no balance due{policy.billPlanId === 'PIF' ? ': it is paid in full for this term.' : '.'}</p></Modal>;
   return <Modal title="Make a Payment" width={620} onClose={() => onClose()} footer={<><button type="button" className={modalButton.secondary} onClick={() => onClose()}>Cancel</button><button type="button" className={modalButton.blue} onClick={submit}>Submit Payment</button></>}>
@@ -76,9 +79,11 @@ function CancelModal({ policy, onClose }: { policy: PolicyRecord; onClose: (mess
   const submit = () => {
     const problem = engine.validateCancel(policy, request, day) || (!confirmed ? 'Confirm the customer (or underwriting) authorized this cancellation.' : '');
     if (problem) { setError(problem); return; }
-    const result = servicePolicy(policy.id, (record, today) => engine.requestCancel(record, request, today));
-    if (result) { setError(result); return; }
-    onClose(engine.dayDiff(day, effectiveDate) > 0 ? `Cancellation scheduled for ${effectiveDate}.` : 'Policy cancelled.');
+    runWithSpinner('Submitting cancellation...', () => {
+      const result = servicePolicy(policy.id, (record, today) => engine.requestCancel(record, request, today));
+      if (result) { setError(result); return; }
+      onClose(engine.dayDiff(day, effectiveDate) > 0 ? `Cancellation scheduled for ${effectiveDate}.` : 'Policy cancelled.');
+    });
   };
   return <Modal title="Cancel Policy" width={720} onClose={() => onClose()} footer={<><button type="button" className={modalButton.secondary} onClick={() => onClose()}>Keep Policy</button><button type="button" className={modalButton.primary} onClick={submit}>Submit Cancellation</button></>}>
     <div className="grid grid-cols-2 gap-4 text-[14px]">
@@ -102,9 +107,11 @@ function ReinstateModal({ policy, onClose }: { policy: PolicyRecord; onClose: (m
   const [method, setMethod] = useState(PAYMENT_METHODS[0]);
   const [error, setError] = useState('');
   const submit = () => {
-    const result = servicePolicy(policy.id, (record, today) => engine.reinstate(record, method, today));
-    if (result) { setError(result); return; }
-    onClose('Policy reinstated.');
+    runWithSpinner('Reinstating policy...', () => {
+      const result = servicePolicy(policy.id, (record, today) => engine.reinstate(record, method, today));
+      if (result) { setError(result); return; }
+      onClose('Policy reinstated.');
+    });
   };
   return <Modal title="Reinstate Policy" width={600} onClose={() => onClose()} footer={<><button type="button" className={modalButton.secondary} onClick={() => onClose()}>Cancel</button>{check.allowed && <button type="button" className={modalButton.blue} onClick={submit}>Collect Payment &amp; Reinstate</button>}</>}>
     {check.allowed ? <>
@@ -189,7 +196,7 @@ function SummaryTab({ policy, open, openDoc }: { policy: PolicyRecord; open: (di
       <WizardCard title="Quick Documents" split={false}>
         <div className="flex flex-wrap gap-[10px] px-[21px] py-[14px]">{(['Declarations', 'ID Cards', 'FS-1 Certificate of Insurance', 'Application'] as const).map((type) => { const found = latest(type); return found ? <button key={type} type="button" onClick={() => openDoc(found)} className={outlineButton}><FileText size={15} />{DOCUMENT_TITLES[type].replace('Insurance Identification Cards', 'ID Cards').replace(' Certification of Liability Insurance', '')}</button> : null; })}</div>
       </WizardCard>
-      {policy.status === 'Active' && <WizardCard title="Trainer Tools" split={false}><div className="flex flex-wrap gap-[10px] px-[21px] py-[14px]"><button type="button" onClick={() => open('nonrenew')} className={outlineButton}>Non-Renew Policy</button></div></WizardCard>}
+      {policy.status === 'Active' && state.trainerMode && <WizardCard title="Trainer Tools" split={false}><div className="flex flex-wrap gap-[10px] px-[21px] py-[14px]"><button type="button" onClick={() => open('nonrenew')} className={outlineButton}>Non-Renew Policy</button></div></WizardCard>}
     </div>
   </div>;
 }
@@ -209,7 +216,7 @@ function BillingTab({ policy, open }: { policy: PolicyRecord; open: (dialog: Dia
     <WizardCard title="Installment Schedule" split={false}>
       <table className="w-full border-collapse text-[14px]"><thead><tr className="text-[12px] uppercase tracking-[.3px] text-[#5c6670]"><th className={cell}>#</th><th className={cell}>Due Date</th><th className={`${cell} text-right`}>Amount</th><th className={`${cell} text-right`}>Paid</th><th className={cell}>Status</th><th className={cell}>Billed</th></tr></thead><tbody>{policy.installments.map((entry) => <tr key={entry.id}><td className={cell}>{entry.number === 0 ? 'Down' : entry.number}</td><td className={cell}>{entry.due}</td><td className={`${cell} text-right tabular-nums`}>{formatCurrency(entry.amount)}</td><td className={`${cell} text-right tabular-nums`}>{formatCurrency(entry.paid)}</td><td className={`${cell} capitalize ${tone[entry.status]}`}>{entry.status}{entry.lateFeeApplied ? ' · late fee' : ''}</td><td className={cell}>{entry.billedOn || '—'}</td></tr>)}</tbody></table>
     </WizardCard>
-    <WizardCard title="Transactions" split={false} subtitle={policy.ledger.some((entry) => entry.type === 'Payment' || entry.type === 'Automatic Payment') && open1 ? <button type="button" onClick={nsf} className={dangerButton}><RotateCcw size={14} />Simulate Returned Payment</button> : undefined}>
+    <WizardCard title="Transactions" split={false} subtitle={policy.ledger.some((entry) => entry.type === 'Payment' || entry.type === 'Automatic Payment') && open1 && state.trainerMode ? <button type="button" onClick={nsf} className={dangerButton}><RotateCcw size={14} />Simulate Returned Payment</button> : undefined}>
       <table className="w-full border-collapse text-[14px]"><thead><tr className="text-[12px] uppercase tracking-[.3px] text-[#5c6670]"><th className={cell}>Date</th><th className={cell}>Type</th><th className={cell}>Detail</th><th className={`${cell} text-right`}>Amount</th></tr></thead><tbody>{[...policy.ledger].reverse().map((entry) => <tr key={entry.id}><td className={cell}>{entry.date}</td><td className={cell}>{entry.type}</td><td className={`${cell} text-[13px] text-[#5c6670]`}>{entry.detail}</td><td className={`${cell} text-right tabular-nums ${entry.amount < 0 ? 'text-[#0b5d3f]' : ''}`}>{entry.amount < 0 ? `−${formatCurrency(-entry.amount)}` : formatCurrency(entry.amount)}</td></tr>)}</tbody></table>
     </WizardCard>
     {notice && <p role="status" className="text-[13px] font-medium text-[#c8102e]">{notice}</p>}
@@ -231,14 +238,14 @@ function HistoryTab({ policy }: { policy: PolicyRecord }) {
 }
 
 export function PolicyView() {
-  const { state, setPolicyTab, openPolicies, servicePolicy, engine } = useQuote();
+  const { state, setPolicyTab, openPolicies, servicePolicy, engine, lastConfirmation } = useQuote();
   const policy = state.policies.find((entry) => entry.id === state.ui.policyId);
   const [dialog, setDialog] = useState<Dialog>(() => (state.ui.policyIntent === 'change' ? 'change' : null));
   const [document, setDocument] = useState<PolicyDocument | null>(null);
   const [message, setMessage] = useState('');
   if (!policy) return <ServiceLayout back={{ label: 'Policy Search', onClick: () => openPolicies(state.ui.policyQuery) }}><p className="text-[14px]">Policy not found.</p></ServiceLayout>;
   const tab = state.ui.policyTab;
-  const close = (text?: string) => { setDialog(null); if (text) setMessage(text); };
+  const close = (text?: string) => { setDialog(null); if (text) setMessage(`${text} Confirmation #${lastConfirmation()}.`); };
   const renewal = policy.renewal;
   const reinstatement = engine.reinstatementCheck(policy, state.simDate);
   const nav = <aside className="w-[200px] shrink-0 border-r border-[#d0d8de] bg-white pt-[10px] print:hidden"><ol>{TABS.map(([key, label]) => <li key={key} className={`relative ${tab === key ? 'border-y border-[#d0d8de] before:absolute before:-bottom-px before:-top-px before:left-0 before:w-[4px] before:bg-[#003865]' : ''}`}><button type="button" onClick={() => setPolicyTab(key)} className={`block w-full py-[12px] pl-[25px] pr-[16px] text-left text-[12.5px] font-bold uppercase ${tab === key ? 'text-[#003865]' : 'text-[#003865] underline underline-offset-2 hover:text-[#0073cf]'}`}>{label}</button></li>)}</ol></aside>;
