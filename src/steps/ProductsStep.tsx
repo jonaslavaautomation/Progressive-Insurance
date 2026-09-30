@@ -10,11 +10,13 @@ import { applyMask } from '@/utils/masks';
 import { WizardLayout } from '@/components/wizard/WizardLayout';
 import { AddButton, HelpDot, HintBubble, InlineError, MoneyTag, RadioPair, WizardCard, WizardField, WizardRowShell, WizardSelect, errorRing, focusRing } from '@/components/wizard/primitives';
 import { useFieldError } from '@/components/wizard/stepValidation';
+import { ProductUnitsContent } from '@/components/products/ProductForms';
+import { currentProduct } from '@/products/active';
 
 type Identity = Pick<Vehicle, 'year' | 'make' | 'model' | 'bodyStyle'>;
 
 /** Policy Effective Date + Named Operator strip above the vehicle cards. */
-function PolicyStrip() {
+function PolicyStrip({ auto = true }: { auto?: boolean }) {
   const { state, updatePolicy } = useQuote();
   const { policy } = state;
   const dateError = useFieldError('policy.effectiveDate');
@@ -29,11 +31,11 @@ function PolicyStrip() {
       <span className="ml-[13px] w-[212px]"><span className="relative block">{policy.effectiveDate && <span className="pointer-events-none absolute -top-[7px] left-[10px] bg-white px-[3px] text-[11px] leading-[12px]">MM/DD/YYYY</span>}<input id="policy.effectiveDate" value={policy.effectiveDate} placeholder="MM/DD/YYYY" aria-invalid={!!dateError} onChange={(event) => updatePolicy({ effectiveDate: applyMask('date', event.target.value) })} className={`h-[38px] w-full rounded-[4px] border bg-white pl-[15px] text-[14px] outline-none ${dateError ? errorRing : 'border-[#7b8a95]'} ${focusRing}`} /></span><InlineError message={dateError} /></span>
       <button type="button" aria-label="Open calendar" onClick={openPicker} className="relative ml-[9px] mt-[6px] flex h-[26px] w-[26px] items-center justify-center rounded-[3px] border border-[#5c6670] text-[#2e3a43] hover:bg-[#e8f4fa]"><CalendarDays size={18} strokeWidth={1.7} /><input ref={picker} type="date" tabIndex={-1} aria-hidden onChange={(event) => fromPicker(event.target.value)} className="pointer-events-none absolute inset-0 opacity-0" /></button>
     </div>
-    <div className="flex flex-1 items-start border-l border-[#d7e0e6] py-[10px] pl-[21px]">
+    {auto ? <div className="flex flex-1 items-start border-l border-[#d7e0e6] py-[10px] pl-[21px]">
       <span className="flex h-[38px] w-[249px] items-center gap-1.5">Named Operator Policy?*<HintBubble text={fieldHints.namedOperator} /></span>
       <span className="flex h-[38px] items-center"><HelpDot label="Named Operator Policy" text={fieldHints.namedOperator} /></span>
       <span id="policy.namedOperator" tabIndex={-1} className="ml-[20px] outline-none"><span className={`flex h-[38px] items-center gap-[30px] rounded px-1 ${operatorError ? 'shadow-[inset_0_0_0_1px_#c8102e]' : ''}`}><RadioPair name="operator" value={policy.namedOperator} onChange={(namedOperator) => updatePolicy({ namedOperator })} /></span><InlineError message={operatorError} /></span>
-    </div>
+    </div> : <div className="flex flex-1 items-center border-l border-[#d7e0e6] pl-[21px] text-[13px] text-[#5c6670]">All products on this quote share the policy effective date.</div>}
   </section>;
 }
 
@@ -41,7 +43,7 @@ function InterestRow({ label, divider = false }: { label: string; divider?: bool
   return <WizardRowShell label={label} help divider={divider}><span className="flex h-[38px] items-center gap-[60px] text-[14px]"><span>None</span><button type="button" className="underline underline-offset-2 hover:text-[#003865]">Add / Delete</button></span></WizardRowShell>;
 }
 
-export function ProductsStep() {
+function AutoProductsStep() {
   const { state, addVehicle, updateVehicle, removeVehicle } = useQuote();
   const { vehicles } = state;
   const [activeId, setActiveId] = useState(vehicles[0].id);
@@ -113,4 +115,12 @@ export function ProductsStep() {
       </WizardCard>
     </div>
   </WizardLayout>;
+}
+
+/** Products step: the Auto vehicle screen, or the selected product's units. */
+export function ProductsStep() {
+  const { state } = useQuote();
+  const product = currentProduct(state);
+  if (product === 'auto') return <AutoProductsStep key="auto" />;
+  return <WizardLayout stepHeader contentClassName="pt-0"><PolicyStrip auto={false} /><ProductUnitsContent key={product} product={product} /></WizardLayout>;
 }

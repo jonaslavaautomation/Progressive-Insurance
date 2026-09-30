@@ -5,6 +5,11 @@ import { lookupVehicleDetails } from '@/data/vehicleCatalog';
 import { emptyReports, type PosOrderResult } from '@/utils/reportSimulator';
 import { rateQuote, ratedDrivers, ratingSignature, selectedPlan } from '@/utils/ratingEngine';
 import { addDays, formatDate, today } from '@/utils/dates';
+import type { OtherProductKey, ProductKey, ProductQuote, ProductUnit } from '@/products/types';
+import type { PolicyRecord } from '@/types/policy';
+import { productSignature } from '@/products/engine';
+import { advancePolicy } from '@/services/policyEngine';
+import type { CommercialQuote } from '@/commercial/types';
 
 export const STEPS = ['NAMED INSURED', 'PRODUCTS', 'HOUSEHOLD MEMBERS', 'ADDITIONAL DETAILS', 'COVERAGES/BILL PLANS', 'PORTFOLIO', 'POINT OF SALE', 'FINAL SALE'] as const;
 export const LAST_STEP = STEPS.length - 1;
@@ -16,8 +21,26 @@ export function agentCodeFor(agent: AgentProfile): string {
   return `${agent.agencyCode} (${agent.agencyName.toUpperCase()})`;
 }
 
+export type PolicyTab = 'summary' | 'billing' | 'documents' | 'history';
+
+export interface PolicyQuery {
+  mode: 'Customer' | 'Policy';
+  lastName: string;
+  firstName: string;
+  policyNumber: string;
+  product: string;
+  status: string;
+}
+
+export const EMPTY_POLICY_QUERY: PolicyQuery = { mode: 'Customer', lastName: '', firstName: '', policyNumber: '', product: 'All', status: 'All' };
+
 export interface UiState {
-  view: 'dashboard' | 'wizard' | 'documents';
+  view: 'dashboard' | 'wizard' | 'documents' | 'policies' | 'policy' | 'commercial';
+  /** Product tab shown on Products and Coverages/Bill Plans. */
+  activeProduct: ProductKey;
+  policyId: string;
+  policyTab: PolicyTab;
+  policyQuery: PolicyQuery;
   step: number;
   maxStep: number;
   hintMode: boolean;
@@ -28,6 +51,12 @@ export interface UiState {
 export interface QuoteState extends QuoteData {
   ui: UiState;
   agent: AgentProfile;
+  /** Issued training policies (persisted in the browser). */
+  policies: PolicyRecord[];
+  /** Training clock date, MM/DD/YYYY. */
+  simDate: string;
+  /** Commercial Lines quote in progress (kept separate from the personal lines quote). */
+  commercial: CommercialQuote | null;
 }
 
 export function newId(prefix: string): string {
@@ -83,11 +112,16 @@ export function createQuoteData(agent: AgentProfile = DEFAULT_AGENT): QuoteData 
     pointOfSale: { billPlan: 'PIF', paymentMethod: '', paymentAuthorized: '', documentDelivery: '', reviewedCoverages: false, confirmedHousehold: false, agreedToTerms: false },
     ratedSignature: '',
     premiumChange: null,
+    products: ['auto'],
+    productQuotes: {},
   };
 }
 
-export function createInitialState(agent: AgentProfile = DEFAULT_AGENT): QuoteState {
-  return { ...createQuoteData(agent), agent, ui: { view: 'dashboard', step: 0, maxStep: 0, hintMode: false, keyboardHelp: true } };
+export function createInitialState(agent: AgentProfile = DEFAULT_AGENT, policies: PolicyRecord[] = [], simDate = formatDate(today())): QuoteState {
+  return {
+    ...createQuoteData(agent), agent, policies, simDate, commercial: null,
+    ui: { view: 'dashboard', step: 0, maxStep: 0, hintMode: false, keyboardHelp: true, activeProduct: 'auto', policyId: '', policyTab: 'summary', policyQuery: EMPTY_POLICY_QUERY },
+  };
 }
 
 /** Fictitious practice customer (no real person's details) for demos and trainer walkthroughs. */
@@ -141,13 +175,30 @@ export type QuoteAction =
   | { type: 'updateAgent'; agent: AgentProfile }
   | { type: 'duplicateQuote'; quoteNumber: string }
   | { type: 'showDocuments' }
+  | { type: 'startQuote'; products: ProductKey[]; productQuotes: Partial<Record<OtherProductKey, ProductQuote>> }
+  | { type: 'addProducts'; products: ProductKey[]; productQuotes: Partial<Record<OtherProductKey, ProductQuote>> }
+  | { type: 'suspendProduct'; key: ProductKey }
+  | { type: 'setActiveProduct'; key: ProductKey }
+  | { type: 'addUnit'; key: OtherProductKey; unit: ProductUnit }
+  | { type: 'removeUnit'; key: OtherProductKey; unitId: string }
+  | { type: 'updateUnit'; key: OtherProductKey; unitId: string; values?: Record<string, string>; coverages?: Record<string, string> }
+  | { type: 'updateProduct'; key: OtherProductKey; patch: Partial<Pick<ProductQuote, 'coverages' | 'answers' | 'billPlan' | 'interests'>> }
+  | { type: 'policiesIssued'; records: PolicyRecord[]; boundAt: string }
+  | { type: 'updatePolicyRecord'; record: PolicyRecord }
+  | { type: 'advanceClock'; to: string }
+  | { type: 'clearPolicies' }
+  | { type: 'openPolicies'; query?: Partial<PolicyQuery> }
+  | { type: 'openPolicy'; id: string; tab?: PolicyTab }
+  | { type: 'setPolicyTab'; tab: PolicyTab }
   | { type: 'bindPolicy'; policyNumber: string; boundAt: string }
   | { type: 'navigate'; step: number }
   | { type: 'showDashboard' }
   | { type: 'toggleHints' }
   | { type: 'toggleKeyboardHelp' }
   | { type: 'load'; data: QuoteData; maxStep: number }
-  | { type: 'reset' };
+  | { type: 'reset' }
+  | { type: 'setCommercial'; quote: CommercialQuote | null; show?: boolean }
+  | { type: 'commercialIssued'; records: PolicyRecord[]; quote: CommercialQuote };
 
 // Fields copied from the principal named insured to household member #1 until the VA edits them there.
 const SYNCED_DRIVER_FIELDS = ['firstName', 'middleInitial', 'lastName', 'suffix', 'dob', 'gender'] as const;
@@ -178,7 +229,8 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
       const vehicles = 'zip' in action.patch
         ? state.vehicles.map((vehicle) => (vehicle.garagingZip === state.insured.address.zip ? { ...vehicle, garagingZip: address.zip } : vehicle))
         : state.vehicles;
-      return { ...state, insured: { ...state.insured, address }, vehicles };
+      const productQuotes = 'zip' in action.patch ? followZip(state.productQuotes, state.insured.address.zip, address.zip) : state.productQuotes;
+      return { ...state, insured: { ...state.insured, address }, vehicles, productQuotes };
     }
     case 'addVehicle':
       return { ...state, vehicles: [...state.vehicles, action.vehicle] };
@@ -218,7 +270,7 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
     case 'updatePointOfSale':
       return { ...state, pointOfSale: { ...state.pointOfSale, ...action.patch } };
     case 'recalculate':
-      return { ...state, ratedSignature: ratingSignature(state), premiumChange: null };
+      return signProducts({ ...state, ratedSignature: ratingSignature(state), premiumChange: null });
     case 'updateReports':
       return { ...state, reports: { ...state.reports, ...action.patch } };
     case 'posOrderStarted': {
@@ -246,7 +298,7 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
       // Report results re-rate the quote automatically, as the carrier does after Point of Sale.
       const next = { ...state, reports };
       const after = selectedPlan(rateQuote(next), state.pointOfSale.billPlan).total;
-      return { ...next, ratedSignature: ratingSignature(next), premiumChange: before !== null && before !== after ? { from: before, to: after } : null };
+      return signProducts({ ...next, ratedSignature: ratingSignature(next), premiumChange: before !== null && before !== after ? { from: before, to: after } : null });
     }
     case 'posOrderCancelled':
       return { ...state, reports: { ...emptyReports(state.reports.requestId + 1), orderClue: state.reports.orderClue, orderMvr: state.reports.orderMvr } };
@@ -254,11 +306,53 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
       return { ...state, premiumChange: null };
     case 'updateAgent':
       return { ...state, agent: action.agent, policy: state.policy.policyNumber ? state.policy : { ...state.policy, agentCode: agentCodeFor(action.agent) } };
-    case 'duplicateQuote':
+    case 'duplicateQuote': {
       // A duplicate keeps every answer but is a new, unsold quote that must be re-rated and re-ordered.
-      return { ...state, policy: { ...state.policy, quoteNumber: action.quoteNumber, policyNumber: '', boundAt: '' }, reports: emptyReports(state.reports.requestId + 1), ratedSignature: '', premiumChange: null };
+      const productQuotes = Object.fromEntries(Object.entries(state.productQuotes).map(([key, product]) => [key, { ...product!, quoteNumber: `5500${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`, ratedSignature: '' }]));
+      return { ...state, productQuotes, policy: { ...state.policy, quoteNumber: action.quoteNumber, policyNumber: '', boundAt: '' }, reports: emptyReports(state.reports.requestId + 1), ratedSignature: '', premiumChange: null };
+    }
     case 'showDocuments':
       return { ...state, ui: { ...state.ui, view: 'documents' } };
+    case 'startQuote':
+      return { ...createQuoteData(state.agent), products: action.products, productQuotes: action.productQuotes, agent: state.agent, policies: state.policies, simDate: state.simDate, commercial: state.commercial, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, view: 'wizard', step: 0, maxStep: 0, activeProduct: action.products[0] } };
+    case 'addProducts': {
+      const products = [...state.products, ...action.products.filter((key) => !state.products.includes(key))];
+      // Auto is always listed first, as on the carrier's product tabs.
+      products.sort((a, b) => (a === 'auto' ? -1 : b === 'auto' ? 1 : 0));
+      const productQuotes = { ...state.productQuotes };
+      for (const [key, product] of Object.entries(action.productQuotes)) productQuotes[key as OtherProductKey] = state.productQuotes[key as OtherProductKey] ? { ...state.productQuotes[key as OtherProductKey]!, suspended: false } : product;
+      return { ...state, products, productQuotes, ui: { ...state.ui, activeProduct: action.products[0] ?? state.ui.activeProduct } };
+    }
+    case 'suspendProduct': {
+      const products = state.products.filter((key) => key !== action.key);
+      if (!products.length) return state;
+      const productQuotes = action.key === 'auto' ? state.productQuotes : { ...state.productQuotes, [action.key]: { ...state.productQuotes[action.key]!, suspended: true } };
+      return { ...state, products, productQuotes, ui: { ...state.ui, activeProduct: products[0] } };
+    }
+    case 'setActiveProduct':
+      return { ...state, ui: { ...state.ui, activeProduct: action.key } };
+    case 'addUnit':
+      return updateProductQuote(state, action.key, (product) => ({ ...product, units: [...product.units, action.unit] }));
+    case 'removeUnit':
+      return updateProductQuote(state, action.key, (product) => (product.units.length <= 1 ? product : { ...product, units: product.units.filter((unit) => unit.id !== action.unitId) }));
+    case 'updateUnit':
+      return updateProductQuote(state, action.key, (product) => ({ ...product, units: product.units.map((unit) => (unit.id === action.unitId ? { ...unit, values: { ...unit.values, ...action.values }, coverages: { ...unit.coverages, ...action.coverages } } : unit)) }));
+    case 'updateProduct':
+      return updateProductQuote(state, action.key, (product) => ({ ...product, ...action.patch }));
+    case 'policiesIssued':
+      return { ...state, policies: [...action.records, ...state.policies], policy: { ...state.policy, policyNumber: action.records[0]?.policyNumber ?? '', boundAt: action.boundAt } };
+    case 'updatePolicyRecord':
+      return { ...state, policies: state.policies.map((record) => (record.id === action.record.id ? action.record : record)) };
+    case 'advanceClock':
+      return { ...state, simDate: action.to, policies: state.policies.map((record) => advancePolicy(record, state.simDate, action.to)) };
+    case 'clearPolicies':
+      return { ...state, policies: [], policy: { ...state.policy, policyNumber: '', boundAt: '' } };
+    case 'openPolicies':
+      return { ...state, ui: { ...state.ui, view: 'policies', policyQuery: { ...EMPTY_POLICY_QUERY, ...action.query } } };
+    case 'openPolicy':
+      return { ...state, ui: { ...state.ui, view: 'policy', policyId: action.id, policyTab: action.tab ?? 'summary' } };
+    case 'setPolicyTab':
+      return { ...state, ui: { ...state.ui, policyTab: action.tab } };
     case 'bindPolicy':
       return { ...state, policy: { ...state.policy, policyNumber: action.policyNumber, boundAt: action.boundAt } };
     case 'navigate': {
@@ -272,10 +366,35 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
     case 'toggleKeyboardHelp':
       return { ...state, ui: { ...state.ui, keyboardHelp: !state.ui.keyboardHelp } };
     case 'load':
-      return { ...action.data, agent: state.agent, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, maxStep: Math.max(state.ui.maxStep, action.maxStep) } };
+      // The practice customer fills the shared and Auto pages; products already chosen stay on the quote.
+      return { ...action.data, products: state.products, productQuotes: followZip(state.productQuotes, state.insured.address.zip, action.data.insured.address.zip), agent: state.agent, policies: state.policies, simDate: state.simDate, commercial: state.commercial, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, maxStep: Math.max(state.ui.maxStep, action.maxStep), activeProduct: state.products[0] } };
     case 'reset':
-      return { ...createQuoteData(state.agent), agent: state.agent, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, step: 0, maxStep: 0 } };
+      return { ...createQuoteData(state.agent), agent: state.agent, policies: state.policies, simDate: state.simDate, commercial: state.commercial, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, step: 0, maxStep: 0, activeProduct: 'auto' } };
+    case 'setCommercial':
+      return { ...state, commercial: action.quote, ui: action.show ? { ...state.ui, view: 'commercial' } : state.ui };
+    case 'commercialIssued':
+      return { ...state, commercial: action.quote, policies: [...action.records, ...state.policies] };
   }
+}
+
+/** Units still garaged at the old mailing ZIP (or none yet) follow the new mailing ZIP. */
+function followZip(productQuotes: QuoteState['productQuotes'], oldZip: string, newZip: string): QuoteState['productQuotes'] {
+  return Object.fromEntries(Object.entries(productQuotes).map(([key, product]) => [key, { ...product!, units: product!.units.map((unit) => ('garagingZip' in unit.values && (unit.values.garagingZip === oldZip || !unit.values.garagingZip) ? { ...unit, values: { ...unit.values, garagingZip: newZip } } : unit)) }]));
+}
+
+function updateProductQuote(state: QuoteState, key: OtherProductKey, update: (product: ProductQuote) => ProductQuote): QuoteState {
+  const product = state.productQuotes[key];
+  return product ? { ...state, productQuotes: { ...state.productQuotes, [key]: update(product) } } : state;
+}
+
+/** Marks every active non-Auto product as rated against the current inputs. */
+function signProducts(state: QuoteState): QuoteState {
+  const productQuotes = { ...state.productQuotes };
+  for (const key of state.products) {
+    if (key === 'auto' || !productQuotes[key]) continue;
+    productQuotes[key] = { ...productQuotes[key]!, ratedSignature: productSignature(key, state) };
+  }
+  return { ...state, productQuotes };
 }
 
 // Anything that could change an MVR/CLUE result for a rated driver.

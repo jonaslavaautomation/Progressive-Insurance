@@ -5,6 +5,11 @@ import { useQuote } from '@/context/useQuote';
 import { formatCurrency } from '@/utils/masks';
 import { SCORE_TIER_NAMES, TERM_MONTHS, driverName, incidentLabel, vehicleName } from '@/utils/ratingEngine';
 import { paymentSchedule, planPaymentText } from '@/utils/paymentSchedule';
+import { activeProducts, hasAuto } from '@/utils/ratingEngine';
+import { PRODUCT_CONFIGS } from '@/products/configs';
+import { productTotals } from '@/products/engine';
+import { productUnits } from '@/services/policyBuilder';
+import type { OtherProductKey } from '@/products/types';
 
 export type DocumentKind = 'selected' | 'all' | 'set' | 'binder';
 
@@ -33,6 +38,10 @@ export function QuoteSheet({ kind = 'binder', agencyAddress = 'Agency default' }
   const phone = insured.phones.filter((entry) => entry.number).map((entry) => `${entry.number} (${entry.type})`).join(', ');
   const money = (value: number) => (rated ? formatCurrency(value) : '$ --.--');
   const schedule = paymentSchedule(plan, policy.effectiveDate);
+  const auto = hasAuto(state);
+  const others = activeProducts(state).filter((key): key is OtherProductKey => key !== 'auto');
+  const totals = productTotals(state, rated);
+  const issued = state.policies.filter((record) => totals.some((entry) => entry.quoteNumber === record.quoteNumber));
 
   return <article className="print-area relative mx-auto max-w-[800px] overflow-hidden rounded border border-[#c6d6e1] bg-white px-8 py-6 text-[#28343c] shadow-sm print:max-w-none print:rounded-none print:border-0 print:p-0 print:shadow-none">
     <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center"><span className="-rotate-[24deg] whitespace-nowrap text-[54px] font-black uppercase tracking-widest text-[#003865]/[.05]">Training Simulation</span></div>
@@ -60,7 +69,7 @@ export function QuoteSheet({ kind = 'binder', agencyAddress = 'Agency default' }
       </div>
     </Section>
 
-    <Section title="Vehicles & Coverages (6-month premium)">
+    {auto && <Section title="Vehicles & Coverages (6-month premium)">
       {vehicles.map((vehicle, index) => {
         const premium = rating.vehicles.find((entry) => entry.vehicleId === vehicle.id);
         return <div key={vehicle.id} className="mb-2 break-inside-avoid">
@@ -82,7 +91,19 @@ export function QuoteSheet({ kind = 'binder', agencyAddress = 'Agency default' }
         ['Uninsured Motorist Property Damage', optionLabel(UMPD, coverages.umpd), money(rating.umpd)],
         ['Snapshot Enrollment', coverages.snapshot || '—', ''],
       ]} />
-    </Section>
+    </Section>}
+
+    {others.map((key) => {
+      const config = PRODUCT_CONFIGS[key];
+      const snapshot = productUnits(state, key);
+      const total = totals.find((entry) => entry.key === key);
+      const issuedPolicy = issued.find((record) => record.product === key);
+      return <Section key={key} title={`${config.name} (${config.termMonths}-month premium) · Quote #${total?.quoteNumber ?? ''}${issuedPolicy ? ` · Policy #${issuedPolicy.policyNumber}` : ''}`}>
+        {snapshot.units.map((unit, index) => <div key={index} className="mb-2 break-inside-avoid"><div className="mb-1 text-[11px] font-bold">{config.unitLabel} {index + 1}: {unit.label}{unit.idNumber ? ` · ${config.idField === 'hin' ? 'HIN' : 'VIN'} ${unit.idNumber}` : ''}</div>{unit.details.length > 0 && <p className="mb-1 text-[9.5px] text-[#52616c]">{unit.details.join(' · ')}</p>}{unit.coverages.length > 0 && <Table head={['Coverage', 'Limit / Deductible', 'Premium']} align={['left', 'left', 'right']} rows={[...unit.coverages.map((line) => [line.label, line.value, money(line.premium ?? 0)]), [<b key="t">{config.unitLabel} Total</b>, '', <b key="v">{money(unit.premium)}</b>]]} />}</div>)}
+        {snapshot.policy.length > 0 && <Table head={['Policy Coverage', 'Limit', 'Premium']} align={['left', 'left', 'right']} rows={snapshot.policy.map((line) => [line.label, line.value, line.premium ? money(line.premium) : ''])} />}
+        {total && <p className="mt-1 text-[10.5px]"><b>{total.plan.name}</b>: {total.rated ? `${planPaymentText(total.plan).line}` : 'RECALCULATE required'}</p>}
+      </Section>;
+    })}
 
     <Section title="Drivers & Household Members">
       <Table head={['Name', 'DOB', 'Relationship', 'Status', 'License', 'Incidents']} rows={drivers.map((driver) => [
@@ -104,7 +125,7 @@ export function QuoteSheet({ kind = 'binder', agencyAddress = 'Agency default' }
       <p className="mt-1 text-[9.5px] text-[#52616c]">{rating.reportsApplied ? `Rated with Point of Sale results (${SCORE_TIER_NAMES[reports.scoreTier]} tier, ordered ${reports.orderedAt}).` : 'Preliminary rate: subject to change when Point of Sale reports are ordered.'}</p>
     </Section>
 
-    {kind === 'all' ? <Section title="Bill Plans (6 Month Options)">
+    {!auto ? null : kind === 'all' ? <Section title="Bill Plans (6 Month Options)">
       <Table head={['Bill Plan', 'Payment Details', 'Total']} align={['left', 'left', 'right']} rows={rating.billPlans.map((option) => [<span key={option.id}>{option.name}{option.id === plan.id && <b> (selected)</b>}</span>, rated ? planPaymentText(option).line : '—', money(option.total)])} />
     </Section> : <Section title={`Selected Bill Plan: ${plan.name}`}>
       {rated ? <Table head={['Due Date', 'Description', 'Amount']} align={['left', 'left', 'right']} rows={[...schedule.map((row) => [row.due, row.description, formatCurrency(row.amount)]), ['', <b key="t">Total 6-month premium</b>, <b key="v">{formatCurrency(plan.total)}</b>]]} /> : <p className="text-[11px] text-[#52616c]">Click RECALCULATE on Coverages/Bill Plans to generate the premium and payment schedule.</p>}
