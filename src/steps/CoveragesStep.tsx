@@ -14,8 +14,8 @@ export function CoveragesStep() {
   const set = <K extends keyof Coverages>(field: K) => (value: string) => updateCoverages({ [field]: value } as Partial<Coverages>);
 
   return <WizardLayout>
-    <div className="mx-4 grid gap-3 lg:grid-cols-[414px_300px]">
-      <div className="space-y-3">
+    <div className="flex items-start gap-[20px]">
+      <div className="w-[450px] shrink-0 space-y-[20px]">
         <WizardCard title="Policy Coverages" subtitle="All vehicles">
           <WizardSelect id="coverages.bodilyInjury" label="Bodily Injury Liability:*" help hint={fieldHints.bodilyInjury} options={tierOptions(BI_LIMITS)} value={coverages.bodilyInjury} onChange={set('bodilyInjury')} />
           <WizardSelect id="coverages.propertyDamage" label="Property Damage Liability:*" help hint={fieldHints.propertyDamage} options={tierOptions(PD_LIMITS)} value={coverages.propertyDamage} onChange={set('propertyDamage')} />
@@ -29,7 +29,7 @@ export function CoveragesStep() {
           <WizardSelect id={`vehicle.${vehicle.id}.collDeductible`} label="Collision:*" help options={tierOptions(DEDUCTIBLES)} value={vehicle.collDeductible} onChange={(collDeductible) => updateVehicle(vehicle.id, { collDeductible })} />
         </WizardCard>)}
       </div>
-      <div className="space-y-3"><RatePanel breakdownOpen /><ReportsPanel /></div>
+      <div className="w-[300px] shrink-0 space-y-[20px]"><RatePanel breakdownOpen /><ReportsPanel /></div>
     </div>
   </WizardLayout>;
 }

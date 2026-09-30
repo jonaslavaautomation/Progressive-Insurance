@@ -15,8 +15,8 @@ export function AdditionalDetailsStep() {
   const noPrior = additional.priorInsurance !== 'Yes';
 
   return <WizardLayout>
-    <div className="mx-4 grid gap-3 lg:grid-cols-[414px_300px]">
-      <div className="space-y-3">
+    <div className="flex items-start gap-[20px]">
+      <div className="w-[450px] shrink-0 space-y-[20px]">
         <WizardCard title="Prior Insurance">
           <WizardSelect id="additional.priorInsurance" label="Does the customer currently have auto insurance?*" help hint={fieldHints.priorInsurance} options={YES_NO} value={additional.priorInsurance} onChange={setPrior} />
           <WizardSelect id="additional.priorCarrier" label="Current Carrier:*" disabled={noPrior} options={PRIOR_CARRIERS} value={additional.priorCarrier} onChange={set('priorCarrier')} />
@@ -32,7 +32,7 @@ export function AdditionalDetailsStep() {
           <WizardSelect id="additional.eSignature" label="e-Signature for policy documents:*" help options={YES_NO} value={additional.eSignature} onChange={set('eSignature')} />
         </WizardCard>
       </div>
-      <div className="space-y-3"><RatePanel /></div>
+      <div className="w-[300px] shrink-0 space-y-[20px]"><RatePanel /></div>
     </div>
   </WizardLayout>;
 }

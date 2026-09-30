@@ -16,6 +16,8 @@ export interface UiState {
   step: number;
   maxStep: number;
   hintMode: boolean;
+  /** Named Insured header switch: lets Tab reach the purple help buttons. */
+  keyboardHelp: boolean;
 }
 
 export interface QuoteState extends QuoteData {
@@ -77,7 +79,7 @@ export function createQuoteData(): QuoteData {
 }
 
 export function createInitialState(): QuoteState {
-  return { ...createQuoteData(), ui: { view: 'dashboard', step: 0, maxStep: 0, hintMode: false } };
+  return { ...createQuoteData(), ui: { view: 'dashboard', step: 0, maxStep: 0, hintMode: false, keyboardHelp: true } };
 }
 
 /** Pre-filled customer matching the training screenshots, for demos and trainer walkthroughs. */
@@ -128,6 +130,7 @@ export type QuoteAction =
   | { type: 'navigate'; step: number }
   | { type: 'showDashboard' }
   | { type: 'toggleHints' }
+  | { type: 'toggleKeyboardHelp' }
   | { type: 'load'; data: QuoteData; maxStep: number }
   | { type: 'reset' };
 
@@ -215,6 +218,8 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
       return { ...state, ui: { ...state.ui, view: 'dashboard' } };
     case 'toggleHints':
       return { ...state, ui: { ...state.ui, hintMode: !state.ui.hintMode } };
+    case 'toggleKeyboardHelp':
+      return { ...state, ui: { ...state.ui, keyboardHelp: !state.ui.keyboardHelp } };
     case 'load':
       return { ...action.data, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, maxStep: Math.max(state.ui.maxStep, action.maxStep) } };
     case 'reset':

@@ -8,7 +8,7 @@ import { ageOn, ratingDate } from '@/utils/dates';
 import { driverName, vehicleLabel } from '@/utils/ratingEngine';
 import { isLicensed, monthsLicensed } from '@/utils/validation';
 import { WizardLayout } from '@/components/wizard/WizardLayout';
-import { AddButton, WizardCard, WizardField, WizardRadio, WizardSelect } from '@/components/wizard/primitives';
+import { AddButton, RemoveButton, WizardCard, WizardField, WizardRadio, WizardSelect } from '@/components/wizard/primitives';
 
 const incidentOptions = INCIDENT_CODES.map(({ value, label }) => ({ value, label: `${value} - ${label}` }));
 
@@ -18,13 +18,12 @@ function IncidentRows({ driver }: { driver: Driver }) {
   const next = driver.incidents.length + 1;
   return <>
     {driver.incidents.map((incident, n) => <div key={incident.id}>
-      <WizardSelect id={`incident.${incident.id}.code`} label={`Incident Code # ${n + 1}:`} hint={n === 0 ? fieldHints.incidents : undefined} options={incidentOptions} value={incident.code} onChange={(code) => set(incident, { code })} />
-      <WizardField id={`incident.${incident.id}.date`} label={`Incident Date # ${n + 1}:`} placeholder="MM/DD/YYYY" mask="date" value={incident.date} onChange={(date) => set(incident, { date })} />
-      <div className="flex justify-end border-b border-[#edf1f3] px-3 py-1"><button type="button" onClick={() => removeIncident(driver.id, incident.id)} className="text-[10px] font-bold text-[#003865] underline">Remove incident #{n + 1}</button></div>
+      <WizardSelect id={`incident.${incident.id}.code`} narrow label={`Incident Code # ${n + 1}:`} hint={n === 0 ? fieldHints.incidents : undefined} options={incidentOptions} value={incident.code} onChange={(code) => set(incident, { code })} after={<RemoveButton label={`Remove incident ${n + 1}`} onClick={() => removeIncident(driver.id, incident.id)} />} />
+      <WizardField id={`incident.${incident.id}.date`} narrow label={`Incident Date # ${n + 1}:`} placeholder="MM/DD/YYYY" mask="date" value={incident.date} onChange={(date) => set(incident, { date })} />
     </div>)}
-    {/* Trailing blank row: choosing a code adds the incident, matching the carrier's inline entry. */}
-    <WizardSelect label={`Incident Code # ${next}:`} hint={next === 1 ? fieldHints.incidents : undefined} options={incidentOptions} value="" onChange={(code) => code && addIncident(driver.id, { code })} />
-    {next === 1 && <WizardField label="Incident Date # 1:" placeholder="MM/DD/YYYY" disabled value="" />}
+    {/* Trailing blank row: entering a code or date adds the incident, matching the carrier's inline entry. */}
+    <WizardSelect narrow label={`Incident Code # ${next}:`} hint={next === 1 ? fieldHints.incidents : undefined} options={incidentOptions} value="" onChange={(code) => code && addIncident(driver.id, { code })} after={<RemoveButton label="Clear incident" onClick={() => undefined} />} />
+    <WizardField narrow label={`Incident Date # ${next}:`} placeholder="MM/DD/YYYY" mask="date" value="" onChange={(date) => date && addIncident(driver.id, { date })} />
   </>;
 }
 
@@ -71,15 +70,15 @@ export function HouseholdStep() {
   };
 
   return <WizardLayout onRevealField={revealField}>
-    <div className="mx-4 grid max-w-[700px] gap-3 lg:grid-cols-[414px_258px]">
-      <div className="space-y-3">
+    <div className="flex items-start gap-[20px]">
+      <div className="w-[450px] shrink-0 space-y-[20px]">
         <WizardCard title="Household Members" subtitle={<>{name}<br />{index + 1} of {drivers.length}</>} onRemove={remove} removeDisabled={isInsured} removeLabel={`Remove ${name}`}>
           <WizardField id={id('firstName')} label="First Name:*" value={driver.firstName} onChange={(firstName) => set({ firstName })} />
           <WizardField id={id('middleInitial')} label="Middle Initial:" value={driver.middleInitial} onChange={(value) => set({ middleInitial: value.slice(-1).toUpperCase() })} />
           <WizardField id={id('lastName')} label="Last Name:*" value={driver.lastName} onChange={(lastName) => set({ lastName })} />
           <WizardSelect id={id('suffix')} label="Suffix:" options={SUFFIXES} value={driver.suffix} onChange={(suffix) => set({ suffix })} />
           <WizardSelect id={id('maritalStatus')} label="Marital Status:*" hint={fieldHints.maritalStatus} options={MARITAL_STATUSES} value={driver.maritalStatus} onChange={(maritalStatus) => set({ maritalStatus })} />
-          <WizardSelect id={id('relationship')} label="Relationship:*" help hint={fieldHints.relationship} disabled={isInsured} options={isInsured ? [] : RELATIONSHIPS} value={driver.relationship} onChange={(relationship) => set({ relationship })} />
+          {isInsured ? <WizardField id={id('relationship')} label="Relationship:*" help hint={fieldHints.relationship} disabled value={driver.relationship} /> : <WizardSelect id={id('relationship')} label="Relationship:*" help hint={fieldHints.relationship} options={RELATIONSHIPS} value={driver.relationship} onChange={(relationship) => set({ relationship })} />}
         </WizardCard>
         <WizardCard title="Additional Info" subtitle={name}>
           <WizardField id={id('dob')} label="Date of Birth:*" placeholder="MM/DD/YYYY" mask="date" value={driver.dob} onChange={setAge} />
@@ -91,24 +90,24 @@ export function HouseholdStep() {
           <WizardSelect id={id('driverStatus')} label="Auto Driver Status:*" help hint={fieldHints.driverStatus} options={DRIVER_STATUSES} value={driver.driverStatus} onChange={(driverStatus) => set({ driverStatus: driverStatus as DriverStatus })} />
           <WizardSelect id={id('licenseType')} label="Driver License Type:*" options={LICENSE_TYPES} value={driver.licenseType} onChange={(licenseType) => set(licenseType === 'Not Licensed' ? { licenseType, licenseStatus: '', licenseNumber: '', ageFirstLicensed: '', previousLicenseState: '', internationalYears: '' } : { licenseType })} />
           <WizardSelect id={id('licenseStatus')} label="Driver License Status:*" hint={fieldHints.licenseStatus} disabled={!licensed} options={LICENSE_STATUSES} value={driver.licenseStatus} onChange={(licenseStatus) => set({ licenseStatus })} />
-          <WizardSelect id={id('licenseState')} label="License State:*" help disabled={!licensed} options={US_STATES} value={driver.licenseState} onChange={(licenseState) => set({ licenseState })} />
-          <WizardField id={id('licenseNumber')} label="License Number:" disabled={!licensed} value={driver.licenseNumber} onChange={(licenseNumber) => set({ licenseNumber: licenseNumber.toUpperCase().slice(0, 16) })} />
+          <WizardSelect id={id('licenseState')} label="License State:*" help disabled={!licensed || !driver.licenseStatus} options={US_STATES} value={driver.licenseState} onChange={(licenseState) => set({ licenseState })} />
+          <WizardField id={id('licenseNumber')} label="License Number:" disabled={!licensed || !driver.licenseStatus} value={driver.licenseNumber} onChange={(licenseNumber) => set({ licenseNumber: licenseNumber.toUpperCase().slice(0, 16) })} />
           <WizardSelect id={id('previousLicenseState')} label="Previous License State:*" help hint={fieldHints.previousLicenseState} disabled={!licensed || months === null || months >= 36} options={US_STATES} value={driver.previousLicenseState} onChange={(previousLicenseState) => set({ previousLicenseState })} />
           <WizardRadio id={id('stateFiling')} label="State Filing:*" name={`filing-${driver.id}`} help hint={fieldHints.stateFiling} value={driver.stateFiling} onChange={(stateFiling) => set({ stateFiling })} />
         </WizardCard>
         <WizardCard title="Auto Drivers" subtitle={name}>
-          <WizardSelect id={id('operatorType')} label="Principal/Occasional Operator:*" help disabled={isInsured} options={isInsured ? [] : OPERATOR_TYPES} value={driver.operatorType} onChange={(operatorType) => set({ operatorType })} />
+          {isInsured ? <WizardField id={id('operatorType')} label="Principal/Occasional Operator:*" help disabled value={driver.operatorType} /> : <WizardSelect id={id('operatorType')} label="Principal/Occasional Operator:*" help options={OPERATOR_TYPES} value={driver.operatorType} onChange={(operatorType) => set({ operatorType })} />}
           <WizardField id={id('ageFirstLicensed')} label="Age First Licensed (in the U.S., Canada or Puerto Rico):*" help hint={fieldHints.ageFirstLicensed} disabled={!licensed} mask="digits" value={driver.ageFirstLicensed} onChange={(ageFirstLicensed) => set({ ageFirstLicensed })} />
-          <WizardSelect label="Months Licensed:*" help disabled options={[]} value={licensed ? monthsLabel : ''} />
+          <WizardField label="Months Licensed:*" help disabled value={licensed ? monthsLabel : ''} />
           <WizardSelect id={id('internationalYears')} label="International Years Licensed:*" help hint={fieldHints.internationalYears} disabled={!licensed} options={INTERNATIONAL_YEARS} value={driver.internationalYears} onChange={(internationalYears) => set({ internationalYears })} />
           <WizardSelect id={id('primaryVehicleId')} label="Primary Vehicle Driven:*" disabled={vehicles.length === 1 || driver.driverStatus !== 'Rated'} options={vehicleOptions} value={vehicles.length === 1 ? vehicles[0].id : driver.primaryVehicleId} onChange={(primaryVehicleId) => set({ primaryVehicleId })} />
-          <WizardSelect id={id('distantStudent')} label="Distant Student:*" tag disabled={!youthful} options={YES_NO} value={driver.distantStudent} onChange={(distantStudent) => set({ distantStudent: distantStudent as YesNo })} />
-          <WizardSelect id={id('goodStudent')} label="Good Student:*" tag disabled={!youthful} options={YES_NO} value={driver.goodStudent} onChange={(goodStudent) => set({ goodStudent: goodStudent as YesNo })} />
+          {youthful ? <WizardSelect id={id('distantStudent')} label="Distant Student:*" tag options={YES_NO} value={driver.distantStudent} onChange={(distantStudent) => set({ distantStudent: distantStudent as YesNo })} /> : <WizardField label="Distant Student:*" tag disabled value={driver.distantStudent} />}
+          {youthful ? <WizardSelect id={id('goodStudent')} label="Good Student:*" tag options={YES_NO} value={driver.goodStudent} onChange={(goodStudent) => set({ goodStudent: goodStudent as YesNo })} /> : <WizardField label="Good Student:*" tag disabled value={driver.goodStudent} />}
         </WizardCard>
-        <WizardCard title="Accidents / Violations" subtitle={name}><IncidentRows driver={driver} /></WizardCard>
+        <WizardCard title="Accidents / Violations" titleHelp={fieldHints.incidents} subtitle={name}><IncidentRows driver={driver} /></WizardCard>
       </div>
-      <WizardCard title="Household Members" className="h-fit">
-        {drivers.length > 1 && <ul>{drivers.map((entry) => <li key={entry.id}><button type="button" onClick={() => setActiveId(entry.id)} className={`flex w-full items-center gap-2 border-b border-[#edf1f3] px-4 py-2 text-left text-[11px] text-[#003865] hover:bg-[#e8f4fa] ${entry.id === driver.id ? 'bg-[#e8f4fa] font-bold' : ''}`}><UserRound size={15} strokeWidth={1.6} /><span className="flex-1">{driverName(entry)}</span><span className="text-[9px] font-semibold text-[#52616c]">{entry.relationship || 'Member'} · {entry.driverStatus || '—'}</span></button></li>)}</ul>}
+      <WizardCard title="Household Members" split={false} className="w-[280px] shrink-0">
+        {drivers.length > 1 && <ul>{drivers.map((entry) => <li key={entry.id}><button type="button" onClick={() => setActiveId(entry.id)} className={`flex w-full items-center gap-2 border-b border-[#edf1f3] px-[21px] py-[11px] text-left text-[14px] text-[#003865] hover:bg-[#e8f4fa] ${entry.id === driver.id ? 'bg-[#eef3f6] font-bold' : ''}`}><UserRound size={18} strokeWidth={1.6} /><span className="flex-1">{driverName(entry)}</span><span className="text-[11px] font-medium text-[#5c6670]">{entry.relationship || 'Member'} · {entry.driverStatus || '—'}</span></button></li>)}</ul>}
         <AddButton label="ADD MORE PEOPLE" onClick={add} />
       </WizardCard>
     </div>

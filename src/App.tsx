@@ -30,6 +30,8 @@ function App() {
   };
 
   const Step = stepScreens[ui.step];
-  return <div className="app-zoom">{ui.view === 'dashboard' ? <><Dashboard onSelectProduct={() => setModalOpen(true)} onOpenExisting={() => goToStep(ui.step)} existingQuote={existingQuote} />{modalOpen && <ProductModal onCancel={() => setModalOpen(false)} onContinue={startNewQuote} />}</> : <Step key={ui.step} />}</div>;
+  // The dashboard keeps its scaled layout; the quote wizard renders 1:1 at the carrier's native sizes.
+  if (ui.view !== 'dashboard') return <Step key={ui.step} />;
+  return <div className="app-zoom"><Dashboard onSelectProduct={() => setModalOpen(true)} onOpenExisting={() => goToStep(ui.step)} existingQuote={existingQuote} showBindingBanner={modalOpen} />{modalOpen && <ProductModal onCancel={() => setModalOpen(false)} onContinue={startNewQuote} />}</div>;
 }
 export default App;

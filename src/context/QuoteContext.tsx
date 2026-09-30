@@ -75,6 +75,7 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     },
     showDashboard: () => dispatch({ type: 'showDashboard' }),
     toggleHints: () => dispatch({ type: 'toggleHints' }),
+    toggleKeyboardHelp: () => dispatch({ type: 'toggleKeyboardHelp' }),
     loadSampleQuote: () => dispatch({ type: 'load', data: createSampleQuote(), maxStep: 4 }),
     resetQuote: () => dispatch({ type: 'reset' }),
   }) satisfies Omit<QuoteContextValue, 'state' | 'rating' | 'summary'>, [orderSimulatedReports]);

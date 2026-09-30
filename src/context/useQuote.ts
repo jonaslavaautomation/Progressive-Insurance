@@ -27,6 +27,7 @@ export interface QuoteContextValue {
   goToStep: (step: number) => void;
   showDashboard: () => void;
   toggleHints: () => void;
+  toggleKeyboardHelp: () => void;
   loadSampleQuote: () => void;
   resetQuote: () => void;
 }
