@@ -27,7 +27,7 @@ function Alert({ tone, icon, children }: { tone: 'red' | 'blue' | 'amber' | 'gre
   return <div className={`mb-[16px] flex w-[1100px] items-start gap-[10px] rounded-[3px] border px-[16px] py-[12px] text-[14px] leading-[20px] ${styles[tone]}`}>{icon}<div className="flex-1">{children}</div></div>;
 }
 
-function PaymentModal({ policy, preset, onClose }: { policy: PolicyRecord; preset?: number; onClose: (message?: string) => void }) {
+export function PaymentModal({ policy, preset, onClose }: { policy: PolicyRecord; preset?: number; onClose: (message?: string) => void }) {
   const { state, servicePolicy, engine } = useQuote();
   const day = state.simDate;
   const minimum = engine.minimumDue(policy, day);
@@ -233,7 +233,7 @@ function HistoryTab({ policy }: { policy: PolicyRecord }) {
 export function PolicyView() {
   const { state, setPolicyTab, openPolicies, servicePolicy, engine } = useQuote();
   const policy = state.policies.find((entry) => entry.id === state.ui.policyId);
-  const [dialog, setDialog] = useState<Dialog>(null);
+  const [dialog, setDialog] = useState<Dialog>(() => (state.ui.policyIntent === 'change' ? 'change' : null));
   const [document, setDocument] = useState<PolicyDocument | null>(null);
   const [message, setMessage] = useState('');
   if (!policy) return <ServiceLayout back={{ label: 'Policy Search', onClick: () => openPolicies(state.ui.policyQuery) }}><p className="text-[14px]">Policy not found.</p></ServiceLayout>;

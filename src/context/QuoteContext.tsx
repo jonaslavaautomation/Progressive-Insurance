@@ -6,6 +6,7 @@ import { PRODUCT_CONFIGS } from '@/products/configs';
 import { createProductQuote, createUnit } from '@/products/engine';
 import { buildCommercialPolicies, buildPolicies, generatePolicyNumber } from '@/services/policyBuilder';
 import { createCommercialQuote } from '@/commercial/engine';
+import { buildPracticeBook, hasPracticeBook } from '@/services/practiceBook';
 import * as engine from '@/services/policyEngine';
 import { setClock } from '@/utils/clock';
 import { QuoteContext, type QuoteContextValue } from '@/context/useQuote';
@@ -154,7 +155,15 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     advanceClock: (days) => dispatch({ type: 'advanceClock', to: formatDate(addDays(parseDate(stateRef.current.simDate) ?? today(), days)) }),
     clearPolicies: () => dispatch({ type: 'clearPolicies' }),
     openPolicies: (query) => dispatch({ type: 'openPolicies', query }),
-    openPolicy: (id, tab) => dispatch({ type: 'openPolicy', id, tab }),
+    openPolicy: (id, tab, intent) => dispatch({ type: 'openPolicy', id, tab, intent }),
+    openPending: (tab) => dispatch({ type: 'openPortal', view: 'pending', tab }),
+    openCustomer: (customerKey) => dispatch({ type: 'openPortal', view: 'customer', customerKey }),
+    openProof: (policyId, page) => dispatch({ type: 'openPortal', view: 'proof', policyId, page }),
+    loadPracticeBook: () => {
+      const current = stateRef.current;
+      if (hasPracticeBook(current.policies)) return;
+      dispatch({ type: 'policiesSeeded', records: buildPracticeBook(current.agent, agentCodeFor(current.agent), current.simDate) });
+    },
     setPolicyTab: (tab) => dispatch({ type: 'setPolicyTab', tab }),
     servicePolicy: (id, operation) => {
       const current = stateRef.current;
