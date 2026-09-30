@@ -1,10 +1,18 @@
-import { useCallback, useMemo, useReducer, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react';
 import type { AgentProfile, QuoteSummary } from '@/types/quote';
+import type { PolicyRecord } from '@/types/policy';
+import type { OtherProductKey, ProductKey, ProductQuote } from '@/products/types';
+import { PRODUCT_CONFIGS } from '@/products/configs';
+import { createProductQuote, createUnit } from '@/products/engine';
+import { buildCommercialPolicies, buildPolicies, generatePolicyNumber } from '@/services/policyBuilder';
+import { createCommercialQuote } from '@/commercial/engine';
+import * as engine from '@/services/policyEngine';
+import { setClock } from '@/utils/clock';
 import { QuoteContext, type QuoteContextValue } from '@/context/useQuote';
-import { DEFAULT_AGENT, createDriver, createIncident, createInitialState, createSampleQuote, createVehicle, generateQuoteNumber, policyNumberFor, quoteReducer } from '@/context/quoteStore';
+import { DEFAULT_AGENT, agentCodeFor, createDriver, createIncident, createInitialState, createSampleQuote, createVehicle, generateQuoteNumber, policyNumberFor, quoteReducer } from '@/context/quoteStore';
 import { TERM_MONTHS, isRated, rateQuote, selectedPlan } from '@/utils/ratingEngine';
 import { simulatePosOrder } from '@/utils/reportSimulator';
-import { addMonths, formatDate, parseDate } from '@/utils/dates';
+import { addDays, addMonths, formatDate, parseDate, today } from '@/utils/dates';
 
 const AGENT_KEY = 'fao-training-agent';
 
@@ -21,8 +29,36 @@ function saveAgent(agent: AgentProfile) {
   try { localStorage.setItem(AGENT_KEY, JSON.stringify(agent)); } catch { /* storage unavailable */ }
 }
 
+const POLICIES_KEY = 'fao-training-policies-v2';
+
+/** Saved training policies. If the saved training date is behind the real date, catch the policies up. */
+function loadPolicies(): { policies: PolicyRecord[]; simDate: string } {
+  const realToday = formatDate(today());
+  try {
+    const saved = JSON.parse(localStorage.getItem(POLICIES_KEY) ?? 'null') as { policies?: PolicyRecord[]; simDate?: string } | null;
+    if (saved?.policies && saved.simDate && parseDate(saved.simDate)) {
+      if (engine.dayDiff(saved.simDate, realToday) > 0) return { policies: saved.policies.map((policy) => engine.advancePolicy(policy, saved.simDate!, realToday)), simDate: realToday };
+      return { policies: saved.policies, simDate: saved.simDate };
+    }
+  } catch { /* storage unavailable or corrupt */ }
+  return { policies: [], simDate: realToday };
+}
+
+function buildProductQuotes(keys: ProductKey[], zip: string): Partial<Record<OtherProductKey, ProductQuote>> {
+  return Object.fromEntries(keys.filter((key): key is OtherProductKey => key !== 'auto').map((key) => [key, createProductQuote(key, generateQuoteNumber(), zip)]));
+}
+
 export function QuoteProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(quoteReducer, undefined, () => createInitialState(loadAgent()));
+  const [state, dispatch] = useReducer(quoteReducer, undefined, () => {
+    const saved = loadPolicies();
+    setClock(parseDate(saved.simDate));
+    return createInitialState(loadAgent(), saved.policies, saved.simDate);
+  });
+  // Keep "today" everywhere in the app on the training clock.
+  setClock(parseDate(state.simDate));
+  useEffect(() => {
+    try { localStorage.setItem(POLICIES_KEY, JSON.stringify({ policies: state.policies, simDate: state.simDate })); } catch { /* storage unavailable */ }
+  }, [state.policies, state.simDate]);
   // Latest state for async callbacks (report ordering) without re-creating them on every keystroke.
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -86,8 +122,48 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     cancelPosOrder: () => dispatch({ type: 'posOrderCancelled' }),
     dismissPremiumChange: () => dispatch({ type: 'dismissPremiumChange' }),
     bindPolicy: () => {
-      const { quoteNumber } = stateRef.current.policy;
-      dispatch({ type: 'bindPolicy', policyNumber: policyNumberFor(quoteNumber || generateQuoteNumber()), boundAt: new Date().toLocaleString('en-US') });
+      // Binding issues one policy per product on the quote, each with its own policy number and bill.
+      const current = stateRef.current;
+      const numbers: Partial<Record<ProductKey, string>> = { auto: policyNumberFor(current.policy.quoteNumber || generateQuoteNumber()) };
+      for (const key of current.products) if (key !== 'auto') numbers[key] = generatePolicyNumber();
+      const records = buildPolicies(current, rateQuote(current), isRated(current), current.agent.name, current.simDate, numbers);
+      dispatch({ type: 'policiesIssued', records, boundAt: `${current.simDate} ${new Date().toLocaleTimeString('en-US')}` });
+    },
+    startQuote: (products) => {
+      const zip = '';
+      dispatch({ type: 'startQuote', products, productQuotes: buildProductQuotes(products, zip) });
+    },
+    addProducts: (products) => {
+      const current = stateRef.current;
+      const fresh = products.filter((key) => !current.products.includes(key));
+      if (!fresh.length) return;
+      if (fresh.includes('auto') && !current.policy.quoteNumber) dispatch({ type: 'updatePolicy', patch: { quoteNumber: generateQuoteNumber() } });
+      dispatch({ type: 'addProducts', products: fresh, productQuotes: buildProductQuotes(fresh, current.insured.address.zip) });
+    },
+    suspendProduct: (key) => dispatch({ type: 'suspendProduct', key }),
+    setActiveProduct: (key) => dispatch({ type: 'setActiveProduct', key }),
+    addUnit: (key) => {
+      const unit = createUnit(PRODUCT_CONFIGS[key], stateRef.current.insured.address.zip);
+      dispatch({ type: 'addUnit', key, unit });
+      return unit.id;
+    },
+    removeUnit: (key, unitId) => dispatch({ type: 'removeUnit', key, unitId }),
+    updateUnitValues: (key, unitId, values) => dispatch({ type: 'updateUnit', key, unitId, values }),
+    updateUnitCoverages: (key, unitId, coverages) => dispatch({ type: 'updateUnit', key, unitId, coverages }),
+    updateProduct: (key, patch) => dispatch({ type: 'updateProduct', key, patch }),
+    advanceClock: (days) => dispatch({ type: 'advanceClock', to: formatDate(addDays(parseDate(stateRef.current.simDate) ?? today(), days)) }),
+    clearPolicies: () => dispatch({ type: 'clearPolicies' }),
+    openPolicies: (query) => dispatch({ type: 'openPolicies', query }),
+    openPolicy: (id, tab) => dispatch({ type: 'openPolicy', id, tab }),
+    setPolicyTab: (tab) => dispatch({ type: 'setPolicyTab', tab }),
+    servicePolicy: (id, operation) => {
+      const current = stateRef.current;
+      const record = current.policies.find((entry) => entry.id === id);
+      if (!record) return 'Policy not found.';
+      const result = operation(record, current.simDate);
+      if (typeof result === 'string') return result;
+      dispatch({ type: 'updatePolicyRecord', record: result });
+      return '';
     },
     duplicateQuote: () => {
       const quoteNumber = generateQuoteNumber();
@@ -106,9 +182,22 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     toggleKeyboardHelp: () => dispatch({ type: 'toggleKeyboardHelp' }),
     loadSampleQuote: () => dispatch({ type: 'load', data: createSampleQuote(stateRef.current.agent), maxStep: 3 }),
     resetQuote: () => dispatch({ type: 'reset' }),
-  }) satisfies Omit<QuoteContextValue, 'state' | 'rating' | 'rated' | 'plan' | 'summary'>, [orderPointOfSale]);
+    startCommercialQuote: (products) => dispatch({ type: 'setCommercial', quote: createCommercialQuote(products), show: true }),
+    updateCommercial: (update) => {
+      const quote = stateRef.current.commercial;
+      if (quote) dispatch({ type: 'setCommercial', quote: update(quote) });
+    },
+    openCommercial: () => { if (stateRef.current.commercial) dispatch({ type: 'setCommercial', quote: stateRef.current.commercial, show: true }); },
+    bindCommercial: () => {
+      const current = stateRef.current;
+      if (!current.commercial || current.commercial.boundPolicyIds.length) return current.commercial?.boundPolicyIds ?? [];
+      const records = buildCommercialPolicies(current.commercial, agentCodeFor(current.agent), current.agent.name, current.simDate);
+      dispatch({ type: 'commercialIssued', records, quote: { ...current.commercial, boundPolicyIds: records.map((record) => record.id) } });
+      return records.map((record) => record.id);
+    },
+  }) satisfies Omit<QuoteContextValue, 'state' | 'rating' | 'rated' | 'plan' | 'summary' | 'engine'>, [orderPointOfSale]);
 
-  const value = useMemo<QuoteContextValue>(() => ({ state, rating, rated, plan, summary, ...actions }), [state, rating, rated, plan, summary, actions]);
+  const value = useMemo<QuoteContextValue>(() => ({ state, rating, rated, plan, summary, engine, ...actions }), [state, rating, rated, plan, summary, actions]);
 
   return <QuoteContext.Provider value={value}>{children}</QuoteContext.Provider>;
 }

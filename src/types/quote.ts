@@ -1,3 +1,5 @@
+import type { OtherProductKey, ProductKey, ProductQuote } from '@/products/types';
+
 // Core data model for the simulated auto quote. All values are strings as entered
 // in the carrier UI (dates are MM/DD/YYYY) so they round-trip through form controls.
 
@@ -196,6 +198,9 @@ export interface QuoteData {
   ratedSignature: string;
   /** Set when report results re-rated the quote, so the agent can see the change. */
   premiumChange: { from: number; to: number } | null;
+  /** Products on this quote, in the order they were added (Auto first when present). */
+  products: ProductKey[];
+  productQuotes: Partial<Record<OtherProductKey, ProductQuote>>;
 }
 
 export interface QuoteSummary {
@@ -233,6 +238,7 @@ export interface BillPlanQuote {
   percentDown: number;
   feePerPayment: number;
   savings: number;
+  termMonths: number;
 }
 
 export interface RatingResult {

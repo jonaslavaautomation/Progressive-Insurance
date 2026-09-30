@@ -10,9 +10,9 @@ export interface Installment {
 /** Due dates for a 6-month bill plan: the down payment at the effective date, then monthly. */
 export function paymentSchedule(plan: BillPlanQuote, effectiveDate: string): Installment[] {
   const start = ratingDate(effectiveDate);
-  if (plan.payments === 0) return [{ due: formatDate(start), description: `${plan.name} (6-month term)`, amount: plan.total }];
+  if (plan.payments === 0) return [{ due: formatDate(start), description: `${plan.name} (${plan.termMonths}-month term)`, amount: plan.total }];
   // Five monthly payments, or a single second installment at mid-term.
-  const spacing = plan.payments === 1 ? 3 : 1;
+  const spacing = plan.payments === 1 ? plan.termMonths / 2 : 1;
   return [
     { due: formatDate(start), description: 'Down payment (due today)', amount: plan.dueToday },
     ...Array.from({ length: plan.payments }, (_, index) => ({

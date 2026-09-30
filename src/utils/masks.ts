@@ -1,6 +1,6 @@
 // Input masks applied as the VA types, mirroring the carrier portal's formatting.
 
-export type Mask = 'date' | 'phone' | 'ssn' | 'zip' | 'digits' | 'money' | 'vin';
+export type Mask = 'date' | 'phone' | 'ssn' | 'zip' | 'digits' | 'number' | 'money' | 'vin' | 'hin';
 
 function digits(value: string, max: number) {
   return value.replace(/\D/g, '').slice(0, max);
@@ -24,6 +24,8 @@ export function applyMask(mask: Mask | undefined, value: string): string {
     case 'ssn': return group(digits(value, 9), [3, 2, 4], '-');
     case 'zip': return digits(value, 5);
     case 'digits': return digits(value, 3);
+    case 'number': return digits(value, 5);
+    case 'hin': return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
     case 'money': {
       const whole = digits(value, 7);
       return whole ? Number(whole).toLocaleString('en-US') : '';

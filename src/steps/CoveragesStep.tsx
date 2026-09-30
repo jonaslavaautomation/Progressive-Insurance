@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Info, RotateCw, Smartphone, X } from 'lucide-react';
-import type { BillPlan, CoverageKey, Vehicle } from '@/types/quote';
+import type { BillPlan, BillPlanQuote, CoverageKey, Vehicle } from '@/types/quote';
+import type { OtherProductKey } from '@/products/types';
+import { currentProduct } from '@/products/active';
+import { productLabel } from '@/products/configs';
+import { isProductRated, productTotals, rateProduct } from '@/products/engine';
+import { ProductCoveragesContent } from '@/components/products/ProductForms';
+import { activeProducts } from '@/utils/ratingEngine';
 import { BI_PD, COLL_DEDUCTIBLES, ETE, MED_PAY, OTC_DEDUCTIBLES, SNAPSHOT_OPTIONS, TOWING, UMPD, UM_BI, coverageOptions } from '@/data/options';
 import { fieldHints } from '@/data/trainingHints';
 import { useQuote } from '@/context/useQuote';
@@ -31,7 +37,11 @@ export function SnapshotPromo() {
 
 /** Total Auto Premium + RECALCULATE, shown in the sticky action bar. */
 function PremiumTotal() {
-  const { state, rated, plan, recalculate } = useQuote();
+  const { state, rated: autoRated, recalculate } = useQuote();
+  const product = currentProduct(state);
+  const totals = productTotals(state, autoRated);
+  const rated = totals.every((entry) => entry.rated);
+  const plan = (totals.find((entry) => entry.key === product) ?? totals[0]).plan;
   const { reveal } = useStepValidation();
   const [flash, setFlash] = useState(false);
   const wasRated = useRef(rated);
@@ -51,7 +61,7 @@ function PremiumTotal() {
     recalculate();
   };
   return <div className="flex items-center gap-[14px]">
-    <div className={`flex h-[40px] items-center gap-[14px] rounded-[3px] px-[12px] ${flash ? 'shadow-[inset_0_0_0_2px_#c2185b]' : ''}`}><span className="text-[14px] text-[#5c6670]">Total Auto Premium:</span><span className="text-[18px] font-bold text-[#2e3a43]" aria-live="polite">{rated ? formatCurrency(plan.total) : '$ --.--'}</span></div>
+    <div className={`flex h-[40px] items-center gap-[14px] rounded-[3px] px-[12px] ${flash ? 'shadow-[inset_0_0_0_2px_#c2185b]' : ''}`}><span className="text-[14px] text-[#5c6670]">Total {productLabel(product)} Premium:</span><span className="text-[18px] font-bold text-[#2e3a43]" aria-live="polite">{rated ? formatCurrency(plan.total) : '$ --.--'}</span></div>
     {!rated && <button type="button" onClick={onRecalculate} className="flex h-[40px] items-center gap-[8px] rounded-[3px] bg-[#c2185b] px-[16px] text-[12.5px] font-bold uppercase text-white outline-none hover:bg-[#a0134b] focus-visible:shadow-[0_0_0_2px_#fff,0_0_0_4px_#e87722]"><RotateCw size={16} strokeWidth={2.6} />Recalculate</button>}
   </div>;
 }
@@ -114,17 +124,26 @@ function PolicyCard({ onViewDetails }: { onViewDetails: () => void }) {
 
 function BillPlans() {
   const { state, rating, updatePointOfSale } = useQuote();
+  return <BillPlansCard fieldId="pos.billPlan" name="auto" allPlans={rating.billPlans} selected={state.pointOfSale.billPlan} onChoose={(billPlan) => updatePointOfSale({ billPlan })} termMonths={6} />;
+}
+
+function ProductBillPlans({ product }: { product: OtherProductKey }) {
+  const { state, updateProduct } = useQuote();
+  const rating = rateProduct(product, state);
+  return <BillPlansCard fieldId={`billPlan.${product}`} name={product} allPlans={rating.billPlans} selected={state.productQuotes[product]?.billPlan ?? 'PIF'} onChoose={(billPlan) => updateProduct(product, { billPlan })} termMonths={rating.termMonths} />;
+}
+
+export function BillPlansCard({ fieldId, name, allPlans, selected, onChoose, termMonths }: { fieldId: string; name: string; allPlans: BillPlanQuote[]; selected: BillPlan; onChoose: (plan: BillPlan) => void; termMonths: number }) {
   const [showAll, setShowAll] = useState(false);
-  const selected = state.pointOfSale.billPlan;
-  const error = useFieldError('pos.billPlan');
-  const plans = showAll ? rating.billPlans : rating.billPlans.slice(0, INITIAL_PLANS);
-  const choose = (billPlan: BillPlan) => updatePointOfSale({ billPlan });
-  return <section id="pos.billPlan" tabIndex={-1} className="w-[880px] overflow-hidden rounded-[3px] border border-[#cfdbe3] bg-white outline-none">
-    <div className="flex min-h-[48px] border-b border-[#cfdbe3]"><div className="flex w-[225px] shrink-0 items-center gap-2 border-r border-[#cfdbe3] bg-[#e4ecf1] pl-[21px] font-slab text-[17px] font-bold">Bill Plans*<HelpDot label="Bill Plans" text={fieldHints.billPlan} /></div><div className="flex flex-1 items-center justify-between pl-[13px] pr-[12px]"><span className="text-[14px] font-bold">6 Month Options</span><button type="button" onClick={() => setShowAll(!showAll)} className="h-[32px] rounded-[3px] bg-[#0073cf] px-[14px] text-[12px] font-bold uppercase text-white outline-none hover:bg-[#003865] focus-visible:shadow-[0_0_0_2px_#fff,0_0_0_4px_#e87722]">{showAll ? 'View Fewer Plans' : 'View All Available Plans'}</button></div></div>
+  const error = useFieldError(fieldId);
+  const plans = showAll ? allPlans : allPlans.slice(0, INITIAL_PLANS);
+  const choose = onChoose;
+  return <section id={fieldId} tabIndex={-1} className="w-[880px] overflow-hidden rounded-[3px] border border-[#cfdbe3] bg-white outline-none">
+    <div className="flex min-h-[48px] border-b border-[#cfdbe3]"><div className="flex w-[225px] shrink-0 items-center gap-2 border-r border-[#cfdbe3] bg-[#e4ecf1] pl-[21px] font-slab text-[17px] font-bold">Bill Plans*<HelpDot label="Bill Plans" text={fieldHints.billPlan} /></div><div className="flex flex-1 items-center justify-between pl-[13px] pr-[12px]"><span className="text-[14px] font-bold">{termMonths} Month Options</span><button type="button" onClick={() => setShowAll(!showAll)} className="h-[32px] rounded-[3px] bg-[#0073cf] px-[14px] text-[12px] font-bold uppercase text-white outline-none hover:bg-[#003865] focus-visible:shadow-[0_0_0_2px_#fff,0_0_0_4px_#e87722]">{showAll ? 'View Fewer Plans' : 'View All Available Plans'}</button></div></div>
     <div role="radiogroup" aria-label="Bill plans">{plans.map((plan) => {
       const text = planPaymentText(plan);
       return <label key={plan.id} className={`flex min-h-[58px] cursor-pointer border-b border-[#edf1f3] text-[14px] last:border-b-0 hover:bg-[#f6f9fb] ${selected === plan.id ? 'bg-[#f6f9fb]' : ''}`}>
-        <span className="flex w-[225px] shrink-0 items-center gap-[12px] border-r border-[#d7e0e6] pl-[21px]"><input type="radio" name="bill-plan" checked={selected === plan.id} onChange={() => choose(plan.id)} className="h-[20px] w-[20px] shrink-0 accent-[#003865]" /><span><span className="block font-medium">{plan.name}</span><span className="block text-[11px] text-[#5c6670]">{plan.detail}</span></span></span>
+        <span className="flex w-[225px] shrink-0 items-center gap-[12px] border-r border-[#d7e0e6] pl-[21px]"><input type="radio" name={`bill-plan-${name}`} checked={selected === plan.id} onChange={() => choose(plan.id)} className="h-[20px] w-[20px] shrink-0 accent-[#003865]" /><span><span className="block font-medium">{plan.name}</span><span className="block text-[11px] text-[#5c6670]">{plan.detail}</span></span></span>
         <span className="flex flex-1 flex-col justify-center pl-[13px]"><span>{text.line}</span><span className="text-[11px] text-[#5c6670]">{text.sub}</span></span>
         <span className="flex w-[170px] items-center justify-end pr-[16px] text-[12px] text-[#5c6670]">{plan.savings > 0 && `Savings of ${formatCurrency(plan.savings)}`}</span>
       </label>;
@@ -157,6 +176,18 @@ function CoveragesContent() {
   </>;
 }
 
+/** Rating state of the other products, shown on the Auto tab so nothing is forgotten. */
+function OtherProductsStatus() {
+  const { state, setActiveProduct } = useQuote();
+  const others = activeProducts(state).filter((key): key is OtherProductKey => key !== 'auto');
+  if (!others.length) return null;
+  return <div className="mb-[20px] flex w-[880px] flex-wrap gap-x-[20px] gap-y-1 rounded-[3px] border border-[#cfdbe3] bg-white px-[16px] py-[10px] text-[13px]"><span className="font-bold">Other products on this quote:</span>{others.map((key) => <button key={key} type="button" onClick={() => setActiveProduct(key)} className="text-[#0073cf] underline underline-offset-2">{productLabel(key)} {isProductRated(key, state) ? '(rated)' : '(needs RECALCULATE)'}</button>)}</div>;
+}
+
 export function CoveragesStep() {
-  return <WizardLayout stepHeader contentClassName="pt-0" sidebar={<SnapshotPromo />} actionCenter={<PremiumTotal />}><CoveragesContent /></WizardLayout>;
+  const { state } = useQuote();
+  const product = currentProduct(state);
+  return <WizardLayout stepHeader contentClassName="pt-0" sidebar={product === 'auto' ? <SnapshotPromo /> : undefined} actionCenter={<PremiumTotal />}>
+    {product === 'auto' ? <><OtherProductsStatus /><CoveragesContent /></> : <ProductCoveragesContent key={product} product={product} billPlans={<ProductBillPlans product={product} />} />}
+  </WizardLayout>;
 }

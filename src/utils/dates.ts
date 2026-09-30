@@ -1,4 +1,5 @@
 // Date helpers for the carrier's MM/DD/YYYY format.
+import { clockDate } from '@/utils/clock';
 
 export function parseDate(value: string): Date | null {
   const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
@@ -15,9 +16,9 @@ export function formatDate(date: Date): string {
   return `${mm}/${dd}/${date.getFullYear()}`;
 }
 
+/** Today on the training clock (the real date unless a trainer advanced it). */
 export function today(): Date {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return clockDate();
 }
 
 export function addMonths(date: Date, months: number): Date {

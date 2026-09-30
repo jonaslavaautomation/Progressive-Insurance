@@ -2,6 +2,12 @@ import { createContext, useContext } from 'react';
 import type { AdditionalDetails, AgentProfile, BillPlanQuote, Coverages, Driver, Incident, MailingAddress, NamedInsured, PointOfSale, PolicyInfo, QuoteSummary, RatingResult, SimulatedReports, Vehicle } from '@/types/quote';
 import type { QuoteState } from '@/context/quoteStore';
 import type { PosOrderResult } from '@/utils/reportSimulator';
+import type { OtherProductKey, ProductKey, ProductQuote } from '@/products/types';
+import type { PolicyRecord } from '@/types/policy';
+import type { PolicyQuery, PolicyTab } from '@/context/quoteStore';
+import type * as PolicyEngine from '@/services/policyEngine';
+import type { CommercialKey } from '@/products/types';
+import type { CommercialQuote } from '@/commercial/types';
 
 export interface QuoteContextValue {
   state: QuoteState;
@@ -43,6 +49,30 @@ export interface QuoteContextValue {
   toggleKeyboardHelp: () => void;
   loadSampleQuote: () => void;
   resetQuote: () => void;
+  /** Starts a fresh quote for the products chosen in Select Product(s). */
+  startQuote: (products: ProductKey[]) => void;
+  addProducts: (products: ProductKey[]) => void;
+  suspendProduct: (key: ProductKey) => void;
+  setActiveProduct: (key: ProductKey) => void;
+  addUnit: (key: OtherProductKey) => string;
+  removeUnit: (key: OtherProductKey, unitId: string) => void;
+  updateUnitValues: (key: OtherProductKey, unitId: string, values: Record<string, string>) => void;
+  updateUnitCoverages: (key: OtherProductKey, unitId: string, coverages: Record<string, string>) => void;
+  updateProduct: (key: OtherProductKey, patch: Partial<Pick<ProductQuote, 'coverages' | 'answers' | 'billPlan' | 'interests'>>) => void;
+  advanceClock: (days: number) => void;
+  clearPolicies: () => void;
+  openPolicies: (query?: Partial<PolicyQuery>) => void;
+  openPolicy: (id: string, tab?: PolicyTab) => void;
+  setPolicyTab: (tab: PolicyTab) => void;
+  /** Runs a servicing operation on a policy; returns an error message, or '' on success. */
+  servicePolicy: (id: string, operation: (policy: PolicyRecord, day: string) => PolicyRecord | string) => string;
+  engine: typeof PolicyEngine;
+  /** Starts a new Commercial Lines quote and opens it. */
+  startCommercialQuote: (products: CommercialKey[]) => void;
+  updateCommercial: (update: (quote: CommercialQuote) => CommercialQuote) => void;
+  openCommercial: () => void;
+  /** Binds every product on the commercial quote; returns the issued policy ids. */
+  bindCommercial: () => string[];
 }
 
 export const QuoteContext = createContext<QuoteContextValue | null>(null);

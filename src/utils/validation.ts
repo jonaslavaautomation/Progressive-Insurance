@@ -4,18 +4,21 @@ import type { Driver, QuoteData } from '@/types/quote';
 import { CUSTOM_EQUIPMENT_MAX } from '@/data/options';
 import { moneyToNumber } from '@/utils/masks';
 import { ageOn, daysBetween, parseDate, ratingDate, today } from '@/utils/dates';
-import { driverName, isRated, ratedDrivers, vehicleLabel } from '@/utils/ratingEngine';
+import { activeProducts, driverName, hasAuto, isRated, ratedDrivers, vehicleLabel } from '@/utils/ratingEngine';
+import type { FieldDef, OtherProductKey } from '@/products/types';
+import { PRODUCT_CONFIGS } from '@/products/configs';
+import { fieldContext, isProductRated } from '@/products/engine';
 
 export type FieldErrors = Record<string, string>;
 
 export const MAX_EFFECTIVE_DAYS_OUT = 60;
 export const INCIDENT_LOOKBACK_YEARS = 5;
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const PHONE = /^[2-9]\d{2}-\d{3}-\d{4}$/;
+export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+export const PHONE = /^[2-9]\d{2}-\d{3}-\d{4}$/;
 const ZIP = /^\d{5}$/;
 const NC_ZIP = /^2[78]\d{3}$/;
-const VIN = /^[A-HJ-NPR-Z0-9]{17}$/;
+export const VIN = /^[A-HJ-NPR-Z0-9]{17}$/;
 
 function required(errors: FieldErrors, id: string, value: string | undefined, message: string) {
   if (!value || !value.trim()) errors[id] = message;
@@ -73,6 +76,8 @@ function validateProducts(quote: QuoteData, errors: FieldErrors) {
   else if (!effective) errors['policy.effectiveDate'] = 'Policy Effective Date must be a valid date in MM/DD/YYYY format.';
   else if (daysBetween(today(), effective) < 0) errors['policy.effectiveDate'] = 'Policy Effective Date cannot be in the past.';
   else if (daysBetween(today(), effective) > MAX_EFFECTIVE_DAYS_OUT) errors['policy.effectiveDate'] = `Policy Effective Date cannot be more than ${MAX_EFFECTIVE_DAYS_OUT} days in the future.`;
+  otherProducts(quote).forEach((key) => validateUnits(quote, key, errors));
+  if (!hasAuto(quote)) return;
   required(errors, 'policy.namedOperator', policy.namedOperator, 'Answer the Named Operator Policy question.');
   if (policy.namedOperator === 'Yes') errors['policy.namedOperator'] = 'Named Operator (non-owner) policies are not available in this simulation. Select "No".';
 
@@ -99,8 +104,14 @@ function validateProducts(quote: QuoteData, errors: FieldErrors) {
   });
 }
 
+/** Auto, Motorcycle and Motor Home need licensed, rated operators. */
+export function needsLicensedDrivers(quote: QuoteData): boolean {
+  return activeProducts(quote).some((key) => key === 'auto' || PRODUCT_CONFIGS[key].motorized);
+}
+
 function validateHousehold(quote: QuoteData, errors: FieldErrors) {
   const on = ratingDate(quote.policy.effectiveDate);
+  const licensing = needsLicensedDrivers(quote);
   quote.drivers.forEach((driver, index) => {
     const who = `${driverName(driver)}: `;
     const id = (field: string) => `driver.${driver.id}.${field}`;
@@ -111,6 +122,7 @@ function validateHousehold(quote: QuoteData, errors: FieldErrors) {
     required(errors, id('relationship'), driver.relationship, `${who}Relationship is required.`);
     dateOfBirth(errors, id('dob'), driver.dob, who, rated ? 15 : 0, 'Rated drivers must be at least 15 years old.');
     required(errors, id('gender'), driver.gender, `${who}Gender is required.`);
+    if (!licensing) return;
     required(errors, id('education'), driver.education, `${who}Highest Level of Education is required.`);
     required(errors, id('employment'), driver.employment, `${who}Employment is required.`);
     required(errors, id('occupation'), driver.occupation, `${who}Occupation is required.`);
@@ -130,7 +142,7 @@ function validateHousehold(quote: QuoteData, errors: FieldErrors) {
       required(errors, id('internationalYears'), driver.internationalYears, `${who}International Years Licensed is required.`);
     }
     if (index > 0) required(errors, id('operatorType'), driver.operatorType, `${who}Principal/Occasional Operator is required.`);
-    if (rated && quote.vehicles.length > 1) required(errors, id('primaryVehicleId'), driver.primaryVehicleId, `${who}Primary Vehicle Driven is required.`);
+    if (rated && hasAuto(quote) && quote.vehicles.length > 1) required(errors, id('primaryVehicleId'), driver.primaryVehicleId, `${who}Primary Vehicle Driven is required.`);
 
     driver.incidents.forEach((incident, n) => {
       const incidentId = `incident.${incident.id}`;
@@ -154,6 +166,14 @@ function validateHousehold(quote: QuoteData, errors: FieldErrors) {
 
 function validateAdditional(quote: QuoteData, errors: FieldErrors) {
   const { additional, insured } = quote;
+  otherProducts(quote).forEach((key) => validateQuestions(quote, key, errors));
+  if (!hasAuto(quote)) {
+    required(errors, 'additional.paperless', additional.paperless, 'Answer the Paperless question.');
+    if (additional.paperless === 'Yes' && !insured.email) errors['additional.paperless'] = 'Paperless requires a Customer Email. Add one on the Named Insured page.';
+    required(errors, 'additional.primaryResidence', additional.primaryResidence, 'Primary Residence is required.');
+    if (!additional.crossSell.length && !additional.noAdditionalRisks) errors['additional.crossSell'] = 'Choose any additional products the Insured or Spouse has, or select "No additional risks apply".';
+    return;
+  }
   required(errors, 'additional.continuousInsurance', additional.continuousInsurance, 'Answer whether the Insured/Spouse had vehicle liability insurance for the past 6 months.');
   required(errors, 'additional.allDriversListed', additional.allDriversListed, 'Answer whether all required drivers are listed.');
   if (additional.allDriversListed === 'No') errors['additional.allDriversListed'] = 'All drivers required to be listed must be added in Household Members before continuing.';
@@ -172,6 +192,12 @@ function perPerson(limit: string): number {
 }
 
 function validateCoverages(quote: QuoteData, errors: FieldErrors) {
+  otherProducts(quote).forEach((key) => validateProductCoverages(quote, key, errors));
+  const productsUnrated = otherProducts(quote).filter((key) => !isProductRated(key, quote));
+  if (!hasAuto(quote)) {
+    if (productsUnrated.length && !Object.keys(errors).length) errors.rate = 'Click RECALCULATE to rate the quote before continuing to PORTFOLIO.';
+    return;
+  }
   const { coverages } = quote;
   required(errors, 'coverages.bodilyInjuryPd', coverages.bodilyInjuryPd, 'Bodily Injury & Property Damage is required.');
   required(errors, 'coverages.medicalPayments', coverages.medicalPayments, 'Medical Payment is required.');
@@ -184,12 +210,25 @@ function validateCoverages(quote: QuoteData, errors: FieldErrors) {
     if (vehicle.collDeductible !== 'None' && vehicle.compDeductible === 'None') errors[`vehicle.${vehicle.id}.compDeductible`] = `${who}Collision coverage requires Other Than Collision (Comprehensive) coverage.`;
     if (moneyToNumber(vehicle.customEquipment) > CUSTOM_EQUIPMENT_MAX) errors[`vehicle.${vehicle.id}.customEquipment`] = `${who}Customizing Equipment Coverage cannot exceed $${CUSTOM_EQUIPMENT_MAX.toLocaleString('en-US')}.`;
   });
-  if (!isRated(quote) && !Object.keys(errors).length) errors.rate = 'Click RECALCULATE to rate the quote before continuing to PORTFOLIO.';
+  if ((!isRated(quote) || productsUnrated.length) && !Object.keys(errors).length) errors.rate = 'Click RECALCULATE to rate the quote before continuing to PORTFOLIO.';
   required(errors, 'pos.billPlan', quote.pointOfSale.billPlan, 'Select a Bill Plan.');
 }
 
 function validatePointOfSale(quote: QuoteData, errors: FieldErrors) {
-  quote.vehicles.forEach((vehicle, index) => {
+  otherProducts(quote).forEach((key) => {
+    const config = PRODUCT_CONFIGS[key];
+    const field = config.unitFields.find((entry) => entry.key === config.idField);
+    if (!field) return;
+    quote.productQuotes[key]?.units.forEach((unit, index) => {
+      const who = `${config.unitLabel} ${index + 1} (${config.describe(unit)}): `;
+      const value = unit.values[field.key] ?? '';
+      const fieldId = `unit.${key}.${unit.id}.${field.key}`;
+      if (!value) errors[fieldId] = `${who}${field.label.replace(/[:*]/g, '')} is required at Point of Sale.`;
+      else if (field.type === 'vin' && !VIN.test(value)) errors[fieldId] = `${who}VIN must be 17 characters (no I, O or Q).`;
+      else if (field.type === 'hin' && !HIN.test(value)) errors[fieldId] = `${who}Hull ID must be 12 letters and numbers.`;
+    });
+  });
+  if (hasAuto(quote)) quote.vehicles.forEach((vehicle, index) => {
     const who = `${vehicleLabel(vehicle, index)}: `;
     const id = (field: string) => `vehicle.${vehicle.id}.${field}`;
     if (!vehicle.vin) errors[id('vin')] = `${who}VIN is required at Point of Sale.`;
@@ -199,7 +238,7 @@ function validatePointOfSale(quote: QuoteData, errors: FieldErrors) {
       required(errors, id('garagingCity'), vehicle.garagingCity, `${who}Garaging City is required.`);
     }
   });
-  ratedDrivers(quote.drivers).filter(isLicensed).forEach((driver) => {
+  if (needsLicensedDrivers(quote)) ratedDrivers(quote.drivers).filter(isLicensed).forEach((driver) => {
     required(errors, `driver.${driver.id}.licenseNumber`, driver.licenseNumber, `${driverName(driver)}: Driver License Number is required at Point of Sale.`);
   });
   const { reports } = quote;
@@ -217,6 +256,62 @@ function validateFinalSale(quote: QuoteData, errors: FieldErrors) {
   if (!pos.reviewedCoverages) errors['pos.reviewedCoverages'] = 'Confirm you reviewed coverages and deductibles with the customer.';
   if (!pos.confirmedHousehold) errors['pos.confirmedHousehold'] = 'Confirm all household members and drivers are listed.';
   if (!pos.agreedToTerms) errors['pos.agreedToTerms'] = 'Confirm the customer agreed to the binding terms.';
+}
+
+// ------------------------------------------------------------------ non-Auto products
+
+function otherProducts(quote: QuoteData): OtherProductKey[] {
+  return activeProducts(quote).filter((key): key is OtherProductKey => key !== 'auto');
+}
+
+export const HIN = /^[A-Z0-9]{12}$/;
+
+export function checkField(errors: FieldErrors, fieldId: string, field: FieldDef, value: string, who: string, visible: boolean) {
+  if (!visible || field.type === 'display') return;
+  const name = field.label.replace(/[:*?]/g, '').trim();
+  if (field.required && !value) { errors[fieldId] = `${who}${name} is required.`; return; }
+  if (!value) return;
+  if (field.type === 'zip') {
+    if (!ZIP.test(value)) errors[fieldId] = `${who}${name} must be 5 digits.`;
+    else if (!NC_ZIP.test(value)) errors[fieldId] = `${who}${name} must be in North Carolina (27xxx or 28xxx).`;
+  }
+  if (field.type === 'vin' && !VIN.test(value)) errors[fieldId] = `${who}VIN must be 17 characters (no I, O or Q).`;
+  if (field.type === 'hin' && !HIN.test(value)) errors[fieldId] = `${who}Hull ID must be 12 letters and numbers.`;
+  if (field.type === 'money' && Number(value.replace(/\D/g, '')) <= 0) errors[fieldId] = `${who}${name} must be greater than $0.`;
+}
+
+function validateUnits(quote: QuoteData, key: OtherProductKey, errors: FieldErrors) {
+  const config = PRODUCT_CONFIGS[key];
+  quote.productQuotes[key]?.units.forEach((unit, index) => {
+    const who = config.multiUnit ? `${config.unitLabel} ${index + 1} (${config.describe(unit)}): ` : `${config.name}: `;
+    const ctx = fieldContext(quote, unit.values);
+    for (const field of config.unitFields) checkField(errors, `unit.${key}.${unit.id}.${field.key}`, field, unit.values[field.key] ?? '', who, !field.showIf || field.showIf(ctx));
+    for (const [field, message] of Object.entries(config.unitRules?.(unit.values) ?? {})) errors[`unit.${key}.${unit.id}.${field}`] = `${who}${message}`;
+  });
+}
+
+function validateQuestions(quote: QuoteData, key: OtherProductKey, errors: FieldErrors) {
+  const config = PRODUCT_CONFIGS[key];
+  const answers = quote.productQuotes[key]?.answers ?? {};
+  for (const question of config.questions) {
+    const fieldId = `answer.${key}.${question.key}`;
+    if (!answers[question.key]) errors[fieldId] = `${config.name}: answer "${question.label.replace(/\*$/, '')}"`;
+    else if (question.ineligibleIf && answers[question.key] === question.ineligibleIf) errors[fieldId] = `${config.name}: ${question.ineligibleMessage}`;
+  }
+}
+
+function validateProductCoverages(quote: QuoteData, key: OtherProductKey, errors: FieldErrors) {
+  const config = PRODUCT_CONFIGS[key];
+  const product = quote.productQuotes[key];
+  if (!product) return;
+  for (const coverage of config.coverages) {
+    if (coverage.scope === 'policy') checkField(errors, `coverage.${key}.policy.${coverage.key}`, coverage, product.coverages[coverage.key] ?? '', `${config.name}: `, true);
+    else product.units.forEach((unit, index) => checkField(errors, `coverage.${key}.${unit.id}.${coverage.key}`, coverage, unit.coverages[coverage.key] ?? '', `${config.unitLabel} ${index + 1}: `, true));
+  }
+  product.units.forEach((unit, index) => {
+    // Collision requires Comprehensive, as on Auto.
+    if (unit.coverages.coll && unit.coverages.coll !== 'None' && unit.coverages.comp === 'None') errors[`coverage.${key}.${unit.id}.comp`] = `${config.unitLabel} ${index + 1}: Collision requires Comprehensive coverage.`;
+  });
 }
 
 const validators = [validateNamedInsured, validateProducts, validateHousehold, validateAdditional, validateCoverages, () => undefined, validatePointOfSale, validateFinalSale];

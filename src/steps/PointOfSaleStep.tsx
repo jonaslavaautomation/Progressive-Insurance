@@ -11,9 +11,14 @@ import { WizardLayout } from '@/components/wizard/WizardLayout';
 import { HelpDot, InlineError, WizardCard, WizardField, WizardRadio, WizardRow, WizardRowShell } from '@/components/wizard/primitives';
 import { useFieldError, useStepValidation } from '@/components/wizard/stepValidation';
 import { Modal } from '@/components/wizard/Modal';
+import { ProductField } from '@/components/products/ProductForms';
+import { PRODUCT_CONFIGS } from '@/products/configs';
+import type { OtherProductKey } from '@/products/types';
+import { activeProducts, hasAuto } from '@/utils/ratingEngine';
+import { needsLicensedDrivers } from '@/utils/validation';
 import { modalButton } from '@/components/wizard/modalStyles';
 
-const SECTIONS = [['pos-ceding', 'Ceding Indicator'], ['pos-vehicle', 'Vehicle Details'], ['pos-auto', 'Auto Details'], ['pos-household', 'Household Member Details']] as const;
+const AUTO_SECTIONS: [string, string][] = [['pos-ceding', 'Ceding Indicator'], ['pos-vehicle', 'Vehicle Details'], ['pos-auto', 'Auto Details']];
 
 function statusText(status: ReportStatus, findings: string[]): string {
   if (status === 'ordering') return 'Ordering…';
@@ -67,12 +72,16 @@ function OrderResults() {
 }
 
 function PosContent() {
-  const { state, updateReports, updateVehicle, updateDriver, orderPointOfSale, applyPosOrder, cancelPosOrder } = useQuote();
+  const { state, updateReports, updateVehicle, updateDriver, updateUnitValues, orderPointOfSale, applyPosOrder, cancelPosOrder } = useQuote();
+  const auto = hasAuto(state);
+  const others = activeProducts(state).filter((key): key is OtherProductKey => key !== 'auto');
+  const licensing = needsLicensedDrivers(state);
+  const sections: [string, string][] = [...(auto ? AUTO_SECTIONS : []), ...(others.length ? [['pos-products', 'Other Product Details'] as [string, string]] : []), ['pos-household', 'Household Member Details']];
   const { reports, vehicles, drivers, insured } = state;
   const { reveal } = useStepValidation();
   const posError = useFieldError('pos');
   const [pending, setPending] = useState<PosOrderResult | null>(null);
-  const [active, setActive] = useState<string>(SECTIONS[0][0]);
+  const [active, setActive] = useState<string>(auto ? AUTO_SECTIONS[0][0] : others.length ? 'pos-products' : 'pos-household');
   const [selectError, setSelectError] = useState('');
   const busy = reports.clueStatus === 'ordering' || reports.mvrStatus === 'ordering';
 
@@ -85,7 +94,8 @@ function PosContent() {
     const clue = reports.orderClue;
     const result = await orderPointOfSale();
     if (!result) return;
-    if (clue && vendorDiffers(result.vendor, state)) setPending(result);
+    // The prior-insurance comparison applies to the Auto policy.
+    if (clue && auto && vendorDiffers(result.vendor, state)) setPending(result);
     else applyPosOrder(result, 'vendor');
   };
   const jump = (id: string) => { setActive(id); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
@@ -101,9 +111,9 @@ function PosContent() {
     {posError && <div id="pos" tabIndex={-1} className="mb-[16px] w-[990px] outline-none"><InlineError message={posError} /></div>}
     <OrderResults />
     <div className="flex items-start gap-[24px]">
-      <nav aria-label="Point of Sale sections" className="sticky top-0 w-[160px] shrink-0 pt-[4px]"><ul className="space-y-[10px]">{SECTIONS.map(([id, label]) => <li key={id}><button type="button" onClick={() => jump(id)} className={`relative block w-full py-[2px] pl-[12px] text-left text-[14px] underline-offset-2 ${active === id ? 'font-medium text-[#2e3a43] before:absolute before:bottom-0 before:left-0 before:top-0 before:w-[3px] before:bg-[#003865]' : 'text-[#003865] underline hover:text-[#0073cf]'}`}>{label}</button></li>)}</ul></nav>
+      <nav aria-label="Point of Sale sections" className="sticky top-0 w-[160px] shrink-0 pt-[4px]"><ul className="space-y-[10px]">{sections.map(([id, label]) => <li key={id}><button type="button" onClick={() => jump(id)} className={`relative block w-full py-[2px] pl-[12px] text-left text-[14px] underline-offset-2 ${active === id ? 'font-medium text-[#2e3a43] before:absolute before:bottom-0 before:left-0 before:top-0 before:w-[3px] before:bg-[#003865]' : 'text-[#003865] underline hover:text-[#0073cf]'}`}>{label}</button></li>)}</ul></nav>
       <div className="w-[460px] shrink-0 space-y-[20px]">
-        <section id="pos-ceding" className="scroll-mt-4"><WizardCard title="Ceding Indicator" split={false}><ul className="list-disc py-[14px] pl-[42px] text-[14px]"><li><span className="inline-flex items-center gap-2">Ceding Indicator: R <HelpDot label="Ceding Indicator" text="R = Regular (voluntary) market. The policy is retained by the carrier and not ceded to the North Carolina Reinsurance Facility." /></span></li></ul></WizardCard></section>
+        {auto && <><section id="pos-ceding" className="scroll-mt-4"><WizardCard title="Ceding Indicator" split={false}><ul className="list-disc py-[14px] pl-[42px] text-[14px]"><li><span className="inline-flex items-center gap-2">Ceding Indicator: R <HelpDot label="Ceding Indicator" text="R = Regular (voluntary) market. The policy is retained by the carrier and not ceded to the North Carolina Reinsurance Facility." /></span></li></ul></WizardCard></section>
         <div id="pos-vehicle" className="scroll-mt-4 space-y-[20px]">{vehicles.map((vehicle, index) => <WizardCard key={vehicle.id} title="Vehicle Details" subtitle={<>{vehicleName(vehicle)}<br />{index + 1} of {vehicles.length}</>}>
           <WizardRow label="Year / Make / Model" value={vehicleName(vehicle)} />
           <WizardRow label="Body Style" value={vehicle.bodyStyle} />
@@ -125,9 +135,21 @@ function PosContent() {
             {same && <p className="px-[21px] pb-[10px] text-[12px] text-[#5c6670]">Garaged at mailing address: {[insured.address.line1, insured.address.city].filter(Boolean).join(', ') || '—'}</p>}
           </WizardCard>;
         })}</div>
+        </>}
+        {others.length > 0 && <div id="pos-products" className="scroll-mt-4 space-y-[20px]">{others.flatMap((key) => {
+          const config = PRODUCT_CONFIGS[key];
+          const units = state.productQuotes[key]?.units ?? [];
+          const idField = config.unitFields.find((field) => field.key === config.idField);
+          return units.map((unit, index) => <WizardCard key={unit.id} title={`${config.unitLabel} Details`} subtitle={<>{config.describe(unit)}<br />{index + 1} of {units.length}</>}>
+            <WizardRow label="Product" value={config.name} />
+            {idField && <ProductField field={{ ...idField, label: `${idField.label.replace(/:$/, '')}:*` }} id={`unit.${key}.${unit.id}.${idField.key}`} value={unit.values[idField.key] ?? ''} values={unit.values} onChange={(value) => updateUnitValues(key, unit.id, { [idField.key]: value })} />}
+            {key === 'renters' && <WizardRow label="Rental Location" value={unit.values.sameAsMailing === 'No' ? `${unit.values.street}, ${unit.values.city} ${unit.values.garagingZip}` : `${insured.address.line1}, ${insured.address.city} ${insured.address.zip}`} />}
+            <WizardRow label={key === 'renters' ? 'ZIP Code' : 'Garaging / Storage ZIP'} value={unit.values.garagingZip} />
+          </WizardCard>);
+        })}</div>}
         <div id="pos-household" className="scroll-mt-4 space-y-[20px]">{drivers.map((driver, index) => <WizardCard key={driver.id} title="Household Member Details" subtitle={<>{driverName(driver)}<br />{index + 1} of {drivers.length}</>}>
           <WizardField label="Date of Birth:" disabled value={driver.dob} />
-          <WizardField id={`driver.${driver.id}.licenseNumber`} label={`Driver License Number:${driver.driverStatus === 'Rated' && isLicensed(driver) ? '*' : ''}`} disabled={!isLicensed(driver)} value={driver.licenseNumber} onChange={(licenseNumber) => updateDriver(driver.id, { licenseNumber: licenseNumber.toUpperCase().slice(0, 16) })} />
+          <WizardField id={`driver.${driver.id}.licenseNumber`} label={`Driver License Number:${licensing && driver.driverStatus === 'Rated' && isLicensed(driver) ? '*' : ''}`} disabled={!isLicensed(driver)} value={driver.licenseNumber} onChange={(licenseNumber) => updateDriver(driver.id, { licenseNumber: licenseNumber.toUpperCase().slice(0, 16) })} />
           <WizardField label="License State:" disabled value={isLicensed(driver) ? driver.licenseState : 'Not Licensed'} />
           <WizardField id={`driver.${driver.id}.ssn`} label="Social Security Number:" placeholder="XXX-XX-XXXX" mask="ssn" value={driver.ssn} onChange={(ssn) => updateDriver(driver.id, { ssn })} />
         </WizardCard>)}</div>

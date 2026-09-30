@@ -2,6 +2,7 @@
 // Before Point of Sale the quote is rated on a preliminary tier (insured-provided data only);
 // once MVR/CLUE/prior-insurance reports are applied, verified factors replace the preliminary ones.
 import type { BillPlan, BillPlanQuote, CoverageKey, Driver, QuoteData, RatingFactor, RatingResult, Vehicle, VehiclePremium } from '@/types/quote';
+import type { ProductKey } from '@/products/types';
 import { BI_PD, COLL_DEDUCTIBLES, CUSTOM_EQUIPMENT_MAX, ETE, INCIDENT_CODES, MED_PAY, OTC_DEDUCTIBLES, OWNED_RESIDENCES, TOWING, UMPD, UM_BI, optionFor } from '@/data/options';
 import { ageOn, ratingDate } from '@/utils/dates';
 import { moneyToNumber } from '@/utils/masks';
@@ -37,7 +38,7 @@ export function countIncidents(drivers: Driver[]): number {
   return ratedDrivers(drivers).reduce((count, driver) => count + driver.incidents.filter((incident) => incident.code).length, 0);
 }
 
-function driverFactor(driver: Driver, on: Date): number {
+export function driverFactor(driver: Driver, on: Date): number {
   const age = ageOn(driver.dob, on);
   let factor = age === null ? 1 : age < 20 ? 2.1 : age < 25 ? 1.65 : age < 30 ? 1.2 : age < 65 ? 1 : age < 75 ? 1.08 : 1.2;
   const licensedAt = Number(driver.ageFirstLicensed);
@@ -48,7 +49,7 @@ function driverFactor(driver: Driver, on: Date): number {
   return factor;
 }
 
-function territoryFactor(zip: string): number {
+export function territoryFactor(zip: string): number {
   const prefix = zip.slice(0, 3);
   return ({ '276': 1, '275': 0.97, '277': 0.95, '282': 1.12, '274': 1.02 } as Record<string, number>)[prefix] ?? 0.93;
 }
@@ -94,7 +95,8 @@ export function rateQuote(quote: QuoteData): RatingResult {
   const score = applied ? SCORE_TIER_FACTORS[reports.scoreTier] ?? 1 : 1;
   const cancellation = additional.priorCancellation === 'Yes' ? 1.35 : 1;
   const homeowner = OWNED_RESIDENCES.includes(additional.primaryResidence);
-  const multiPolicy = additional.crossSell.length > 0;
+  // Bundling any other product on this quote, or one the customer already has, earns Multi Policy.
+  const multiPolicy = additional.crossSell.length > 0 || activeProducts(quote).length > 1;
   const snapshot = coverages.snapshot.startsWith('Enrolled');
   const paperless = additional.paperless === 'Yes';
   const discount = (homeowner ? 0.93 : 1) * (multiPolicy ? 0.92 : 1) * (snapshot ? 0.85 : 1) * (paperless ? 0.97 : 1);
@@ -139,7 +141,7 @@ export function rateQuote(quote: QuoteData): RatingResult {
   const umpd = round2((optionFor(UMPD, coverages.umpd)?.base ?? 0) * count);
   const fullTermPremium = round2(vehicles.reduce((sum, vehicle) => sum + vehicle.total, 0) + umbi + umpd);
 
-  const billPlans = buildBillPlans(fullTermPremium);
+  const billPlans = buildBillPlans(fullTermPremium, TERM_MONTHS);
   if (quote.pointOfSale.billPlan === 'PIF' || quote.pointOfSale.billPlan === '') appliedDiscounts.splice(1, 0, 'Paid in Full');
 
   const factors: RatingFactor[] = [
@@ -169,22 +171,26 @@ export function rateQuote(quote: QuoteData): RatingResult {
   };
 }
 
-function installmentPlan(id: BillPlanQuote['id'], name: string, detail: string, full: number, downRate: number, payments: number, fee: number): Omit<BillPlanQuote, 'savings'> {
+function installmentPlan(id: BillPlanQuote['id'], name: string, detail: string, full: number, downRate: number, payments: number, fee: number, termMonths: number): Omit<BillPlanQuote, 'savings'> {
   const dueToday = round2(full * downRate);
   const paymentAmount = round2((full - dueToday) / payments + fee);
   const total = round2(dueToday + paymentAmount * payments);
-  return { id, name, detail, dueToday, payments, paymentAmount, total, percentDown: dueToday / total, feePerPayment: fee };
+  return { id, name, detail, dueToday, payments, paymentAmount, total, percentDown: dueToday / total, feePerPayment: fee, termMonths };
 }
 
-export function buildBillPlans(full: number): BillPlanQuote[] {
-  const pif = round2(full * (1 - PAY_IN_FULL_DISCOUNT));
+/** Bill plans for a 6-month (5 installments) or 12-month (11 installments) term. */
+export function buildBillPlans(full: number, termMonths = TERM_MONTHS): BillPlanQuote[] {
+  const annual = termMonths === 12;
+  const pif = round2(full * (1 - (annual ? 0.08 : PAY_IN_FULL_DISCOUNT)));
+  const monthly = annual ? 11 : 5;
+  const down = annual ? 1 / 12 : 0.2;
   const plans = [
-    { id: 'PIF' as const, name: 'Pay In Full', detail: 'Paid In Full', dueToday: pif, payments: 0, paymentAmount: 0, total: pif, percentDown: 1, feePerPayment: 0 },
-    installmentPlan('EFT', 'Pay With EFT', 'From Checking', full, 0.2, 5, 3),
-    installmentPlan('CARD', 'Pay With Automatic Card', 'Recurring Credit Card', full, 0.2, 5, 3),
-    installmentPlan('MAIL', 'Pay By Mail', 'Paper Bill', full, 0.18, 5, 8),
-    installmentPlan('EFT2', 'Pay With EFT - 2 Payments', 'From Checking', full, 0.5, 1, 3),
-    installmentPlan('MAIL2', 'Pay By Mail - 2 Payments', 'Paper Bill', full, 0.5, 1, 8),
+    { id: 'PIF' as const, name: 'Pay In Full', detail: 'Paid In Full', dueToday: pif, payments: 0, paymentAmount: 0, total: pif, percentDown: 1, feePerPayment: 0, termMonths },
+    installmentPlan('EFT', 'Pay With EFT', 'From Checking', full, down, monthly, 3, termMonths),
+    installmentPlan('CARD', 'Pay With Automatic Card', 'Recurring Credit Card', full, down, monthly, 3, termMonths),
+    installmentPlan('MAIL', 'Pay By Mail', 'Paper Bill', full, annual ? down : 0.18, monthly, 8, termMonths),
+    installmentPlan('EFT2', 'Pay With EFT - 2 Payments', 'From Checking', full, 0.5, 1, 3, termMonths),
+    installmentPlan('MAIL2', 'Pay By Mail - 2 Payments', 'Paper Bill', full, 0.5, 1, 8, termMonths),
   ];
   const mail = plans.find((plan) => plan.id === 'MAIL')?.total ?? pif;
   return plans.map((plan) => ({ ...plan, savings: plan.id === 'PIF' ? round2(mail - pif) : 0 }));
@@ -200,6 +206,21 @@ export function ratingSignature(quote: QuoteData): string {
   const drivers = quote.drivers.map((driver) => [driver.id, driver.dob, driver.driverStatus, driver.maritalStatus, driver.stateFiling, driver.ageFirstLicensed, driver.primaryVehicleId, driver.incidents.map((incident) => [incident.code, incident.date])]);
   const { reports } = quote;
   return JSON.stringify([quote.policy.effectiveDate, vehicles, drivers, quote.coverages, quote.additional, reports.clueStatus, reports.priorSource, reports.scoreTier, reports.vendor]);
+}
+
+/** Products currently on the quote (suspended products are excluded). */
+export function activeProducts(quote: QuoteData): ProductKey[] {
+  return (quote.products ?? ['auto']).filter((key) => key === 'auto' || !quote.productQuotes?.[key]?.suspended);
+}
+
+export function hasAuto(quote: QuoteData): boolean {
+  return activeProducts(quote).includes('auto');
+}
+
+/** Highest rated-driver factor on the quote (principal operator for toys). */
+export function primaryDriverFactor(quote: QuoteData): number {
+  const on = ratingDate(quote.policy.effectiveDate);
+  return Math.max(1, ...ratedDrivers(quote.drivers).map((driver) => driverFactor(driver, on)));
 }
 
 export function isRated(quote: QuoteData): boolean {
