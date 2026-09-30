@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useQuote } from '@/context/useQuote';
 import { Dashboard } from '@/components/dashboard/Dashboard';
 import { ProductModal } from '@/components/ProductModal';
@@ -18,13 +17,20 @@ import { CommercialFlow } from '@/commercial/CommercialFlow';
 import { PendingList } from '@/servicing/portal/PendingList';
 import { CustomerSummary } from '@/servicing/portal/CustomerSummary';
 import { ProofCenter } from '@/servicing/portal/ProofCenter';
+import { BillingPage, ClaimsPage, CrossSellPage, EsignPage, ProspectsPage } from '@/servicing/portal/ServicePages';
+import { AgencyPage, CommissionsPage, NewsPage, ProductGuidesPage, ProductionPage, SupportPage } from '@/servicing/portal/AgencyPages';
+import { SessionGuard } from '@/components/SessionGuard';
+import type { PortalPage } from '@/context/quoteStore';
+
+const portalPages: Record<PortalPage, () => JSX.Element> = { billing: BillingPage, esign: EsignPage, claims: ClaimsPage, prospects: ProspectsPage, crossSell: CrossSellPage, productGuides: ProductGuidesPage, agency: AgencyPage, production: ProductionPage, commissions: CommissionsPage, news: NewsPage, support: SupportPage };
 
 // Index matches STEPS in quoteStore.
 const stepScreens = [NamedInsuredStep, ProductsStep, HouseholdStep, AdditionalDetailsStep, CoveragesStep, PortfolioStep, PointOfSaleStep, FinalSaleStep];
 
-function App() {
-  const { state, goToStep, startQuote, startCommercialQuote } = useQuote();
-  const [modalOpen, setModalOpen] = useState(false);
+function Screen() {
+  const { state, goToStep, startQuote, startCommercialQuote, openProductPicker, closeProductPicker } = useQuote();
+  const modalOpen = state.ui.pickerOpen;
+  const setModalOpen = (open: boolean) => (open ? openProductPicker() : closeProductPicker());
   const { ui, policy, insured } = state;
   const hasQuote = ui.maxStep > 0 || Boolean(insured.firstName || insured.lastName);
   const customer = [insured.firstName, insured.lastName].filter(Boolean).join(' ') || 'New Customer';
@@ -52,7 +58,11 @@ function App() {
   if (ui.view === 'pending') return <PendingList />;
   if (ui.view === 'customer') return <CustomerSummary key={ui.customerKey} />;
   if (ui.view === 'proof') return <ProofCenter key={ui.policyId} />;
+  if (ui.view === 'portal') { const Page = portalPages[ui.portalPage]; return <Page key={ui.portalPage} />; }
   if (ui.view !== 'dashboard') return <Step key={ui.step} />;
   return <div className="app-zoom"><Dashboard onSelectProduct={() => setModalOpen(true)} onOpenExisting={() => goToStep(ui.step)} existingQuote={existingQuote} showBindingBanner={modalOpen} />{modalOpen && <ProductModal onCancel={() => setModalOpen(false)} onContinue={startNewQuote} onCommercial={startCommercial} />}</div>;
+}
+function App() {
+  return <SessionGuard><Screen /></SessionGuard>;
 }
 export default App;

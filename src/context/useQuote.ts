@@ -4,7 +4,7 @@ import type { QuoteState } from '@/context/quoteStore';
 import type { PosOrderResult } from '@/utils/reportSimulator';
 import type { OtherProductKey, ProductKey, ProductQuote } from '@/products/types';
 import type { PolicyRecord } from '@/types/policy';
-import type { PendingTab, PolicyQuery, PolicyTab, ProofPage } from '@/context/quoteStore';
+import type { PendingTab, PolicyQuery, PolicyTab, PortalPage, ProofPage } from '@/context/quoteStore';
 import type * as PolicyEngine from '@/services/policyEngine';
 import type { CommercialKey } from '@/products/types';
 import type { CommercialQuote } from '@/commercial/types';
@@ -66,8 +66,16 @@ export interface QuoteContextValue {
   openPending: (tab?: PendingTab) => void;
   openCustomer: (customerKey: string) => void;
   openProof: (policyId: string, page?: ProofPage) => void;
-  /** Adds the five fictitious practice customers (once). */
+  /** Adds the five fictitious reference customers (once). */
   loadPracticeBook: () => void;
+  openPage: (page: PortalPage) => void;
+  /** New quote for an existing customer, pre-filled from one of their policies. */
+  startQuoteFor: (policyId: string, products: ProductKey[]) => void;
+  openProductPicker: () => void;
+  closeProductPicker: () => void;
+  setTrainerMode: (on: boolean) => void;
+  /** Confirmation number of the last successful servicing transaction. */
+  lastConfirmation: () => string;
   setPolicyTab: (tab: PolicyTab) => void;
   /** Runs a servicing operation on a policy; returns an error message, or '' on success. */
   servicePolicy: (id: string, operation: (policy: PolicyRecord, day: string) => PolicyRecord | string) => string;

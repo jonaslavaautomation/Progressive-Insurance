@@ -1,7 +1,18 @@
 // FAO portal chrome (global header, customer/policy search, footer) for the servicing pages
 // reached from the dashboard: pending cancel/renewal list and Customer Summary.
 import type { ReactNode } from 'react';
+import { ChevronRight } from 'lucide-react';
+import { useQuote } from '@/context/useQuote';
 import { Header, SearchBar } from '@/components/dashboard/Dashboard';
+
+export interface Crumb { label: string; onClick?: () => void }
+
+/** Home › Section › Page trail. The last crumb is the current page. */
+export function Breadcrumbs({ crumbs }: { crumbs: Crumb[] }) {
+  const { showDashboard } = useQuote();
+  const all: Crumb[] = [{ label: 'Home', onClick: showDashboard }, ...crumbs];
+  return <nav aria-label="Breadcrumb" className="mb-3 flex flex-wrap items-center gap-1 text-[12px] print:hidden">{all.map((crumb, index) => <span key={crumb.label + index} className="flex items-center gap-1">{index > 0 && <ChevronRight size={12} className="text-[#7b858a]" />}{crumb.onClick && index < all.length - 1 ? <button type="button" onClick={crumb.onClick} className="font-bold text-[#0073cf] underline underline-offset-2 hover:text-[#003865]">{crumb.label}</button> : <span aria-current={index === all.length - 1 ? 'page' : undefined} className="text-[#3d4b55]">{crumb.label}</span>}</span>)}</nav>;
+}
 
 const FOOTER_LINKS = ['Contact Us', 'Site Map', 'Accessibility', "Agents' Privacy", 'Consumer/Customer Privacy', 'CA Notice at Collection', 'Do Not Sell or Share My Personal Information (CA Residents Only)', 'Legal and Regulatory', 'Terms of Use'];
 
@@ -12,10 +23,10 @@ export function PortalFooter() {
   </footer>;
 }
 
-export function PortalLayout({ children }: { children: ReactNode }) {
+export function PortalLayout({ children, crumbs }: { children: ReactNode; crumbs?: Crumb[] }) {
   return <div className="app-zoom min-h-screen bg-white text-[#1b2a36]">
     <div className="print:hidden"><Header /><SearchBar /></div>
-    <main className="mx-auto max-w-[1440px] px-4 pt-4">{children}</main>
+    <main className="mx-auto max-w-[1440px] px-4 pt-4">{crumbs && <Breadcrumbs crumbs={crumbs} />}{children}</main>
     <PortalFooter />
   </div>;
 }

@@ -2,6 +2,7 @@ import { AlertTriangle, CheckCircle2, Printer } from 'lucide-react';
 import type { YesNo } from '@/types/quote';
 import { DOCUMENT_DELIVERY, PAYMENT_METHODS, YES_NO } from '@/data/options';
 import { useQuote } from '@/context/useQuote';
+import { runWithSpinner } from '@/services/processing';
 import { LAST_STEP, STEPS } from '@/context/quoteStore';
 import { formatCurrency } from '@/utils/masks';
 import { incompleteSteps } from '@/utils/validation';
@@ -26,8 +27,8 @@ function FinalSaleContent() {
   const incomplete = incompleteSteps(state);
   const earlier = incomplete.filter((step) => step < LAST_STEP);
   const bound = Boolean(state.policy.policyNumber);
-  const bind = () => { if (incomplete.includes(LAST_STEP)) { reveal(); return; } bindPolicy(); };
-  const startNew = () => { if (window.confirm('Start a new quote? This policy will be cleared from the simulator.')) { resetQuote(); goToStep(0); } };
+  const bind = () => { if (incomplete.includes(LAST_STEP)) { reveal(); return; } runWithSpinner('Binding and issuing policies...', bindPolicy, 1400); };
+  const startNew = () => { if (window.confirm('Start a new quote? The bound policy stays available in Manage Policies.')) { resetQuote(); goToStep(0); } };
 
   return <div className="w-[990px] space-y-[20px] print:w-auto">
     {earlier.length > 0 && <div role="alert" className="rounded-[3px] border border-[#c8102e] bg-[#fdf0f1] px-[16px] py-[12px] text-[14px] print:hidden"><div className="flex items-center gap-2 font-bold text-[#c8102e]"><AlertTriangle size={17} /> The policy cannot be bound until these steps are complete:</div><ul className="mt-1 flex flex-wrap gap-3 pl-6">{earlier.map((step) => <li key={step}><button type="button" onClick={() => goToStep(step)} className="font-bold text-[#003865] underline">{STEPS[step]}</button></li>)}</ul></div>}

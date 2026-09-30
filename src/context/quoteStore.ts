@@ -25,6 +25,8 @@ export type PolicyTab = 'summary' | 'billing' | 'documents' | 'history';
 export type PendingTab = 'nonpayment' | 'underwriting' | 'renewals';
 export type ProofPage = 'hub' | 'idcards' | 'verification';
 export type PortalView = 'pending' | 'customer' | 'proof';
+/** Pages reached from the global navigation menus. */
+export type PortalPage = 'billing' | 'esign' | 'claims' | 'prospects' | 'crossSell' | 'productGuides' | 'agency' | 'production' | 'commissions' | 'news' | 'support';
 
 export interface PolicyQuery {
   mode: 'Customer' | 'Policy';
@@ -38,7 +40,10 @@ export interface PolicyQuery {
 export const EMPTY_POLICY_QUERY: PolicyQuery = { mode: 'Customer', lastName: '', firstName: '', policyNumber: '', product: 'All', status: 'All' };
 
 export interface UiState {
-  view: 'dashboard' | 'wizard' | 'documents' | 'policies' | 'policy' | 'commercial' | PortalView;
+  view: 'dashboard' | 'wizard' | 'documents' | 'policies' | 'policy' | 'commercial' | 'portal' | PortalView;
+  portalPage: PortalPage;
+  /** Select Product(s) dialog on the dashboard. */
+  pickerOpen: boolean;
   pendingTab: PendingTab;
   /** Customer shown on Customer Summary (see customerKey in policyFilters). */
   customerKey: string;
@@ -66,6 +71,8 @@ export interface QuoteState extends QuoteData {
   simDate: string;
   /** Commercial Lines quote in progress (kept separate from the personal lines quote). */
   commercial: CommercialQuote | null;
+  /** Shows trainer-only controls (training clock, hints, sample data, trainer tools). */
+  trainerMode: boolean;
 }
 
 export function newId(prefix: string): string {
@@ -126,10 +133,10 @@ export function createQuoteData(agent: AgentProfile = DEFAULT_AGENT): QuoteData 
   };
 }
 
-export function createInitialState(agent: AgentProfile = DEFAULT_AGENT, policies: PolicyRecord[] = [], simDate = formatDate(today())): QuoteState {
+export function createInitialState(agent: AgentProfile = DEFAULT_AGENT, policies: PolicyRecord[] = [], simDate = formatDate(today()), trainerMode = false): QuoteState {
   return {
-    ...createQuoteData(agent), agent, policies, simDate, commercial: null,
-    ui: { view: 'dashboard', step: 0, maxStep: 0, hintMode: false, keyboardHelp: true, activeProduct: 'auto', policyId: '', policyTab: 'summary', policyQuery: EMPTY_POLICY_QUERY, pendingTab: 'nonpayment', customerKey: '', proofPage: 'hub', policyIntent: '' },
+    ...createQuoteData(agent), agent, policies, simDate, commercial: null, trainerMode,
+    ui: { view: 'dashboard', step: 0, maxStep: 0, hintMode: false, keyboardHelp: true, activeProduct: 'auto', policyId: '', policyTab: 'summary', policyQuery: EMPTY_POLICY_QUERY, pendingTab: 'nonpayment', customerKey: '', proofPage: 'hub', policyIntent: '', portalPage: 'billing', pickerOpen: false },
   };
 }
 
@@ -200,6 +207,9 @@ export type QuoteAction =
   | { type: 'openPolicy'; id: string; tab?: PolicyTab; intent?: '' | 'change' }
   | { type: 'openPortal'; view: PortalView; tab?: PendingTab; customerKey?: string; policyId?: string; page?: ProofPage }
   | { type: 'policiesSeeded'; records: PolicyRecord[] }
+  | { type: 'openPage'; page: PortalPage }
+  | { type: 'setPicker'; open: boolean }
+  | { type: 'setTrainerMode'; on: boolean }
   | { type: 'setPolicyTab'; tab: PolicyTab }
   | { type: 'bindPolicy'; policyNumber: string; boundAt: string }
   | { type: 'navigate'; step: number }
@@ -325,7 +335,7 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
     case 'showDocuments':
       return { ...state, ui: { ...state.ui, view: 'documents' } };
     case 'startQuote':
-      return { ...createQuoteData(state.agent), products: action.products, productQuotes: action.productQuotes, agent: state.agent, policies: state.policies, simDate: state.simDate, commercial: state.commercial, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, view: 'wizard', step: 0, maxStep: 0, activeProduct: action.products[0] } };
+      return { ...createQuoteData(state.agent), products: action.products, productQuotes: action.productQuotes, agent: state.agent, policies: state.policies, simDate: state.simDate, commercial: state.commercial, trainerMode: state.trainerMode, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, view: 'wizard', step: 0, maxStep: 0, activeProduct: action.products[0], pickerOpen: false } };
     case 'addProducts': {
       const products = [...state.products, ...action.products.filter((key) => !state.products.includes(key))];
       // Auto is always listed first, as on the carrier's product tabs.
@@ -366,6 +376,12 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
       return { ...state, ui: { ...state.ui, view: action.view, pendingTab: action.tab ?? state.ui.pendingTab, customerKey: action.customerKey ?? state.ui.customerKey, policyId: action.policyId ?? state.ui.policyId, proofPage: action.page ?? 'hub' } };
     case 'policiesSeeded':
       return { ...state, policies: [...action.records, ...state.policies] };
+    case 'openPage':
+      return { ...state, ui: { ...state.ui, view: 'portal', portalPage: action.page, pickerOpen: false } };
+    case 'setPicker':
+      return { ...state, ui: { ...state.ui, pickerOpen: action.open, view: action.open ? 'dashboard' : state.ui.view } };
+    case 'setTrainerMode':
+      return { ...state, trainerMode: action.on, ui: { ...state.ui, hintMode: action.on && state.ui.hintMode } };
     case 'setPolicyTab':
       return { ...state, ui: { ...state.ui, policyTab: action.tab } };
     case 'bindPolicy':
@@ -382,9 +398,9 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
       return { ...state, ui: { ...state.ui, keyboardHelp: !state.ui.keyboardHelp } };
     case 'load':
       // The practice customer fills the shared and Auto pages; products already chosen stay on the quote.
-      return { ...action.data, products: state.products, productQuotes: followZip(state.productQuotes, state.insured.address.zip, action.data.insured.address.zip), agent: state.agent, policies: state.policies, simDate: state.simDate, commercial: state.commercial, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, maxStep: Math.max(state.ui.maxStep, action.maxStep), activeProduct: state.products[0] } };
+      return { ...action.data, products: state.products, productQuotes: followZip(state.productQuotes, state.insured.address.zip, action.data.insured.address.zip), agent: state.agent, policies: state.policies, simDate: state.simDate, commercial: state.commercial, trainerMode: state.trainerMode, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, maxStep: Math.max(state.ui.maxStep, action.maxStep), activeProduct: state.products[0] } };
     case 'reset':
-      return { ...createQuoteData(state.agent), agent: state.agent, policies: state.policies, simDate: state.simDate, commercial: state.commercial, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, step: 0, maxStep: 0, activeProduct: 'auto' } };
+      return { ...createQuoteData(state.agent), agent: state.agent, policies: state.policies, simDate: state.simDate, commercial: state.commercial, trainerMode: state.trainerMode, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, step: 0, maxStep: 0, activeProduct: 'auto' } };
     case 'setCommercial':
       return { ...state, commercial: action.quote, ui: action.show ? { ...state.ui, view: 'commercial' } : state.ui };
     case 'commercialIssued':

@@ -10,7 +10,7 @@ import { buildPracticeBook, hasPracticeBook } from '@/services/practiceBook';
 import * as engine from '@/services/policyEngine';
 import { setClock } from '@/utils/clock';
 import { QuoteContext, type QuoteContextValue } from '@/context/useQuote';
-import { DEFAULT_AGENT, agentCodeFor, createDriver, createIncident, createInitialState, createSampleQuote, createVehicle, generateQuoteNumber, policyNumberFor, quoteReducer } from '@/context/quoteStore';
+import { DEFAULT_AGENT, agentCodeFor, createDriver, createQuoteData, createIncident, createInitialState, createSampleQuote, createVehicle, generateQuoteNumber, policyNumberFor, quoteReducer } from '@/context/quoteStore';
 import { TERM_MONTHS, isRated, rateQuote, selectedPlan } from '@/utils/ratingEngine';
 import { simulatePosOrder } from '@/utils/reportSimulator';
 import { addDays, addMonths, formatDate, parseDate, today } from '@/utils/dates';
@@ -30,7 +30,17 @@ function saveAgent(agent: AgentProfile) {
   try { localStorage.setItem(AGENT_KEY, JSON.stringify(agent)); } catch { /* storage unavailable */ }
 }
 
-const POLICIES_KEY = 'fao-training-policies-v2';
+const POLICIES_KEY = 'fao-training-policies-v3';
+const TRAINER_KEY = 'fao-trainer-mode';
+
+function loadTrainerMode(): boolean {
+  try { return localStorage.getItem(TRAINER_KEY) === 'on'; } catch { return false; }
+}
+
+/** Carrier-style transaction confirmation number. */
+function confirmationNumber(): string {
+  return `${String(Math.floor(Math.random() * 1e5)).padStart(5, '0')}${String(Math.floor(Math.random() * 1e5)).padStart(5, '0')}`;
+}
 
 /** Saved training policies. If the saved training date is behind the real date, catch the policies up. */
 function loadPolicies(): { policies: PolicyRecord[]; simDate: string } {
@@ -53,7 +63,10 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(quoteReducer, undefined, () => {
     const saved = loadPolicies();
     setClock(parseDate(saved.simDate));
-    return createInitialState(loadAgent(), saved.policies, saved.simDate);
+    const agent = loadAgent();
+    // The agency's reference accounts are always part of the book of business.
+    const policies = hasPracticeBook(saved.policies) ? saved.policies : [...buildPracticeBook(agent, agentCodeFor(agent), saved.simDate), ...saved.policies];
+    return createInitialState(agent, policies, saved.simDate, loadTrainerMode());
   });
   // Keep "today" everywhere in the app on the training clock.
   setClock(parseDate(state.simDate));
@@ -63,6 +76,7 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
   // Latest state for async callbacks (report ordering) without re-creating them on every keystroke.
   const stateRef = useRef(state);
   stateRef.current = state;
+  const confirmationRef = useRef('');
 
   const rating = useMemo(() => rateQuote(state), [state]);
   const rated = useMemo(() => isRated(state), [state]);
@@ -153,12 +167,34 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     updateUnitCoverages: (key, unitId, coverages) => dispatch({ type: 'updateUnit', key, unitId, coverages }),
     updateProduct: (key, patch) => dispatch({ type: 'updateProduct', key, patch }),
     advanceClock: (days) => dispatch({ type: 'advanceClock', to: formatDate(addDays(parseDate(stateRef.current.simDate) ?? today(), days)) }),
-    clearPolicies: () => dispatch({ type: 'clearPolicies' }),
+    clearPolicies: () => {
+      // Resets the book of business to the reference accounts.
+      const current = stateRef.current;
+      dispatch({ type: 'clearPolicies' });
+      dispatch({ type: 'policiesSeeded', records: buildPracticeBook(current.agent, agentCodeFor(current.agent), current.simDate) });
+    },
     openPolicies: (query) => dispatch({ type: 'openPolicies', query }),
     openPolicy: (id, tab, intent) => dispatch({ type: 'openPolicy', id, tab, intent }),
     openPending: (tab) => dispatch({ type: 'openPortal', view: 'pending', tab }),
     openCustomer: (customerKey) => dispatch({ type: 'openPortal', view: 'customer', customerKey }),
     openProof: (policyId, page) => dispatch({ type: 'openPortal', view: 'proof', policyId, page }),
+    openPage: (page) => dispatch({ type: 'openPage', page }),
+    startQuoteFor: (policyId, products) => {
+      const current = stateRef.current;
+      const policy = current.policies.find((entry) => entry.id === policyId);
+      if (!policy || policy.source.kind !== 'personal') return;
+      const source = JSON.parse(JSON.stringify(policy.source.quote)) as typeof policy.source.quote;
+      const fresh = createQuoteData(current.agent);
+      dispatch({ type: 'startQuote', products, productQuotes: buildProductQuotes(products, source.insured.address.zip) });
+      dispatch({ type: 'load', maxStep: 0, data: { ...source, policy: { ...fresh.policy, quoteNumber: generateQuoteNumber() }, pointOfSale: fresh.pointOfSale, ratedSignature: '', premiumChange: null, products, productQuotes: {} } });
+    },
+    openProductPicker: () => dispatch({ type: 'setPicker', open: true }),
+    closeProductPicker: () => dispatch({ type: 'setPicker', open: false }),
+    setTrainerMode: (on) => {
+      try { localStorage.setItem(TRAINER_KEY, on ? 'on' : 'off'); } catch { /* storage unavailable */ }
+      dispatch({ type: 'setTrainerMode', on });
+    },
+    lastConfirmation: () => confirmationRef.current,
     loadPracticeBook: () => {
       const current = stateRef.current;
       if (hasPracticeBook(current.policies)) return;
@@ -171,7 +207,11 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
       if (!record) return 'Policy not found.';
       const result = operation(record, current.simDate);
       if (typeof result === 'string') return result;
-      dispatch({ type: 'updatePolicyRecord', record: result });
+      // Every servicing transaction gets a confirmation number, recorded on its history entries.
+      const confirmation = confirmationNumber();
+      confirmationRef.current = confirmation;
+      const known = new Set(record.history.map((entry) => entry.id));
+      dispatch({ type: 'updatePolicyRecord', record: { ...result, history: result.history.map((entry) => (known.has(entry.id) ? entry : { ...entry, detail: `${entry.detail} Confirmation #${confirmation}.` })) } });
       return '';
     },
     duplicateQuote: () => {
