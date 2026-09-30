@@ -22,6 +22,9 @@ export function agentCodeFor(agent: AgentProfile): string {
 }
 
 export type PolicyTab = 'summary' | 'billing' | 'documents' | 'history';
+export type PendingTab = 'nonpayment' | 'underwriting' | 'renewals';
+export type ProofPage = 'hub' | 'idcards' | 'verification';
+export type PortalView = 'pending' | 'customer' | 'proof';
 
 export interface PolicyQuery {
   mode: 'Customer' | 'Policy';
@@ -35,7 +38,13 @@ export interface PolicyQuery {
 export const EMPTY_POLICY_QUERY: PolicyQuery = { mode: 'Customer', lastName: '', firstName: '', policyNumber: '', product: 'All', status: 'All' };
 
 export interface UiState {
-  view: 'dashboard' | 'wizard' | 'documents' | 'policies' | 'policy' | 'commercial';
+  view: 'dashboard' | 'wizard' | 'documents' | 'policies' | 'policy' | 'commercial' | PortalView;
+  pendingTab: PendingTab;
+  /** Customer shown on Customer Summary (see customerKey in policyFilters). */
+  customerKey: string;
+  proofPage: ProofPage;
+  /** Opens Policy View straight into a workflow (e.g. Change Policy). */
+  policyIntent: '' | 'change';
   /** Product tab shown on Products and Coverages/Bill Plans. */
   activeProduct: ProductKey;
   policyId: string;
@@ -120,7 +129,7 @@ export function createQuoteData(agent: AgentProfile = DEFAULT_AGENT): QuoteData 
 export function createInitialState(agent: AgentProfile = DEFAULT_AGENT, policies: PolicyRecord[] = [], simDate = formatDate(today())): QuoteState {
   return {
     ...createQuoteData(agent), agent, policies, simDate, commercial: null,
-    ui: { view: 'dashboard', step: 0, maxStep: 0, hintMode: false, keyboardHelp: true, activeProduct: 'auto', policyId: '', policyTab: 'summary', policyQuery: EMPTY_POLICY_QUERY },
+    ui: { view: 'dashboard', step: 0, maxStep: 0, hintMode: false, keyboardHelp: true, activeProduct: 'auto', policyId: '', policyTab: 'summary', policyQuery: EMPTY_POLICY_QUERY, pendingTab: 'nonpayment', customerKey: '', proofPage: 'hub', policyIntent: '' },
   };
 }
 
@@ -188,7 +197,9 @@ export type QuoteAction =
   | { type: 'advanceClock'; to: string }
   | { type: 'clearPolicies' }
   | { type: 'openPolicies'; query?: Partial<PolicyQuery> }
-  | { type: 'openPolicy'; id: string; tab?: PolicyTab }
+  | { type: 'openPolicy'; id: string; tab?: PolicyTab; intent?: '' | 'change' }
+  | { type: 'openPortal'; view: PortalView; tab?: PendingTab; customerKey?: string; policyId?: string; page?: ProofPage }
+  | { type: 'policiesSeeded'; records: PolicyRecord[] }
   | { type: 'setPolicyTab'; tab: PolicyTab }
   | { type: 'bindPolicy'; policyNumber: string; boundAt: string }
   | { type: 'navigate'; step: number }
@@ -350,7 +361,11 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
     case 'openPolicies':
       return { ...state, ui: { ...state.ui, view: 'policies', policyQuery: { ...EMPTY_POLICY_QUERY, ...action.query } } };
     case 'openPolicy':
-      return { ...state, ui: { ...state.ui, view: 'policy', policyId: action.id, policyTab: action.tab ?? 'summary' } };
+      return { ...state, ui: { ...state.ui, view: 'policy', policyId: action.id, policyTab: action.tab ?? 'summary', policyIntent: action.intent ?? '' } };
+    case 'openPortal':
+      return { ...state, ui: { ...state.ui, view: action.view, pendingTab: action.tab ?? state.ui.pendingTab, customerKey: action.customerKey ?? state.ui.customerKey, policyId: action.policyId ?? state.ui.policyId, proofPage: action.page ?? 'hub' } };
+    case 'policiesSeeded':
+      return { ...state, policies: [...action.records, ...state.policies] };
     case 'setPolicyTab':
       return { ...state, ui: { ...state.ui, policyTab: action.tab } };
     case 'bindPolicy':

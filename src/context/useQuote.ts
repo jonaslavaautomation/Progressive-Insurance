@@ -4,7 +4,7 @@ import type { QuoteState } from '@/context/quoteStore';
 import type { PosOrderResult } from '@/utils/reportSimulator';
 import type { OtherProductKey, ProductKey, ProductQuote } from '@/products/types';
 import type { PolicyRecord } from '@/types/policy';
-import type { PolicyQuery, PolicyTab } from '@/context/quoteStore';
+import type { PendingTab, PolicyQuery, PolicyTab, ProofPage } from '@/context/quoteStore';
 import type * as PolicyEngine from '@/services/policyEngine';
 import type { CommercialKey } from '@/products/types';
 import type { CommercialQuote } from '@/commercial/types';
@@ -62,7 +62,12 @@ export interface QuoteContextValue {
   advanceClock: (days: number) => void;
   clearPolicies: () => void;
   openPolicies: (query?: Partial<PolicyQuery>) => void;
-  openPolicy: (id: string, tab?: PolicyTab) => void;
+  openPolicy: (id: string, tab?: PolicyTab, intent?: '' | 'change') => void;
+  openPending: (tab?: PendingTab) => void;
+  openCustomer: (customerKey: string) => void;
+  openProof: (policyId: string, page?: ProofPage) => void;
+  /** Adds the five fictitious practice customers (once). */
+  loadPracticeBook: () => void;
   setPolicyTab: (tab: PolicyTab) => void;
   /** Runs a servicing operation on a policy; returns an error message, or '' on success. */
   servicePolicy: (id: string, operation: (policy: PolicyRecord, day: string) => PolicyRecord | string) => string;

@@ -5,6 +5,7 @@ import { Printer, X } from 'lucide-react';
 import type { PolicyDocument, PolicyRecord } from '@/types/policy';
 import { formatCurrency } from '@/utils/masks';
 import { DOCUMENT_TITLES } from '@/servicing/documentTitles';
+import { CLAIMS_LINE, NC_STATUTORY_TEXT } from '@/servicing/portal/portalUtils';
 import { NC_NONPAYMENT_NOTICE_DAYS, NC_OTHER_NOTICE_DAYS, LATE_FEE } from '@/services/policyEngine';
 
 const money = (value: unknown) => formatCurrency(Number(value) || 0);
@@ -31,13 +32,17 @@ function IdCards({ policy }: { policy: PolicyRecord }) {
   const auto = policy.product === 'auto';
   return <div className="grid grid-cols-2 gap-3">{policy.units.flatMap((unit, index) => [0, 1].map((copy) => <div key={`${index}-${copy}`} className="break-inside-avoid rounded-[4px] border-2 border-[#003865] p-3 text-[10.5px] leading-[15px]">
     <div className="mb-1 flex justify-between text-[9px] font-bold uppercase text-[#003865]"><span>{auto ? 'North Carolina Automobile Liability Insurance Card' : 'Insurance Identification Card'}</span><span>{copy === 0 ? 'Keep in vehicle' : 'Customer copy'}</span></div>
-    <div className="font-bold">Progressive (training simulation)</div>
+    <div className="mb-1 rounded-[2px] bg-[#fde8ea] px-1 text-center text-[8.5px] font-bold text-[#c8102e]">TRAINING SIMULATION ONLY. NOT PROOF OF INSURANCE.</div>
+    <div className="font-bold">Training Insurance Company (simulation)</div>
     <div>Policy #: <b>{policy.policyNumber}</b></div>
     <div>Effective {policy.effectiveDate} · Expires {policy.expirationDate}</div>
-    <div>Named insured: {policy.insured.name}</div>
-    <div>{unit.label}</div>
+    <div>Named insured: <b>{policy.insured.name}</b></div>
+    <div>{policy.insured.street}, {policy.insured.cityStateZip}</div>
+    <div className="mt-1 font-bold">{unit.label}</div>
     {unit.idNumber && <div>{policy.product === 'boat' ? 'HIN' : 'VIN'}: {unit.idNumber}</div>}
-    <div className="mt-1 text-[9px] text-[#52616c]">Agent: {policy.agentCode}</div>
+    <div className="mt-1 text-[9px] text-[#52616c]">Agent: {policy.agentName} · {policy.agentCode}</div>
+    {auto && <div className="mt-1 text-[8.5px] leading-[11px] text-[#52616c]">{NC_STATUTORY_TEXT}</div>}
+    <div className="mt-1 text-[9px] font-bold text-[#003865]">Report a claim 24/7: {CLAIMS_LINE} (training line)</div>
   </div>))}</div>;
 }
 

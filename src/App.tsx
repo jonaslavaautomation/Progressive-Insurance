@@ -15,6 +15,9 @@ import { PolicySearch } from '@/servicing/PolicySearch';
 import { PolicyView } from '@/servicing/PolicyView';
 import type { CommercialKey, ProductKey } from '@/products/types';
 import { CommercialFlow } from '@/commercial/CommercialFlow';
+import { PendingList } from '@/servicing/portal/PendingList';
+import { CustomerSummary } from '@/servicing/portal/CustomerSummary';
+import { ProofCenter } from '@/servicing/portal/ProofCenter';
 
 // Index matches STEPS in quoteStore.
 const stepScreens = [NamedInsuredStep, ProductsStep, HouseholdStep, AdditionalDetailsStep, CoveragesStep, PortfolioStep, PointOfSaleStep, FinalSaleStep];
@@ -46,6 +49,9 @@ function App() {
   if (ui.view === 'policies') return <PolicySearch />;
   if (ui.view === 'policy') return <PolicyView key={ui.policyId} />;
   if (ui.view === 'commercial' && state.commercial) return <CommercialFlow />;
+  if (ui.view === 'pending') return <PendingList />;
+  if (ui.view === 'customer') return <CustomerSummary key={ui.customerKey} />;
+  if (ui.view === 'proof') return <ProofCenter key={ui.policyId} />;
   if (ui.view !== 'dashboard') return <Step key={ui.step} />;
   return <div className="app-zoom"><Dashboard onSelectProduct={() => setModalOpen(true)} onOpenExisting={() => goToStep(ui.step)} existingQuote={existingQuote} showBindingBanner={modalOpen} />{modalOpen && <ProductModal onCancel={() => setModalOpen(false)} onContinue={startNewQuote} onCommercial={startCommercial} />}</div>;
 }
