@@ -20,4 +20,5 @@ export const DOCUMENT_TITLES: Record<PolicyDocument['type'], string> = {
   'Amended Declarations': 'Amended Declarations Page',
   'Evidence of Insurance': 'Evidence of Insurance (Lienholder Copy)',
   'Certificate of Insurance': 'Certificate of Liability Insurance',
+  'Policy Packet': 'Policy Packet',
 };

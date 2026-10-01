@@ -3,14 +3,15 @@ import type { CommercialQuote } from '@/commercial/types';
 import type { CommercialKey } from '@/products/types';
 import { BUSINESS_FIELDS, COMMERCIAL_CONFIGS, INDUSTRIES, SHARED_QUESTIONS } from '@/commercial/configs';
 import { commercialContext, isCommercialRated } from '@/commercial/engine';
-import { EMAIL, PHONE, VIN, checkField, type FieldErrors } from '@/utils/validation';
+import { EMAIL, PHONE, VIN, checkField, setValidationState, type FieldErrors } from '@/utils/validation';
+import { SUPPORTED_STATES } from '@/data/states';
 import { ageOn, daysBetween, parseDate, today } from '@/utils/dates';
 
 function validateBusiness(quote: CommercialQuote, errors: FieldErrors) {
   const b = quote.business;
   const ctx = commercialContext(quote, b);
   for (const field of BUSINESS_FIELDS) checkField(errors, `business.${field.key}`, field, b[field.key] ?? '', '', !field.showIf || field.showIf(ctx));
-  if (b.state && b.state !== 'North Carolina' && !errors['business.state']) errors['business.state'] = 'This training quote writes North Carolina businesses only.';
+  if (b.state && !SUPPORTED_STATES.includes(b.state as never) && !errors['business.state']) errors['business.state'] = `Commercial Lines are written in ${SUPPORTED_STATES.join(', ')}.`;
   if (b.phone && !PHONE.test(b.phone)) errors['business.phone'] = 'Business Phone must be a valid 10-digit number (XXX-XXX-XXXX).';
   if (b.email && !EMAIL.test(b.email)) errors['business.email'] = 'Business Email is not a valid email address.';
   if (b.fein && b.fein.replace(/\D/g, '').length !== 9) errors['business.fein'] = 'FEIN must be 9 digits.';
@@ -104,6 +105,7 @@ const validators = [validateBusiness, (quote: CommercialQuote, errors: FieldErro
 
 export function validateCommercialStep(step: number, quote: CommercialQuote): FieldErrors {
   const errors: FieldErrors = {};
+  setValidationState(quote.business.state);
   validators[step]?.(quote, errors);
   return errors;
 }

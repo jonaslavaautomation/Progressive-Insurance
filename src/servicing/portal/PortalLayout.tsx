@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { useQuote } from '@/context/useQuote';
 import { Header, SearchBar } from '@/components/dashboard/Dashboard';
+import { LegalLink } from '@/components/LegalLink';
 
 export interface Crumb { label: string; onClick?: () => void }
 
@@ -18,7 +19,7 @@ const FOOTER_LINKS = ['Contact Us', 'Site Map', 'Accessibility', "Agents' Privac
 
 export function PortalFooter() {
   return <footer className="mx-auto mt-[40px] max-w-[1440px] border-t border-[#d5d9dd] px-4 pb-6 pt-5 text-[11px] text-[#1b2a36] print:hidden">
-    <div className="flex flex-wrap gap-x-[26px] gap-y-2">{FOOTER_LINKS.map((link) => <a key={link} href="#" onClick={(event) => event.preventDefault()} className="font-bold underline underline-offset-2 hover:text-[#0073cf]">{link}</a>)}</div>
+    <div className="flex flex-wrap gap-x-[26px] gap-y-2">{FOOTER_LINKS.map((link) => <LegalLink key={link} label={link} className="font-bold underline underline-offset-2 hover:text-[#0073cf]" />)}</div>
     <p className="mt-4">ForAgentsOnly is a restricted use site for authorized users only. Training simulation. Copyright © 1997-{new Date().getFullYear()} Progressive Casualty Insurance Company. All rights reserved.</p>
   </footer>;
 }

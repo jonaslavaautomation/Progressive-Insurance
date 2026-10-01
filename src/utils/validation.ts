@@ -8,6 +8,7 @@ import { activeProducts, driverName, hasAuto, isRated, ratedDrivers, vehicleLabe
 import type { FieldDef, OtherProductKey } from '@/products/types';
 import { PRODUCT_CONFIGS } from '@/products/configs';
 import { fieldContext, isProductRated } from '@/products/engine';
+import { DEFAULT_STATE, rulesFor } from '@/data/states';
 
 export type FieldErrors = Record<string, string>;
 
@@ -17,7 +18,10 @@ export const INCIDENT_LOOKBACK_YEARS = 5;
 export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export const PHONE = /^[2-9]\d{2}-\d{3}-\d{4}$/;
 const ZIP = /^\d{5}$/;
-const NC_ZIP = /^2[78]\d{3}$/;
+/** State whose ZIP rules apply to the validation in progress (the quote or policy state). */
+let activeState: string = DEFAULT_STATE;
+export function setValidationState(state: string | undefined) { activeState = state || DEFAULT_STATE; }
+const zipMessage = (label: string) => { const rules = rulesFor(activeState); return `${label} must be in ${rules.name} (${rules.zipHint}).`; };
 export const VIN = /^[A-HJ-NPR-Z0-9]{17}$/;
 
 function required(errors: FieldErrors, id: string, value: string | undefined, message: string) {
@@ -92,7 +96,7 @@ function validateProducts(quote: QuoteData, errors: FieldErrors) {
     required(errors, id('bodyStyle'), vehicle.bodyStyle, `${who}Body Style is required.`);
     if (!vehicle.garagingZip) errors[id('garagingZip')] = `${who}Garaging Zip Code is required.`;
     else if (!ZIP.test(vehicle.garagingZip)) errors[id('garagingZip')] = `${who}Garaging Zip Code must be 5 digits.`;
-    else if (!NC_ZIP.test(vehicle.garagingZip)) errors[id('garagingZip')] = `${who}Garaging Zip Code must be in North Carolina (27xxx or 28xxx).`;
+    else if (!rulesFor(activeState).zip.test(vehicle.garagingZip)) errors[id('garagingZip')] = `${who}${zipMessage('Garaging Zip Code')}`;
     required(errors, id('ownershipLength'), vehicle.ownershipLength, `${who}How long the customer has had this vehicle is required.`);
     required(errors, id('primaryUse'), vehicle.primaryUse, `${who}Primary Vehicle Use is required.`);
     required(errors, id('rideshare'), vehicle.rideshare, `${who}Rideshare/TNC use is required.`);
@@ -203,8 +207,19 @@ function validateCoverages(quote: QuoteData, errors: FieldErrors) {
   required(errors, 'coverages.medicalPayments', coverages.medicalPayments, 'Medical Payment is required.');
   required(errors, 'coverages.snapshot', coverages.snapshot, 'Snapshot Enrollment is required.');
   required(errors, 'coverages.uninsuredMotorist', coverages.uninsuredMotorist, 'Uninsured/Underinsured Motorist Bodily Injury is required.');
-  if (perPerson(coverages.uninsuredMotorist) > perPerson(coverages.bodilyInjuryPd)) errors['coverages.uninsuredMotorist'] = 'UM/UIM Bodily Injury limits cannot be higher than Bodily Injury limits in North Carolina.';
-  required(errors, 'coverages.umpd', coverages.umpd, 'Uninsured Motorist Property Damage is required.');
+  const rules = rulesFor(quote.policy.quoteState);
+  if (coverages.bodilyInjuryPd && !rules.liability.includes(coverages.bodilyInjuryPd)) errors['coverages.bodilyInjuryPd'] = `Select a liability limit available in ${rules.name} (minimum: ${rules.minimumText})`;
+  if (coverages.medicalPayments && !rules.medPay.includes(coverages.medicalPayments)) errors['coverages.medicalPayments'] = rules.name === 'New Hampshire' ? 'New Hampshire policies must include at least $1,000 Medical Payments.' : `Medical Payments is not offered in ${rules.name}.`;
+  if (coverages.uninsuredMotorist && !rules.um.choices.includes(coverages.uninsuredMotorist)) errors['coverages.uninsuredMotorist'] = `Select an Uninsured Motorist option available in ${rules.name}. ${rules.um.text}`;
+  else if (rules.um.rule === 'matchLiability' && perPerson(coverages.uninsuredMotorist) !== perPerson(coverages.bodilyInjuryPd)) errors['coverages.uninsuredMotorist'] = 'New Hampshire requires UM/UIM limits equal to the Bodily Injury limits.';
+  else if (perPerson(coverages.uninsuredMotorist) > Math.max(perPerson(coverages.bodilyInjuryPd), 0) && coverages.uninsuredMotorist !== 'Rejected') errors['coverages.uninsuredMotorist'] = `UM/UIM Bodily Injury limits cannot be higher than the Bodily Injury limits in ${rules.name}.`;
+  if (rules.pip) {
+    required(errors, 'coverages.pip', coverages.pip, 'Personal Injury Protection is required.');
+    if (coverages.pip && !rules.pip.choices.includes(coverages.pip)) errors['coverages.pip'] = rules.pip.text;
+  }
+  const rejected = [coverages.pip === 'Rejected' ? 'PIP' : '', coverages.uninsuredMotorist === 'Rejected' ? 'UM/UIM' : ''].filter(Boolean);
+  if (rejected.length && !coverages.rejectionSigned) errors['coverages.rejectionSigned'] = `${rules.name} requires the customer's signed rejection form for ${rejected.join(' and ')}. Confirm the form is signed, or select a limit.`;
+  if (rules.umpd) required(errors, 'coverages.umpd', coverages.umpd, 'Uninsured Motorist Property Damage is required.');
   quote.vehicles.forEach((vehicle, index) => {
     const who = `${vehicleLabel(vehicle, index)}: `;
     if (vehicle.collDeductible !== 'None' && vehicle.compDeductible === 'None') errors[`vehicle.${vehicle.id}.compDeductible`] = `${who}Collision coverage requires Other Than Collision (Comprehensive) coverage.`;
@@ -273,7 +288,7 @@ export function checkField(errors: FieldErrors, fieldId: string, field: FieldDef
   if (!value) return;
   if (field.type === 'zip') {
     if (!ZIP.test(value)) errors[fieldId] = `${who}${name} must be 5 digits.`;
-    else if (!NC_ZIP.test(value)) errors[fieldId] = `${who}${name} must be in North Carolina (27xxx or 28xxx).`;
+    else if (!rulesFor(activeState).zip.test(value)) errors[fieldId] = `${who}${zipMessage(name)}`;
   }
   if (field.type === 'vin' && !VIN.test(value)) errors[fieldId] = `${who}VIN must be 17 characters (no I, O or Q).`;
   if (field.type === 'hin' && !HIN.test(value)) errors[fieldId] = `${who}Hull ID must be 12 letters and numbers.`;
@@ -318,6 +333,7 @@ const validators = [validateNamedInsured, validateProducts, validateHousehold, v
 
 export function validateStep(step: number, quote: QuoteData): FieldErrors {
   const errors: FieldErrors = {};
+  setValidationState(quote.policy.quoteState);
   validators[step]?.(quote, errors);
   return errors;
 }

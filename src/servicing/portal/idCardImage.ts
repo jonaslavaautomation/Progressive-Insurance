@@ -1,7 +1,8 @@
 // Draws the auto ID cards (one per vehicle) onto a canvas and downloads them as a PNG.
 // Every card carries the training-simulation banner so it can never pass as real proof of insurance.
 import type { PolicyRecord } from '@/types/policy';
-import { CLAIMS_LINE, NC_STATUTORY_TEXT } from '@/servicing/portal/portalUtils';
+import { CLAIMS_LINE } from '@/servicing/portal/portalUtils';
+import { rulesFor } from '@/data/states';
 
 const W = 1050;
 const H = 640;
@@ -23,7 +24,7 @@ function drawCard(ctx: CanvasRenderingContext2D, policy: PolicyRecord, unit: Pol
   ctx.strokeStyle = navy; ctx.lineWidth = 6; ctx.strokeRect(3, top + 3, W - 6, H - 6);
   ctx.fillStyle = navy; ctx.fillRect(3, top + 3, W - 6, 64);
   ctx.fillStyle = '#fff'; ctx.font = 'bold 26px Roboto, Arial, sans-serif';
-  ctx.fillText('NORTH CAROLINA AUTOMOBILE LIABILITY INSURANCE CARD', 28, top + 45);
+  ctx.fillText(rulesFor(policy.state).idCardTitle.toUpperCase(), 28, top + 45);
   ctx.fillStyle = '#fde8ea'; ctx.fillRect(3, top + 67, W - 6, 36);
   ctx.fillStyle = '#c8102e'; ctx.font = 'bold 19px Roboto, Arial, sans-serif';
   ctx.fillText('TRAINING SIMULATION ONLY. NOT A VALID INSURANCE CARD OR PROOF OF COVERAGE.', 28, top + 92);
@@ -43,7 +44,7 @@ function drawCard(ctx: CanvasRenderingContext2D, policy: PolicyRecord, unit: Pol
   label('Agent code', 560, top + 420); value(policy.agentCode, 560, top + 448, 19);
   ctx.fillStyle = '#e4ecf1'; ctx.fillRect(3, top + 470, W - 6, 1);
   ctx.fillStyle = '#3d4b55'; ctx.font = '16px Roboto, Arial, sans-serif';
-  const next = wrap(ctx, NC_STATUTORY_TEXT, 28, top + 500, W - 56, 21);
+  const next = wrap(ctx, rulesFor(policy.state).statuteText, 28, top + 500, W - 56, 21);
   ctx.font = 'bold 17px Roboto, Arial, sans-serif'; ctx.fillStyle = navy;
   ctx.fillText(`Report a claim 24/7: ${CLAIMS_LINE} (training line)`, 28, Math.min(next + 8, top + H - 22));
 }

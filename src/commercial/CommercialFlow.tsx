@@ -6,6 +6,7 @@ import type { CommercialKey, ProductUnit } from '@/products/types';
 import type { CommercialDriver, CommercialQuote } from '@/commercial/types';
 import { useQuote } from '@/context/useQuote';
 import { runWithSpinner } from '@/services/processing';
+import { PacketButtons } from '@/servicing/PacketButtons';
 import { BUSINESS_FIELDS, COMMERCIAL_CONFIGS, DRIVER_ACCIDENTS, DRIVER_EXPERIENCE, DRIVER_LICENSE_TYPES, DRIVER_VIOLATIONS, SHARED_QUESTIONS } from '@/commercial/configs';
 import { COMMERCIAL_STEPS, addCommercialProducts, commercialContext, commercialTotals, createCommercialDriver, isCommercialRated, rateCommercial, recalculateCommercial } from '@/commercial/engine';
 import { incompleteCommercialSteps, validateCommercialStep } from '@/commercial/validation';
@@ -217,7 +218,7 @@ function FinalSaleContent({ quote }: { quote: CommercialQuote }) {
   };
   if (bound.length) return <div className="max-w-[880px] space-y-[20px]">
     <div role="status" className="flex items-start gap-3 rounded-[3px] border border-[#0f7a52] bg-[#eef8f3] px-[18px] py-[14px] text-[14px]"><CheckCircle2 size={22} className="shrink-0 text-[#0f7a52]" /><div><div className="font-slab text-[17px] font-bold">{bound.length} commercial polic{bound.length > 1 ? 'ies' : 'y'} issued</div><p className="mt-1 text-[#2e3a43]">Declarations, the application and a certificate of insurance are in each policy&rsquo;s Documents tab. Billing and servicing work the same as personal lines.</p></div></div>
-    <WizardCard title="Issued Policies" split={false}>{bound.map((policy) => <div key={policy.id} className="flex items-center justify-between border-b border-[#edf1f3] px-[21px] py-[12px] text-[14px] last:border-b-0"><span><b>{policy.productName}</b> · Policy #{policy.policyNumber} · {formatCurrency(policy.termPremium)} ({policy.billPlanName})</span><button type="button" onClick={() => openPolicy(policy.id)} className={`h-[34px] rounded-[3px] bg-[#0073cf] px-[14px] text-[12px] font-bold uppercase text-white hover:bg-[#003865] ${focusable}`}>View Policy</button></div>)}</WizardCard>
+    <WizardCard title="Issued Policies" split={false}>{bound.map((policy) => <div key={policy.id} className="flex items-center justify-between border-b border-[#edf1f3] px-[21px] py-[12px] text-[14px] last:border-b-0"><span><b>{policy.productName}</b> · Policy #{policy.policyNumber} · {formatCurrency(policy.termPremium)} ({policy.billPlanName})<span className="mt-1 block"><PacketButtons policy={policy} compact /></span></span><button type="button" onClick={() => openPolicy(policy.id)} className={`h-[34px] rounded-[3px] bg-[#0073cf] px-[14px] text-[12px] font-bold uppercase text-white hover:bg-[#003865] ${focusable}`}>View Policy</button></div>)}</WizardCard>
     <button type="button" onClick={() => openPolicies({ mode: 'Customer', lastName: quote.business.name })} className="text-[14px] font-bold text-[#0073cf] underline">Go to Manage Policies</button>
   </div>;
   return <div className="max-w-[880px] space-y-[20px]">

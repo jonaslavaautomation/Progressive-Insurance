@@ -28,7 +28,6 @@ export function latestDocument(policy: PolicyRecord, types: PolicyDocument['type
 }
 
 export const CLAIMS_LINE = '1-800-555-0199';
-export const NC_STATUTORY_TEXT = 'North Carolina law (G.S. 20-309) requires owners of registered vehicles to maintain continuous liability insurance. Keep this card in the insured vehicle and show it to a law enforcement officer on request or after an accident.';
 
 /** Product the dashboard's Product Guides picker asked for (read once by the guides page). */
-export const guideRequest = { product: '' };
+export const guideRequest = { product: '', state: '' };

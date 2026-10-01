@@ -12,6 +12,8 @@ import { InlineError, SelectControl, TextControl } from '@/components/wizard/pri
 import { PHONE } from '@/utils/validation';
 import { POLICY_ICONS, customerSince, formatLongDate, hasIdCards, latestDocument, shortDate } from '@/servicing/portal/portalUtils';
 import { downloadIdCards } from '@/servicing/portal/idCardImage';
+import { LegalLink } from '@/components/LegalLink';
+import { rulesFor } from '@/data/states';
 
 const newId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 const withHistory = (policy: PolicyRecord, day: string, event: string, detail: string): PolicyRecord => ({ ...policy, history: [...policy.history, { id: newId('his'), date: day, event, detail }] });
@@ -53,7 +55,7 @@ function Sidebar({ policy, collapsed, onToggle, largeText, onLargeText }: { poli
           <div className="border-b border-[#1b2a36] pb-[6px] text-[15px] font-bold">{policy.productName.replace(' (HO4)', '')} {policy.policyNumber}</div>
           <div className="mt-[6px]">{shortDate(policy.effectiveDate)} - {shortDate(policy.expirationDate)}</div>
           <div>Primary named insured</div>
-          <div>{policy.status}, NC, {policy.agentCode.split(' ')[0]}</div>
+          <div>{policy.status}, {rulesFor(policy.state).code}, {policy.agentCode.split(' ')[0]}</div>
         </div>
       </div>
       <button type="button" onClick={showDashboard} className="flex items-center gap-[14px] border-b border-[#d5d9dd] px-[20px] py-[14px] text-left text-[12px] hover:bg-[#f3f7fa]"><TicketPercent size={24} strokeWidth={1.3} className="text-[#0073cf]" />New Policy Quotes</button>
@@ -67,7 +69,7 @@ function Sidebar({ policy, collapsed, onToggle, largeText, onLargeText }: { poli
 
 function Footer() {
   return <footer className="mt-auto flex flex-wrap justify-between gap-4 px-[20px] pb-[20px] pt-[60px] text-[13px] text-[#3d4b55] print:hidden">
-    <div className="space-y-[18px] font-medium"><a href="#" onClick={(event) => event.preventDefault()} className="block hover:underline">CA Notice at Collection</a><a href="#" onClick={(event) => event.preventDefault()} className="block hover:underline">Do Not Sell or Share My Personal Information (CA Residents Only)</a></div>
+    <div className="space-y-[18px] font-medium"><LegalLink label="CA Notice at Collection" className="block hover:underline" /><LegalLink label="Do Not Sell or Share My Personal Information (CA Residents Only)" className="block text-left hover:underline" /></div>
     <span>Copyright 1995 - {new Date().getFullYear()}. Progressive Casualty Insurance Company. Training simulation.</span>
   </footer>;
 }

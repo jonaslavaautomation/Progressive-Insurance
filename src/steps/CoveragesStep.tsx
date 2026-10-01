@@ -7,7 +7,8 @@ import { productLabel } from '@/products/configs';
 import { isProductRated, productTotals, rateProduct } from '@/products/engine';
 import { ProductCoveragesContent } from '@/components/products/ProductForms';
 import { activeProducts } from '@/utils/ratingEngine';
-import { BI_PD, COLL_DEDUCTIBLES, ETE, MED_PAY, OTC_DEDUCTIBLES, SNAPSHOT_OPTIONS, TOWING, UMPD, UM_BI, coverageOptions } from '@/data/options';
+import { BI_PD, COLL_DEDUCTIBLES, ETE, MED_PAY, OTC_DEDUCTIBLES, PIP_OPTIONS, SNAPSHOT_OPTIONS, TOWING, UMPD, UM_BI, coverageOptions } from '@/data/options';
+import { rulesFor, stateOptions } from '@/data/states';
 import { fieldHints } from '@/data/trainingHints';
 import { useQuote } from '@/context/useQuote';
 import { formatCurrency } from '@/utils/masks';
@@ -15,7 +16,7 @@ import { vehicleName } from '@/utils/ratingEngine';
 import { planPaymentText } from '@/utils/paymentSchedule';
 import { validateStep } from '@/utils/validation';
 import { WizardLayout } from '@/components/wizard/WizardLayout';
-import { HelpDot, InlineError, MoneyTag, WizardCard, WizardField, WizardRowShell, WizardSelect } from '@/components/wizard/primitives';
+import { HelpDot, InlineError, MoneyTag, WizardCard, WizardCheckbox, WizardField, WizardRowShell, WizardSelect } from '@/components/wizard/primitives';
 import { useFieldError, useStepValidation } from '@/components/wizard/stepValidation';
 import { Modal } from '@/components/wizard/Modal';
 import { modalButton } from '@/components/wizard/modalStyles';
@@ -69,6 +70,7 @@ function PremiumTotal() {
 function VehicleCoverageCard({ vehicle, index, count }: { vehicle: Vehicle; index: number; count: number }) {
   const { state, rating, rated, updateCoverages, updateVehicle } = useQuote();
   const { coverages } = state;
+  const rules = rulesFor(state.policy.quoteState);
   const premium = rating.vehicles.find((entry) => entry.vehicleId === vehicle.id);
   const price = (key: CoverageKey) => <Price amount={premium?.coverages[key] ?? 0} rated={rated} />;
   // Policy-level controls repeat on each vehicle card; only the first carries the field id.
@@ -76,8 +78,8 @@ function VehicleCoverageCard({ vehicle, index, count }: { vehicle: Vehicle; inde
   const id = (field: keyof Vehicle) => `vehicle.${vehicle.id}.${field}`;
   const set = (patch: Partial<Vehicle>) => updateVehicle(vehicle.id, patch);
   return <WizardCard title="Vehicles" className="w-[485px] shrink-0" subtitle={<>{vehicleName(vehicle)}<br />{index + 1} of {count}</>}>
-    <WizardSelect id={policyId('bodilyInjuryPd')} narrow label="Bodily Injury & Property Damage:*" help hint={fieldHints.bodilyInjury} options={coverageOptions(BI_PD)} value={coverages.bodilyInjuryPd} onChange={(bodilyInjuryPd) => updateCoverages({ bodilyInjuryPd })} after={price('bipd')} />
-    <WizardSelect id={policyId('medicalPayments')} narrow label="Medical Payment:*" help options={coverageOptions(MED_PAY)} value={coverages.medicalPayments} onChange={(medicalPayments) => updateCoverages({ medicalPayments })} after={price('medpay')} />
+    <WizardSelect id={policyId('bodilyInjuryPd')} narrow label="Bodily Injury & Property Damage:*" help hint={`${rules.name} minimum: ${rules.minimumText}`} options={coverageOptions(stateOptions(BI_PD, rules.liability))} value={coverages.bodilyInjuryPd} onChange={(bodilyInjuryPd) => updateCoverages({ bodilyInjuryPd })} after={price('bipd')} />
+    <WizardSelect id={policyId('medicalPayments')} narrow label="Medical Payment:*" help options={coverageOptions(stateOptions(MED_PAY, rules.medPay))} value={coverages.medicalPayments} onChange={(medicalPayments) => updateCoverages({ medicalPayments })} after={price('medpay')} />
     <WizardSelect id={id('compDeductible')} narrow label="Other Than Collision Deductible:*" help hint={fieldHints.deductibles} options={coverageOptions(OTC_DEDUCTIBLES)} value={vehicle.compDeductible} onChange={(compDeductible) => set({ compDeductible })} after={price('otc')} />
     <WizardSelect id={id('collDeductible')} narrow label="Collision Deductible:*" help options={coverageOptions(COLL_DEDUCTIBLES)} value={vehicle.collDeductible} onChange={(collDeductible) => set({ collDeductible })} after={price('coll')} />
     <WizardSelect id={id('rental')} narrow label="Extended Transportation Expense:*" help options={coverageOptions(ETE)} value={vehicle.rental} onChange={(rental) => set({ rental })} after={price('ete')} />
@@ -99,7 +101,7 @@ function RatingDetails({ onClose }: { onClose: () => void }) {
       {rows.map(([label, key]) => <tr key={key}><td className={cell}>{label}</td>{rating.vehicles.map((vehicle) => <td key={vehicle.vehicleId} className={`${cell} text-right tabular-nums`}>{formatCurrency(vehicle.coverages[key])}</td>)}</tr>)}
       <tr className="font-bold"><td className={cell}>Vehicle Total</td>{rating.vehicles.map((vehicle) => <td key={vehicle.vehicleId} className={`${cell} text-right tabular-nums`}>{formatCurrency(vehicle.total)}</td>)}</tr>
     </tbody></table>
-    <div className="mt-3 grid grid-cols-3 gap-3 text-[13px]"><div>UM/UIM Bodily Injury: <b>{formatCurrency(rating.umbi)}</b></div><div>UM Property Damage: <b>{formatCurrency(rating.umpd)}</b></div><div>Full-term premium: <b>{formatCurrency(rating.fullTermPremium)}</b></div></div>
+    <div className="mt-3 grid grid-cols-3 gap-3 text-[13px]"><div>UM/UIM Bodily Injury: <b>{formatCurrency(rating.umbi)}</b></div><div>UM Property Damage: <b>{formatCurrency(rating.umpd)}</b></div><div>Personal Injury Protection: <b>{formatCurrency(rating.pip)}</b></div><div>Full-term premium: <b>{formatCurrency(rating.fullTermPremium)}</b></div></div>
     <h3 className="mb-1 mt-4 font-bold">Rating factors</h3>
     <table className="w-full border-collapse text-[13px]"><tbody>{rating.factors.map((factor) => <tr key={factor.label}><td className={cell}>{factor.label}</td><td className={`${cell} w-[260px] text-right`}>{factor.value}</td></tr>)}</tbody></table>
     <p className="mt-3 text-[13px]">Selected bill plan: <b>{plan.name}</b>, total <b>{formatCurrency(plan.total)}</b>.</p>
@@ -109,10 +111,15 @@ function RatingDetails({ onClose }: { onClose: () => void }) {
 function PolicyCard({ onViewDetails }: { onViewDetails: () => void }) {
   const { state, rating, rated, updateCoverages, goToStep } = useQuote();
   const { coverages } = state;
+  const rules = rulesFor(state.policy.quoteState);
+  const rejected = coverages.pip === 'Rejected' || coverages.uninsuredMotorist === 'Rejected';
   const focusSnapshot = () => document.getElementById('coverages.snapshot')?.focus();
   return <WizardCard title="Policy" className="w-[880px]" subtitle={<button type="button" onClick={onViewDetails} className="text-[13px] font-bold text-[#0073cf] underline underline-offset-2 hover:text-[#003865]">View Rating Details</button>}>
-    <WizardSelect id="coverages.uninsuredMotorist" narrow label="Uninsured/Underinsured Motorist Bodily Injury:*" help hint={fieldHints.uninsuredMotorist} options={coverageOptions(UM_BI)} value={coverages.uninsuredMotorist} onChange={(uninsuredMotorist) => updateCoverages({ uninsuredMotorist })} after={<Price amount={rating.umbi} rated={rated} />} />
-    <WizardSelect id="coverages.umpd" narrow label="Uninsured Motorist Property Damage:*" help hint={fieldHints.umpd} options={coverageOptions(UMPD)} value={coverages.umpd} onChange={(umpd) => updateCoverages({ umpd })} after={<Price amount={rating.umpd} rated={rated} />} />
+    <WizardSelect id="coverages.uninsuredMotorist" narrow label="Uninsured/Underinsured Motorist Bodily Injury:*" help hint={fieldHints.uninsuredMotorist} options={coverageOptions(stateOptions(UM_BI, rules.um.choices))} value={coverages.uninsuredMotorist} onChange={(uninsuredMotorist) => updateCoverages({ uninsuredMotorist })} after={<Price amount={rating.umbi} rated={rated} />} />
+    {rules.umpd && <WizardSelect id="coverages.umpd" narrow label="Uninsured Motorist Property Damage:*" help hint={fieldHints.umpd} options={coverageOptions(UMPD)} value={coverages.umpd} onChange={(umpd) => updateCoverages({ umpd })} after={<Price amount={rating.umpd} rated={rated} />} />}
+    {rules.pip && <WizardSelect id="coverages.pip" narrow label="Personal Injury Protection:*" help helpText={rules.pip.text} options={coverageOptions(stateOptions(PIP_OPTIONS, rules.pip.choices))} value={coverages.pip} onChange={(pip) => updateCoverages({ pip })} after={<Price amount={rating.pip} rated={rated} />} />}
+    {rejected && <WizardCheckbox id="coverages.rejectionSigned" label={`The customer signed the ${rules.name} rejection form for ${[coverages.pip === 'Rejected' ? 'Personal Injury Protection' : '', coverages.uninsuredMotorist === 'Rejected' ? 'Uninsured/Underinsured Motorist' : ''].filter(Boolean).join(' and ')} coverage.`} checked={coverages.rejectionSigned} onChange={(rejectionSigned) => updateCoverages({ rejectionSigned })} />}
+    <div className="border-b border-[#edf1f3] bg-[#f6f9fb] px-[21px] py-[10px] text-[12.5px] leading-[18px] text-[#3d4b55]"><b>{rules.name} requirements:</b> {rules.minimumText} {rules.um.text}{rules.pip ? ` ${rules.pip.text}` : ''}</div>
     <WizardRowShell label="Discounts:" tag>
       <div className="grid grid-cols-2 gap-[20px] py-[9px] text-[14px] leading-[21px]">
         <div><div className="font-bold">Applied Discounts</div>{rated && rating.appliedDiscounts.map((discount) => <div key={discount}>{discount}</div>)}</div>

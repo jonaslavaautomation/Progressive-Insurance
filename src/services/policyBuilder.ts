@@ -4,7 +4,8 @@ import type { CoverageLine, InsuredSnapshot, PolicyDocument, PolicyRecord, Polic
 import type { BillPlanQuote, QuoteData, RatingResult } from '@/types/quote';
 import type { AnyProductKey, FieldContext, OtherProductKey, ProductConfig, ProductKey, ProductQuote, UnitPremium } from '@/products/types';
 import type { CommercialQuote } from '@/commercial/types';
-import { BI_PD, COLL_DEDUCTIBLES, ETE, MED_PAY, OTC_DEDUCTIBLES, TOWING, UMPD, UM_BI, optionLabel } from '@/data/options';
+import { BI_PD, COLL_DEDUCTIBLES, ETE, MED_PAY, OTC_DEDUCTIBLES, TOWING, UMPD, PIP_OPTIONS, UM_BI, optionLabel } from '@/data/options';
+import { rulesFor } from '@/data/states';
 import { PRODUCT_CONFIGS, productLabel } from '@/products/configs';
 import { COMMERCIAL_CONFIGS } from '@/commercial/configs';
 import { fieldContext, productTotals, rateProduct } from '@/products/engine';
@@ -46,7 +47,8 @@ export function autoUnits(quote: QuoteData, rating: RatingResult): { units: Unit
     units,
     policy: [
       { label: 'Uninsured/Underinsured Motorist BI', value: optionLabel(UM_BI, coverages.uninsuredMotorist), premium: rating.umbi },
-      { label: 'Uninsured Motorist Property Damage', value: optionLabel(UMPD, coverages.umpd), premium: rating.umpd },
+      ...(coverages.umpd && coverages.umpd !== 'None' ? [{ label: 'Uninsured Motorist Property Damage', value: optionLabel(UMPD, coverages.umpd), premium: rating.umpd }] : []),
+      ...(coverages.pip ? [{ label: 'Personal Injury Protection', value: optionLabel(PIP_OPTIONS, coverages.pip), premium: rating.pip }] : []),
       { label: 'Snapshot', value: coverages.snapshot || 'Do Not Participate' },
     ],
   };
@@ -114,8 +116,11 @@ function newPolicy(input: { key: AnyProductKey; quoteNumber: string; policyNumbe
     { id: id('doc'), type: 'Payment Receipt', date: day, term: 1, data: { amount: plan.dueToday, method: input.paymentMethod || paymentMethod, confirmation: `P${Math.floor(Math.random() * 1e9)}` } },
   ];
   if (!['renters', 'boat', 'bop', 'mgmt'].includes(key)) documents.splice(1, 0, { id: id('doc'), type: 'ID Cards', date: day, term: 1, data: {} });
-  if (key === 'auto') documents.push({ id: id('doc'), type: 'FS-1 Certificate of Insurance', date: day, term: 1, data: { reason: 'New business' } });
+  const stateName = input.source.kind === 'personal' ? input.source.quote.policy.quoteState : input.source.quote.business.state;
+  if (key === 'auto' && rulesFor(stateName).reporting?.system.includes('FS-1')) documents.push({ id: id('doc'), type: 'FS-1 Certificate of Insurance', date: day, term: 1, data: { reason: 'New business' } });
   if (key === 'bop' || key === 'commercialAuto' || key === 'mgmt') documents.push({ id: id('doc'), type: 'Certificate of Insurance', date: day, term: 1, data: { holder: 'Evidence of coverage' } });
+  // The bind packet: one copy for the insured, one for the agency file.
+  for (const copy of ['Insured Copy', 'Agent Copy']) documents.push({ id: id('doc'), type: 'Policy Packet', date: day, term: 1, data: { copy } });
   return {
     id: id('pol'),
     policyNumber: input.policyNumber,
@@ -127,7 +132,7 @@ function newPolicy(input: { key: AnyProductKey; quoteNumber: string; policyNumbe
     drivers: input.drivers,
     agentCode: input.agentCode,
     agentName: input.agentName,
-    state: 'North Carolina',
+    state: rulesFor(stateName).name,
     termMonths,
     termNumber: 1,
     effectiveDate,
@@ -151,7 +156,8 @@ function newPolicy(input: { key: AnyProductKey; quoteNumber: string; policyNumbe
     documents,
     history: [
       { id: id('his'), date: day, event: 'Policy issued', detail: `${productLabel(key)} policy bound from Quote #${input.quoteNumber}. Effective ${effectiveDate}.` },
-      { id: id('his'), date: day, event: 'Down payment received', detail: `$${plan.dueToday.toFixed(2)} (${plan.name})` },
+      { id: id('his'), date: day, event: 'Down payment received', detail: `${plan.dueToday.toFixed(2)} (${plan.name})` },
+      ...(rulesFor(stateName).reporting && ['auto', 'commercialAuto'].includes(key) ? [{ id: id('his'), date: day, event: 'Coverage reported to the state', detail: rulesFor(stateName).reporting!.text }] : []),
     ],
     esign: input.delivery === 'In person (print and sign)' ? 'Signed' : 'Pending',
     pendingCancel: null,
