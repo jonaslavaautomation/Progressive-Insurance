@@ -32,8 +32,8 @@ function Price({ amount, rated }: { amount: number; rated: boolean }) {
 export function SnapshotPromo() {
   return <div className="mx-[14px] mt-[24px] rounded-[4px] border-2 border-[#003865] px-[12px] pb-[18px] pt-[16px] text-center text-[#2e3a43]">
     <div className="text-[12px] font-bold leading-[16px] text-[#003865]">SAFE DRIVING CAN MEAN BIG SAVINGS!</div>
-    <div className="mt-[14px] flex flex-col items-center text-[#0073cf]"><Smartphone size={22} strokeWidth={1.6} /><span className="text-[19px] font-bold leading-[22px] tracking-[-.3px]">snapshot</span></div>
-    <p className="mt-[12px] text-[12px] leading-[17px]">Save 15% for signing up today and, at every renewal, up to 45% for the remainder of the policy. Encourage your customer to take advantage of Snapshot today!</p>
+    <div className="mt-[14px] flex flex-col items-center text-[#0073cf]"><Smartphone size={22} strokeWidth={1.6} /><span className="text-[19px] font-bold leading-[22px] tracking-[-.3px]">DriveSense</span></div>
+    <p className="mt-[12px] text-[12px] leading-[17px]">Save 15% for signing up today and, at every renewal, up to 45% for the remainder of the policy. Encourage your customer to enroll in DriveSense today!</p>
   </div>;
 }
 
@@ -86,8 +86,8 @@ function VehicleCoverageCard({ vehicle, index, count }: { vehicle: Vehicle; inde
     <WizardSelect id={id('rental')} narrow label="Extended Transportation Expense:*" help options={coverageOptions(ETE)} value={vehicle.rental} onChange={(rental) => set({ rental })} after={price('ete')} />
     <WizardSelect id={id('roadside')} narrow label="Towing and Labor (Roadside):*" help options={coverageOptions(TOWING)} value={vehicle.roadside} onChange={(roadside) => set({ roadside })} after={price('towing')} />
     <WizardField id={id('customEquipment')} narrow label="Customizing Equipment Coverage:*" help hint={fieldHints.customEquipment} money mask="money" value={vehicle.customEquipment} onChange={(customEquipment) => set({ customEquipment })} after={price('cec')} />
-    <WizardSelect id={policyId('snapshot')} narrow divider label="Snapshot Enrollment: *" tag hint={fieldHints.snapshot} options={SNAPSHOT_OPTIONS} value={coverages.snapshot} onChange={(snapshot) => updateCoverages({ snapshot })} />
-    {rated && coverages.snapshot === 'Do Not Participate' && <div className="flex text-[12px] leading-[17px]"><div className="w-[225px] shrink-0 border-r border-[#d7e0e6]" /><p className="flex gap-[6px] py-[4px] pb-[10px] pl-[10px] pr-[14px]"><AlertTriangle size={15} className="mt-px shrink-0 text-[#e87722]" /><span><b>Less frequent driving or other good driving habits may help your customers save with Snapshot.</b> Signing up today can earn your customer a discount of 15%. Then at each renewal, they could earn up to 45% for the remainder of the policy thanks to safe driving habits.</span></p></div>}
+    <WizardSelect id={policyId('snapshot')} narrow divider label="DriveSense Enrollment: *" tag hint={fieldHints.snapshot} options={SNAPSHOT_OPTIONS} value={coverages.snapshot} onChange={(snapshot) => updateCoverages({ snapshot })} />
+    {rated && coverages.snapshot === 'Do Not Participate' && <div className="flex text-[12px] leading-[17px]"><div className="w-[225px] shrink-0 border-r border-[#d7e0e6]" /><p className="flex gap-[6px] py-[4px] pb-[10px] pl-[10px] pr-[14px]"><AlertTriangle size={15} className="mt-px shrink-0 text-[#e87722]" /><span><b>Less frequent driving or other good driving habits may help your customers save with DriveSense.</b> Signing up today can earn your customer a discount of 15%. Then at each renewal, they could earn up to 45% for the remainder of the policy thanks to safe driving habits.</span></p></div>}
     <div className="flex min-h-[48px] border-t border-[#d7e0e6] text-[14px]"><div className="flex w-[225px] shrink-0 items-center border-r border-[#d7e0e6] pl-[21px] font-bold">Vehicle Total:</div><div className="flex items-center pl-[10px] text-[16px] font-medium">{rated ? formatCurrency(premium?.total ?? 0) : '$ --.--'}</div></div>
   </WizardCard>;
 }

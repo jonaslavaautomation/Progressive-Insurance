@@ -42,7 +42,7 @@ function Sidebar({ policy, collapsed, onToggle, largeText, onLargeText }: { poli
   return <aside className={`relative flex shrink-0 flex-col border-r border-[#d5d9dd] bg-white transition-[width] print:hidden ${collapsed ? 'w-0' : 'w-[256px]'}`}>
     <button type="button" onClick={onToggle} aria-label={collapsed ? 'Show policy panel' : 'Hide policy panel'} className="absolute -right-[38px] top-[32px] z-10 flex h-[54px] w-[36px] items-center justify-center rounded-r-[6px] border border-l-0 border-[#d5d9dd] bg-white text-[#0073cf] hover:bg-[#e8f4fa]">{collapsed ? <ChevronRight size={26} /> : <ChevronLeft size={26} />}</button>
     {!collapsed && <>
-      <button type="button" onClick={showDashboard} title="Return to dashboard" className="flex h-[82px] items-center justify-center bg-[#003865] text-[22px] font-light tracking-[-.5px] text-white">FOR<b className="font-bold">AGENTS</b>ONLY</button>
+      <button type="button" onClick={showDashboard} title="Return to dashboard" className="flex h-[82px] items-center justify-center bg-[#003865] text-[22px] font-light tracking-[-.5px] text-white">LAVA<b className="font-bold">TRAINING</b></button>
       <p className="mt-[24px] text-center text-[12px]">Customer since {since}</p>
       <form onSubmit={find} className="px-[26px] pt-[14px]">
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Enter a name or policy #" aria-label="Enter a name or policy number" className="h-[44px] w-full rounded-[2px] border border-[#6b7780] px-[8px] text-[15px] outline-none focus:border-[#0073cf]" />
@@ -71,7 +71,7 @@ function Sidebar({ policy, collapsed, onToggle, largeText, onLargeText }: { poli
 function Footer() {
   return <footer className="mt-auto flex flex-wrap justify-between gap-4 px-[20px] pb-[20px] pt-[60px] text-[13px] text-[#3d4b55] print:hidden">
     <div className="space-y-[18px] font-medium"><LegalLink label="CA Notice at Collection" className="block hover:underline" /><LegalLink label="Do Not Sell or Share My Personal Information (CA Residents Only)" className="block text-left hover:underline" /></div>
-    <span>Copyright 1995 - {new Date().getFullYear()}. Progressive Casualty Insurance Company. Training simulation.</span>
+    <span className="max-w-[640px] text-right">© {new Date().getFullYear()} LAVA Automation. LAVA Training is an independent agent training simulator by LAVA Automation. It is not affiliated with, endorsed by, or sponsored by Progressive Casualty Insurance Company or any of its affiliates. Training simulation only: no real insurance is quoted, bound or issued.</span>
   </footer>;
 }
 

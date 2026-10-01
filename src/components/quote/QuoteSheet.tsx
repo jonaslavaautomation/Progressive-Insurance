@@ -46,7 +46,7 @@ export function QuoteSheet({ kind = 'binder', agencyAddress = 'Agency default' }
   return <article className="print-area relative mx-auto max-w-[800px] overflow-hidden rounded border border-[#c6d6e1] bg-white px-8 py-6 text-[#28343c] shadow-sm print:max-w-none print:rounded-none print:border-0 print:p-0 print:shadow-none">
     <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center"><span className="-rotate-[24deg] whitespace-nowrap text-[54px] font-black uppercase tracking-widest text-[#003865]/[.05]">Training Simulation</span></div>
     <header className="flex items-start justify-between border-b-4 border-[#003865] pb-3">
-      <div><div className="text-[18px] font-light tracking-[-.5px] text-[#003865]">FOR<b>AGENTS</b>ONLY</div><div className="mt-1 text-[10px] text-[#52616c]">Producer: {policy.agentCode} · Agent: {agent.name}</div><div className="text-[10px] text-[#52616c]">Agency address: {agencyAddress}</div></div>
+      <div><div className="text-[18px] font-light tracking-[-.5px] text-[#003865]">LAVA<b>TRAINING</b></div><div className="mt-1 text-[10px] text-[#52616c]">Producer: {policy.agentCode} · Agent: {agent.name}</div><div className="text-[10px] text-[#52616c]">Agency address: {agencyAddress}</div></div>
       <div className="text-right"><h2 className="text-[18px] font-bold text-[#003865]">{title}</h2><div className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${bound ? 'bg-[#e6f4ef] text-[#05784c]' : 'bg-[#fff6ee] text-[#9a4a0b]'}`}>{bound ? 'Sold' : 'Not Sold'}</div></div>
     </header>
     <p className="mt-2 rounded bg-[#fdf0f1] px-2 py-1 text-center text-[9px] font-bold uppercase tracking-wide text-[#c8102e]">Training simulation only. Not a valid insurance document or proof of coverage.</p>
@@ -89,7 +89,7 @@ export function QuoteSheet({ kind = 'binder', agencyAddress = 'Agency default' }
       <Table head={['Policy Coverage', 'Limit', 'Premium']} align={['left', 'left', 'right']} rows={[
         ['Uninsured/Underinsured Motorist Bodily Injury', optionLabel(UM_BI, coverages.uninsuredMotorist), money(rating.umbi)],
         ['Uninsured Motorist Property Damage', optionLabel(UMPD, coverages.umpd), money(rating.umpd)],
-        ['Snapshot Enrollment', coverages.snapshot || '—', ''],
+        ['DriveSense Enrollment', coverages.snapshot || '—', ''],
       ]} />
     </Section>}
 
@@ -139,7 +139,7 @@ export function QuoteSheet({ kind = 'binder', agencyAddress = 'Agency default' }
         ['Auto policy canceled (except non-payment) within the past 5 years', additional.priorCancellation],
         ['Vehicles owned by a corporation/partnership or jointly outside the household', additional.jointOwnership],
         ['Paperless documents and bills by email', additional.paperless],
-        ['Other Progressive products', additional.noAdditionalRisks ? 'No additional risks apply' : additional.crossSell.join(', ') || '—'],
+        ['Other LAVA products', additional.noAdditionalRisks ? 'No additional risks apply' : additional.crossSell.join(', ') || '—'],
       ]} />
       {pointOfSale.paymentMethod && <p className="mt-1 text-[10px] text-[#52616c]">Payment method: {pointOfSale.paymentMethod} · Documents: {pointOfSale.documentDelivery}</p>}
       {policy.comment && <p className="mt-1 text-[10px] text-[#52616c]">Quote comment: {policy.comment}</p>}

@@ -16,11 +16,11 @@ function ProcessingOverlay() {
 function SignedOut({ reason }: { reason: string }) {
   const { state } = useQuote();
   return <div className="flex min-h-screen flex-col bg-[#f1f6f9]">
-    <header className="flex h-[60px] items-center bg-[#003865] px-[24px] text-[19px] font-light tracking-[-.4px] text-white">FOR<b className="font-bold">AGENTS</b>ONLY</header>
+    <header className="flex h-[60px] items-center bg-[#003865] px-[24px] text-[19px] font-light tracking-[-.4px] text-white">LAVA<b className="font-bold">TRAINING</b></header>
     <main className="mx-auto mt-[80px] w-[440px] rounded-[3px] border border-[#cfdbe3] bg-white p-[28px] text-[#1b2a36] shadow-sm">
       <LockKeyhole size={34} strokeWidth={1.4} className="text-[#003865]" />
       <h1 className="mt-3 font-slab text-[22px] font-bold">{reason === 'timeout' ? 'Your session timed out' : 'You have signed out'}</h1>
-      <p className="mt-2 text-[14px] leading-[20px] text-[#3d4b55]">{reason === 'timeout' ? 'For your security you were signed out after 15 minutes of inactivity. Unsaved changes on the page you were on may have been lost.' : 'Thank you for using ForAgentsOnly. Close your browser if you are on a shared computer.'}</p>
+      <p className="mt-2 text-[14px] leading-[20px] text-[#3d4b55]">{reason === 'timeout' ? 'For your security you were signed out after 15 minutes of inactivity. Unsaved changes on the page you were on may have been lost.' : 'Thank you for using LAVA Training. Close your browser if you are on a shared computer.'}</p>
       <div className="mt-5 rounded-[3px] border border-[#cfdbe3] bg-[#f6f9fb] px-3 py-2 text-[13px]">User: <b>{state.agent.name}</b> · {state.agent.agencyName} ({state.agent.agencyCode})</div>
       <button type="button" autoFocus onClick={signIn} className="mt-5 h-[42px] w-full rounded-[3px] bg-[#0073cf] text-[14px] font-bold uppercase text-white hover:bg-[#003865]">Sign In</button>
     </main>

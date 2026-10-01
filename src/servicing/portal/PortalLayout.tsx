@@ -1,4 +1,4 @@
-// FAO portal chrome (global header, customer/policy search, footer) for the servicing pages
+// LAVA Training portal chrome (global header, customer/policy search, footer) for the servicing pages
 // reached from the dashboard: pending cancel/renewal list and Customer Summary.
 import type { ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
@@ -15,12 +15,12 @@ export function Breadcrumbs({ crumbs }: { crumbs: Crumb[] }) {
   return <nav aria-label="Breadcrumb" className="mb-3 flex flex-wrap items-center gap-1 text-[12px] print:hidden">{all.map((crumb, index) => <span key={crumb.label + index} className="flex items-center gap-1">{index > 0 && <ChevronRight size={12} className="text-[#7b858a]" />}{crumb.onClick && index < all.length - 1 ? <button type="button" onClick={crumb.onClick} className="font-bold text-[#0073cf] underline underline-offset-2 hover:text-[#003865]">{crumb.label}</button> : <span aria-current={index === all.length - 1 ? 'page' : undefined} className="text-[#3d4b55]">{crumb.label}</span>}</span>)}</nav>;
 }
 
-const FOOTER_LINKS = ['Contact Us', 'Site Map', 'Accessibility', "Agents' Privacy", 'Consumer/Customer Privacy', 'CA Notice at Collection', 'Do Not Sell or Share My Personal Information (CA Residents Only)', 'Legal and Regulatory', 'Terms of Use'];
+const FOOTER_LINKS = ['About LAVA Training', 'Contact Us', 'Site Map', 'Accessibility', "Agents' Privacy", 'Consumer/Customer Privacy', 'CA Notice at Collection', 'Do Not Sell or Share My Personal Information (CA Residents Only)', 'Legal and Regulatory', 'Terms of Use'];
 
 export function PortalFooter() {
   return <footer className="mx-auto mt-[40px] max-w-[1440px] border-t border-[#d5d9dd] px-4 pb-6 pt-5 text-[11px] text-[#1b2a36] print:hidden">
     <div className="flex flex-wrap gap-x-[26px] gap-y-2">{FOOTER_LINKS.map((link) => <LegalLink key={link} label={link} className="font-bold underline underline-offset-2 hover:text-[#0073cf]" />)}</div>
-    <p className="mt-4">ForAgentsOnly is a restricted use site for authorized users only. Training simulation. Copyright © 1997-{new Date().getFullYear()} Progressive Casualty Insurance Company. All rights reserved.</p>
+    <p className="mt-4">LAVA Training is a restricted use site for authorized users only. © {new Date().getFullYear()} LAVA Automation. All rights reserved. LAVA Training is an independent agent training simulator by LAVA Automation. It is not affiliated with, endorsed by, or sponsored by Progressive Casualty Insurance Company or any of its affiliates. Training simulation only: no real insurance is quoted, bound or issued.</p>
   </footer>;
 }
 

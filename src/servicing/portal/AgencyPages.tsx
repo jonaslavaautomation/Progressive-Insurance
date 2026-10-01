@@ -173,7 +173,7 @@ export function CommissionsPage() {
 // ------------------------------------------------------------------ News and support
 
 const NEWS: { date: string; title: string; body: string }[] = [
-  { date: '01/22/2026', title: 'Exciting changes coming to FAO on January 22!', body: 'Updates to ForAgentsOnly give agents more control over licensing requests and streamline everyday servicing. Look for a new SmartView layout, faster policy search and one-click ID card printing from Customer Summary.' },
+  { date: '01/22/2026', title: 'Exciting changes coming to LAVA Training on January 22!', body: 'Updates to LAVA Training give agents more control over licensing requests and streamline everyday servicing. Look for a new LAVA Alerts layout, faster policy search and one-click ID card printing from Customer Summary.' },
   { date: '12/15/2025', title: 'North Carolina auto rate filing', body: 'A base rate adjustment takes effect on new and renewal auto policies. Renewal offers show the change on the renewal declarations along with any loyalty credit the customer earns.' },
   { date: '11/03/2025', title: 'Binding restrictions during severe weather', body: 'When a hurricane or wildfire watch is issued for a county, new business and coverage increases for property and physical damage are suspended until the watch is lifted. Existing policies can still be serviced.' },
   { date: '09/08/2025', title: 'Commercial Lines appetite update', body: 'Artisan contractors, landscapers and office risks remain preferred classes. For-hire trucking and restaurants need underwriting review before binding.' },
@@ -194,7 +194,7 @@ const FAQ: [string, string][] = [
   ['How do I print ID cards?', 'Open the customer (Customer Summary) › Get ID Cards and Documents › ID Cards › Print. Save, Mail and Fax are on the same page.'],
   ['How do I change a vehicle, driver, address or coverage?', 'Customer Summary › Quote or Make Changes, or Change Policy on the policy page. Review the prorated premium with the customer before submitting.'],
   ['How do I report a claim?', 'Manage Policies › Claims Center › Report a Claim. The claim is assigned to an adjuster immediately.'],
-  ['What are SmartView Alerts?', 'SmartView Alerts on the dashboard list the policies that need action today: unsigned applications, past-due bills, pending cancellations and renewals, recent claims and changes.'],
+  ['What are LAVA Alerts?', 'LAVA Alerts on the dashboard list the policies that need action today: unsigned applications, past-due bills, pending cancellations and renewals, recent claims and changes.'],
 ];
 
 export function SupportPage() {

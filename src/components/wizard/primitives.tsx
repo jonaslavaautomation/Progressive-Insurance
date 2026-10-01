@@ -1,4 +1,4 @@
-// Carrier form controls, sized to the FAO quoting screens (1:1 at a ~1536px viewport):
+// Carrier form controls, sized to the LAVA Training quoting screens (1:1 at a ~1536px viewport):
 // 450px two-column cards (225px label / 225px value), 48px rows, 38px x 204px controls.
 import type { ReactNode } from 'react';
 import { Check, ChevronDown, CirclePlus, Lightbulb, Plus, X } from 'lucide-react';

@@ -29,7 +29,7 @@ export const sessionStore = {
 };
 
 export function signOut(reason: 'manual' | 'timeout' = 'manual') {
-  notify({ kind: 'account', title: reason === 'timeout' ? 'Signed out (session timed out)' : 'Signed out', detail: reason === 'timeout' ? 'Session ended after 15 minutes of inactivity.' : 'User signed out of ForAgentsOnly.' });
+  notify({ kind: 'account', title: reason === 'timeout' ? 'Signed out (session timed out)' : 'Signed out', detail: reason === 'timeout' ? 'Session ended after 15 minutes of inactivity.' : 'User signed out of LAVA Training.' });
   session = { ...session, signedOut: true, reason };
   emit();
 }

@@ -43,7 +43,7 @@ export const fieldHints = {
   jointOwnership: 'Vehicles owned by a business or jointly with someone outside the household are not eligible for a personal auto policy.',
   primaryResidence: 'Single Family Home, Condo and Townhouse residences qualify for the Homeowner discount.',
   crossSell: 'Any additional product the customer has or will buy in the next month earns the Multi Policy discount. Choose No additional risks apply if none.',
-  snapshot: 'Snapshot is a usage-based program. Enrolling earns an upfront participation discount; good driving can earn more at renewal.',
+  snapshot: 'DriveSense is the LAVA usage-based program. Enrolling earns an upfront participation discount; good driving can earn more at renewal.',
   customEquipment: 'The first $1,000 of aftermarket equipment is included. Enter the total value of custom parts, up to $5,000.',
   umpd: 'Uninsured Motorist Property Damage pays for damage caused by an uninsured driver, after a $100 deductible.',
   clue: 'Auto CLUE returns the customer’s claims history and prior insurance record. It should always be ordered.',
@@ -69,5 +69,5 @@ export const productGuides: { title: string; points: string[] }[] = [
   { title: 'Auto Product Guide', points: ['Policy term is 6 months; premiums shown are for the full term.', 'Liability limits are shown as per-person / per-accident bodily injury / property damage, in thousands.', 'North Carolina requires UM/UIM limits no higher than the bodily injury limits.', 'Collision coverage requires Other Than Collision (comprehensive) coverage on the same vehicle.'] },
   { title: 'Point of Sale Reports', points: ['Auto CLUE returns claims history and prior insurance; MVR returns driving records.', 'Rates before Point of Sale are preliminary. Report results can raise or lower the premium.', 'When vendor data differs from what the insured provided, confirm with the customer before clicking Continue.'] },
   { title: 'Bill Plans & Fees', points: ['Pay In Full receives the Paid in Full discount and has no installment fees.', 'EFT and Automatic Card plans carry a .00 fee per future payment; Pay By Mail carries .00.', 'Use VIEW ALL AVAILABLE PLANS to show 2-payment options.'] },
-  { title: 'Snapshot Reference Card', points: ['Customers save for signing up and can earn more at every renewal based on driving habits.', 'Mobile App and Plug-In Device enrollment both qualify for the participation discount.'] },
+  { title: 'DriveSense Reference Card', points: ['Customers save for signing up and can earn more at every renewal based on driving habits.', 'Mobile App and Plug-In Device enrollment both qualify for the participation discount.'] },
 ];
