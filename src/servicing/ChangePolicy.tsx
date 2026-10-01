@@ -19,13 +19,13 @@ import { formatCurrency } from '@/utils/masks';
 import { ageOn, parseDate } from '@/utils/dates';
 import { EMAIL, PHONE, VIN, checkField, setValidationState, type FieldErrors } from '@/utils/validation';
 import { rulesFor, stateOptions } from '@/data/states';
+import { availableTypes, type ChangeType } from '@/servicing/changeTypes';
 import { MAX_BACKDATE_DAYS, MAX_FUTURE_DAYS, applyChange, previewChange, validateChangeDate } from '@/services/endorsement';
 import { Modal } from '@/components/wizard/Modal';
 import { modalButton } from '@/components/wizard/modalStyles';
 import { InlineError, SelectControl, TextControl } from '@/components/wizard/primitives';
 import { ConfigField } from '@/components/products/Editors';
 
-export type ChangeType = 'address' | 'contact' | 'addVehicle' | 'replaceVehicle' | 'removeVehicle' | 'addDriver' | 'removeDriver' | 'coverages' | 'lienholder' | 'addUnit' | 'removeUnit';
 const TYPE_LABELS: Record<ChangeType, string> = {
   address: 'Change address', contact: 'Update phone / email', addVehicle: 'Add a vehicle', replaceVehicle: 'Replace a vehicle', removeVehicle: 'Remove a vehicle',
   addDriver: 'Add a driver', removeDriver: 'Remove or exclude a driver', coverages: 'Change coverages', lienholder: 'Add or remove a lienholder / loss payee',
@@ -53,17 +53,6 @@ function withProductQuote(source: PolicySource, policy: PolicyRecord, update: (q
   if (draft.kind === 'commercial') { const key = policy.product as CommercialKey; draft.quote.productQuotes[key] = update(draft.quote.productQuotes[key]!); }
   else { const key = policy.product as OtherProductKey; draft.quote.productQuotes[key] = update(draft.quote.productQuotes[key]!); }
   return draft;
-}
-
-function availableTypes(policy: PolicyRecord): ChangeType[] {
-  if (policy.product === 'auto') return ['address', 'contact', 'addVehicle', 'replaceVehicle', 'removeVehicle', 'addDriver', 'removeDriver', 'coverages', 'lienholder'];
-  const config = configOf(policy);
-  const types: ChangeType[] = ['address', 'contact'];
-  if (config?.multiUnit) types.push('addUnit', 'removeUnit');
-  types.push('coverages');
-  if (policy.product === 'commercialAuto') types.push('addDriver', 'removeDriver');
-  if (config?.idField === 'vin' || config?.idField === 'hin' || policy.product === 'renters') types.push('lienholder');
-  return types;
 }
 
 function labelFor(type: ChangeType, policy: PolicyRecord): string {

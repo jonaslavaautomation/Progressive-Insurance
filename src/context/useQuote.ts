@@ -64,6 +64,8 @@ export interface QuoteContextValue {
   clearPolicies: () => void;
   openPolicies: (query?: Partial<PolicyQuery>) => void;
   openPolicy: (id: string, tab?: PolicyTab, intent?: PolicyIntent) => void;
+  /** Policy and Coverages: the customer account page a policy search lands on. */
+  openAccount: (id: string) => void;
   openPending: (tab?: PendingTab) => void;
   openCustomer: (customerKey: string) => void;
   openProof: (policyId: string, page?: ProofPage) => void;

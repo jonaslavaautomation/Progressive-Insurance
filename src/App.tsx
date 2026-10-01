@@ -12,6 +12,8 @@ import { FinalSaleStep } from '@/steps/FinalSaleStep';
 import { DocumentCenter } from '@/components/DocumentCenter';
 import { PolicySearch } from '@/servicing/PolicySearch';
 import { PolicyView } from '@/servicing/PolicyView';
+import { PolicyAccount } from '@/servicing/account/PolicyAccount';
+import { CarLoading } from '@/components/CarLoading';
 import type { CommercialKey, ProductKey } from '@/products/types';
 import { CommercialFlow } from '@/commercial/CommercialFlow';
 import { PendingList } from '@/servicing/portal/PendingList';
@@ -56,6 +58,7 @@ function Screen() {
   if (ui.view === 'documents') return <DocumentCenter />;
   if (ui.view === 'policies') return <PolicySearch />;
   if (ui.view === 'policy') return <PolicyView key={ui.policyId} />;
+  if (ui.view === 'account') return <PolicyAccount key={ui.policyId} />;
   if (ui.view === 'commercial' && state.commercial) return <CommercialFlow />;
   if (ui.view === 'pending') return <PendingList />;
   if (ui.view === 'customer') return <CustomerSummary key={ui.customerKey} />;
@@ -66,6 +69,6 @@ function Screen() {
   return <div className="app-zoom"><Dashboard onSelectProduct={() => setModalOpen(true)} onOpenExisting={() => goToStep(ui.step)} existingQuote={existingQuote} showBindingBanner={modalOpen} />{modalOpen && <ProductModal onCancel={() => setModalOpen(false)} onContinue={startNewQuote} onCommercial={startCommercial} />}</div>;
 }
 function App() {
-  return <SessionGuard><Screen /></SessionGuard>;
+  return <SessionGuard><Screen /><CarLoading /></SessionGuard>;
 }
 export default App;

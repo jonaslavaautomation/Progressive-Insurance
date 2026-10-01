@@ -1,4 +1,4 @@
-// The agency's reference book of business: five fictitious customers, one in each of the states
+// The agency's reference book of business: five fictitious customers (one a two-policy household), one in each of the states
 // where Progressive holds the largest auto share (TX, FL, WI, OR, NH). Every name, address, phone
 // number, email and VIN is invented. Each account is issued years ago and lived forward day by day
 // on the policy engine (bills, on-time payments, renewals, a late payment, claims, policy changes),
@@ -6,7 +6,7 @@
 import type { AgentProfile, BillPlan, QuoteData } from '@/types/quote';
 import type { ClaimRecord, PolicyRecord } from '@/types/policy';
 import type { ProductKey } from '@/products/types';
-import { createSampleQuote, generateQuoteNumber } from '@/context/quoteStore';
+import { createDriver, createSampleQuote, generateQuoteNumber } from '@/context/quoteStore';
 import { createProductQuote } from '@/products/engine';
 import { buildPolicies, generatePolicyNumber } from '@/services/policyBuilder';
 import { dayDiff, makePayment, otherNoticeDays, processDay, requestCancel, shiftDate } from '@/services/policyEngine';
@@ -18,6 +18,8 @@ import { addMonths, formatDate, parseDate } from '@/utils/dates';
 
 /** Reference accounts are recognised by this email domain. */
 export const PRACTICE_DOMAIN = '@practice.example.com';
+/** Bumped when the reference accounts change, so saved books rebuild them. */
+export const PRACTICE_VERSION = 2;
 
 interface AccountEvent {
   /** Days before today (negative numbers are not used). */
@@ -43,6 +45,12 @@ interface PracticeCustomer {
   /** An installment due in this month (MM/YYYY) is paid five days late. */
   lateMonth?: string;
   events?: AccountEvent[];
+  /** A household: spouse on the auto policy with a second vehicle, and the spouse's own motorcycle policy. */
+  household?: {
+    spouse: { first: string; dob: string };
+    vehicle: [year: string, make: string, model: string, body: string]; vin: string;
+    motorcycle: { year: string; make: string; model: string; type: string; cc: string; value: string; vin: string; startDaysAgo: number; cancelDaysAgo: number };
+  };
 }
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
@@ -94,6 +102,11 @@ const CUSTOMERS: PracticeCustomer[] = [
   {
     state: 'New Hampshire', first: 'Morgan', last: 'Ellis', dob: '09/09/1990', street: '15 Harbor Demo St', city: 'Manchester', zip: '03104', phone: '603-555-0119', vehicle: ['2020', 'Honda', 'CR-V', 'Utility 4D'], vin: '5J6RW2H50LA000505',
     producer: 'Reyes, Dana', currentTermDaysAgo: fixed(30), priorTerms: 12, autoPlan: 'EFT', scenario: 'active',
+    household: {
+      spouse: { first: 'Jamie', dob: '05/17/1991' },
+      vehicle: ['2017', 'Hyundai', 'Tucson', 'Utility 4D'], vin: 'KM8J3CA46HU000606',
+      motorcycle: { year: '2019', make: 'Honda', model: 'Rebel 500', type: 'Cruiser', cc: '471', value: '5200', vin: 'JH2PC4500KK000707', startDaysAgo: 700, cancelDaysAgo: 330 },
+    },
     events: [
       { daysAgo: 1150, apply: note('Policy change processed', 'Replaced 2016 Honda Civic (VIN 19XFC2F59GE000999) with 2020 Honda CR-V (VIN 5J6RW2H50LA000505). Lienholder removed. Additional premium $38.20.') },
       { daysAgo: 9, apply: claim({ type: 'Comprehensive - animal strike', description: 'Struck a deer on NH-101 at night. Front bumper and headlight damage. Vehicle drivable.', status: 'Open - Assigned', paid: 0, adjuster: 'Auto Claims Team 7', atFault: 'No', unit: '2020 Honda CR-V', lossDaysBefore: 1 }) },
@@ -106,12 +119,21 @@ function quoteFor(customer: PracticeCustomer, agent: AgentProfile, effectiveDate
   const [year, make, model, body] = customer.vehicle;
   const vehicle = { ...base.vehicles[0], year, make, model, bodyStyle: body, ...lookupVehicleDetails(year, make, model, body), vin: customer.vin, garagingZip: customer.zip };
   const email = `${customer.first}.${customer.last}${PRACTICE_DOMAIN}`.toLowerCase();
+  const household = customer.household;
+  const vehicles = [vehicle];
+  const drivers = [{ ...base.drivers[0], firstName: customer.first, lastName: customer.last, dob: customer.dob, licenseNumber: `0000${customer.vin.slice(-5)}`, primaryVehicleId: vehicle.id, ...(household ? { maritalStatus: 'Married' } : {}) }];
+  if (household) {
+    const [year2, make2, model2, body2] = household.vehicle;
+    const second = { ...vehicle, id: uid('veh'), year: year2, make: make2, model: model2, bodyStyle: body2, ...lookupVehicleDetails(year2, make2, model2, body2), vin: household.vin };
+    vehicles.push(second);
+    drivers.push(createDriver({ ...base.drivers[0], id: uid('drv'), firstName: household.spouse.first, lastName: customer.last, dob: household.spouse.dob, relationship: 'Spouse', maritalStatus: 'Married', licenseNumber: `0000${household.vin.slice(-5)}`, primaryVehicleId: second.id }));
+  }
   const quote: QuoteData = {
     ...base,
     policy: { ...base.policy, effectiveDate, agentCode },
     insured: { ...base.insured, firstName: customer.first, lastName: customer.last, dob: customer.dob, email, phones: [{ type: 'Cell', number: customer.phone }], address: { ...base.insured.address, line1: customer.street, city: customer.city, zip: customer.zip } },
-    vehicles: [vehicle],
-    drivers: [{ ...base.drivers[0], firstName: customer.first, lastName: customer.last, dob: customer.dob, licenseNumber: `0000${customer.vin.slice(-5)}`, primaryVehicleId: vehicle.id }],
+    vehicles,
+    drivers,
     additional: { ...base.additional, continuousInsurance: customer.priorTerms > 8 ? 'Yes' : 'No' },
     pointOfSale: { ...base.pointOfSale, billPlan: customer.autoPlan, paymentMethod: customer.autoPlan.startsWith('EFT') ? 'Bank account (EFT)' : 'Credit/debit card via secure IVR', documentDelivery: 'In person (print and sign)' },
     products: customer.renters ? ['auto', 'renters'] : ['auto'],
@@ -124,6 +146,27 @@ function quoteFor(customer: PracticeCustomer, agent: AgentProfile, effectiveDate
     renters.billPlan = customer.renters;
     quote.productQuotes = { renters };
   }
+  return { ...quote, ratedSignature: ratingSignature(quote) };
+}
+
+/** The spouse's own motorcycle policy at the same address (household account). */
+function motorcycleQuoteFor(customer: PracticeCustomer, agent: AgentProfile, effectiveDate: string, agentCode: string): QuoteData {
+  const household = customer.household!;
+  const bike = household.motorcycle;
+  const base = quoteFor({ ...customer, household: undefined }, agent, effectiveDate, agentCode);
+  const first = household.spouse.first;
+  const motorcycle = createProductQuote('motorcycle', generateQuoteNumber(), customer.zip);
+  motorcycle.units[0].values = { ...motorcycle.units[0].values, type: bike.type, vin: bike.vin, year: bike.year, make: bike.make, model: bike.model, cc: bike.cc, value: bike.value, garagingZip: customer.zip, miles: '2,000 - 4,999', antiTheft: 'No' };
+  motorcycle.answers = { racing: 'No', safetyCourse: 'Yes' };
+  motorcycle.billPlan = 'PIF';
+  const quote: QuoteData = {
+    ...base,
+    insured: { ...base.insured, firstName: first, dob: household.spouse.dob, email: `${first}.${customer.last}${PRACTICE_DOMAIN}`.toLowerCase() },
+    drivers: [{ ...base.drivers[0], firstName: first, dob: household.spouse.dob, maritalStatus: 'Married', licenseNumber: `0000${bike.vin.slice(-5)}` }],
+    pointOfSale: { ...base.pointOfSale, billPlan: 'PIF', paymentMethod: 'Credit/debit card via secure IVR' },
+    products: ['motorcycle'],
+    productQuotes: { motorcycle },
+  };
   return { ...quote, ratedSignature: ratingSignature(quote) };
 }
 
@@ -167,7 +210,18 @@ export function buildPracticeBook(agent: AgentProfile, agentCode: string, day: s
         if (customer.scenario === 'underwriting' && next.product === 'auto') {
           next = requestCancel(next, { kind: 'company', reason: 'Underwriting: an undisclosed household driver was found on the MVR and CLUE reports', effectiveDate: shiftDate(day, Math.max(otherNoticeDays(next), 30)), method: 'Pro Rata' }, day);
         }
-        records.push(next);
+        records.push({ ...next, practiceVersion: PRACTICE_VERSION });
+      }
+      const bike = customer.household?.motorcycle;
+      if (bike) {
+        const bikeStart = shiftDate(day, -bike.startDaysAgo);
+        setClock(parseDate(bikeStart));
+        const quote = motorcycleQuoteFor(customer, agent, bikeStart, agentCode);
+        const cancel: AccountEvent = { daysAgo: bike.cancelDaysAgo, apply: (policy, today) => requestCancel(policy, { kind: 'insured', reason: 'Sold or disposed of the insured property/vehicle', effectiveDate: today, method: 'Pro Rata' }, today) };
+        for (const record of buildPolicies(quote, rateQuote(quote), true, customer.producer, bikeStart, { motorcycle: generatePolicyNumber() })) {
+          const opened = { ...record, claims: [], history: [...record.history, { id: uid('his'), date: bikeStart, event: 'Reference account', detail: 'Fictitious household member included in the agency book for reference and practice.' }] };
+          records.push({ ...live(opened, { ...customer, scenario: 'active', unpaid: [] }, bikeStart, day, day, [cancel]), practiceVersion: PRACTICE_VERSION });
+        }
       }
     }
   } finally {
@@ -176,6 +230,11 @@ export function buildPracticeBook(agent: AgentProfile, agentCode: string, day: s
   return records;
 }
 
+export function isPracticePolicy(policy: PolicyRecord): boolean {
+  return policy.insured.email.endsWith(PRACTICE_DOMAIN);
+}
+
+/** True when the book already holds the current version of the reference accounts. */
 export function hasPracticeBook(policies: PolicyRecord[]): boolean {
-  return policies.some((policy) => policy.insured.email.endsWith(PRACTICE_DOMAIN));
+  return policies.some((policy) => isPracticePolicy(policy) && policy.practiceVersion === PRACTICE_VERSION);
 }

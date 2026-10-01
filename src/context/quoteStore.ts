@@ -49,7 +49,7 @@ export interface PolicyQuery {
 export const EMPTY_POLICY_QUERY: PolicyQuery = { mode: 'Customer', lastName: '', firstName: '', policyNumber: '', product: 'All', status: 'All' };
 
 export interface UiState {
-  view: 'dashboard' | 'wizard' | 'documents' | 'policies' | 'policy' | 'commercial' | 'portal' | PortalView;
+  view: 'dashboard' | 'wizard' | 'documents' | 'policies' | 'policy' | 'account' | 'commercial' | 'portal' | PortalView;
   portalPage: PortalPage;
   /** Select Product(s) dialog on the dashboard. */
   pickerOpen: boolean;
@@ -217,8 +217,9 @@ export type QuoteAction =
   | { type: 'clearPolicies' }
   | { type: 'openPolicies'; query?: Partial<PolicyQuery> }
   | { type: 'openPolicy'; id: string; tab?: PolicyTab; intent?: PolicyIntent }
+  | { type: 'openAccount'; id: string }
   | { type: 'openPortal'; view: PortalView; tab?: PendingTab; customerKey?: string; policyId?: string; page?: ProofPage }
-  | { type: 'policiesSeeded'; records: PolicyRecord[] }
+  | { type: 'policiesSeeded'; records: PolicyRecord[]; replace?: string[] }
   | { type: 'openPage'; page: PortalPage }
   | { type: 'setPicker'; open: boolean }
   | { type: 'setTrainerMode'; on: boolean }
@@ -385,10 +386,12 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
       return { ...state, ui: { ...state.ui, view: 'policies', policyQuery: { ...EMPTY_POLICY_QUERY, ...action.query } } };
     case 'openPolicy':
       return { ...state, ui: { ...state.ui, view: 'policy', policyId: action.id, policyTab: action.tab ?? 'summary', policyIntent: action.intent ?? '' } };
+    case 'openAccount':
+      return { ...state, ui: { ...state.ui, view: 'account', policyId: action.id, policyIntent: '' } };
     case 'openPortal':
       return { ...state, ui: { ...state.ui, view: action.view, pendingTab: action.tab ?? state.ui.pendingTab, customerKey: action.customerKey ?? state.ui.customerKey, policyId: action.policyId ?? state.ui.policyId, proofPage: action.page ?? 'hub' } };
     case 'policiesSeeded':
-      return { ...state, policies: [...action.records, ...state.policies] };
+      return { ...state, policies: [...action.records, ...state.policies.filter((policy) => !action.replace?.includes(policy.id))] };
     case 'openPage':
       return { ...state, ui: { ...state.ui, view: 'portal', portalPage: action.page, pickerOpen: false } };
     case 'setPicker':

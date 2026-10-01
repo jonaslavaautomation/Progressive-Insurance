@@ -1,0 +1,35 @@
+# Change-management gate (SOC 2 CC8.1): every pull request and every push to main must pass
+# dependency audit, type checks, lint and a production build before it can be merged/deployed.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Type check (app)
+        run: npx tsc --noEmit -p tsconfig.app.json
+      - name: Type check (build config and access middleware)
+        run: npx tsc --noEmit -p tsconfig.node.json
+      - name: Lint
+        run: npx eslint .
+      - name: Production build
+        run: npm run build
+      - name: No source maps in the bundle
+        run: "! grep -rl 'sourceMappingURL' dist/assets"
