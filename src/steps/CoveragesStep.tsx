@@ -6,6 +6,7 @@ import { currentProduct } from '@/products/active';
 import { productLabel } from '@/products/configs';
 import { isProductRated, productTotals, rateProduct } from '@/products/engine';
 import { ProductCoveragesContent } from '@/components/products/ProductForms';
+import { RentersCoveragesContent } from '@/steps/renters/RentersScreens';
 import { activeProducts } from '@/utils/ratingEngine';
 import { BI_PD, COLL_DEDUCTIBLES, ETE, MED_PAY, OTC_DEDUCTIBLES, PIP_OPTIONS, SNAPSHOT_OPTIONS, TOWING, UMPD, UM_BI, coverageOptions } from '@/data/options';
 import { rulesFor, stateOptions } from '@/data/states';
@@ -195,6 +196,6 @@ export function CoveragesStep() {
   const { state } = useQuote();
   const product = currentProduct(state);
   return <WizardLayout stepHeader contentClassName="pt-0" sidebar={product === 'auto' ? <SnapshotPromo /> : undefined} actionCenter={<PremiumTotal />}>
-    {product === 'auto' ? <><OtherProductsStatus /><CoveragesContent /></> : <ProductCoveragesContent key={product} product={product} billPlans={<ProductBillPlans product={product} />} />}
+    {product === 'auto' ? <><OtherProductsStatus /><CoveragesContent /></> : product === 'renters' ? <RentersCoveragesContent billPlans={isProductRated('renters', state) ? <ProductBillPlans product="renters" /> : null} /> : <ProductCoveragesContent key={product} product={product} billPlans={<ProductBillPlans product={product} />} />}
   </WizardLayout>;
 }

@@ -19,7 +19,7 @@ type MenuItem = { label: string; onClick: () => void };
 
 /** Global navigation with dropdown menus (click or keyboard; closes on outside click or Escape). */
 function NavMenus({ mobileOpen }: { mobileOpen: boolean }) {
-  const { state, openPolicies, openPending, openPage, openProductPicker, openCommercial, goToStep, showDashboard } = useQuote();
+  const { openPolicies, openPending, openPage, showDashboard } = useQuote();
   const [open, setOpen] = useState('');
   const nav = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -30,14 +30,12 @@ function NavMenus({ mobileOpen }: { mobileOpen: boolean }) {
     return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', close); };
   }, [open]);
   const page = (target: PortalPage) => () => openPage(target);
-  const personalQuote = state.ui.maxStep > 0 || !!(state.insured.firstName || state.insured.lastName);
-  const commercialQuote = !!state.commercial && !state.commercial.boundPolicyIds.length;
   const menus: [string, MenuItem[]][] = [
     ['New Business', [
-      { label: 'Start a New Quote', onClick: openProductPicker },
-      { label: 'Commercial Lines Quote', onClick: openProductPicker },
-      ...(personalQuote ? [{ label: `Retrieve Quote ${state.policy.quoteNumber || ''}`.trim(), onClick: () => goToStep(state.ui.step) }] : []),
-      ...(commercialQuote ? [{ label: 'Retrieve Commercial Quote', onClick: openCommercial }] : []),
+      { label: 'New Quote/Quote Preferences', onClick: page('newQuote') },
+      { label: 'Existing Quote', onClick: page('existingQuotes') },
+      { label: 'Delete Quote', onClick: page('existingQuotes') },
+      { label: 'Book Builder Program', onClick: page('bookBuilder') },
     ]],
     ['Prospecting', [{ label: 'Requote Prospects', onClick: page('prospects') }, { label: 'Cross-Sell Opportunities', onClick: page('crossSell') }]],
     ['Manage Policies', [
@@ -115,7 +113,7 @@ function AgentGreeting() {
   </div>;
 }
 
-const PRODUCT_SEARCH: Record<string, string> = { All: 'All', Auto: 'auto', 'Motorcycle/ATV': 'motorcycle', 'Boat/PWC': 'boat', 'Motor Home': 'motorhome', 'Travel Trailer': 'trailer', 'Renters (HO4)': 'renters' };
+const PRODUCT_SEARCH: Record<string, string> = { All: 'All', Auto: 'auto', 'Motorcycle/ATV': 'motorcycle', 'Boat/PWC': 'boat', 'Motor Home': 'motorhome', 'Travel Trailer': 'trailer', Snowmobile: 'snowmobile', 'Renters (HO4)': 'renters' };
 const STATUS_SEARCH: Record<string, string> = { 'Active Policies': 'Active', 'All Policies': 'All', Pending: 'Pending Cancel', Cancelled: 'Cancelled' };
 
 export function SearchBar() {
@@ -145,7 +143,7 @@ function QuoteCard({ onSelect, onOpenExisting, existingQuote }: QuoteActions) {
   return <section className="overflow-hidden rounded-[3px] border border-[#a6adb3] bg-white"><div className="flex h-[35px] border-b border-[#a6adb3] bg-[#f0f0ee]"><button onClick={() => setActiveTab('new')} className={`flex-1 border-r border-[#a6adb3] px-2 text-[14px] font-bold ${activeTab === 'new' ? 'bg-white text-[#003865]' : 'text-[#003865]/80'}`}>New Quote</button><button onClick={() => setActiveTab('existing')} className={`flex-1 px-2 text-[14px] font-bold ${activeTab === 'existing' ? 'bg-white text-[#003865]' : 'text-[#003865]/80'}`}>Existing Quote</button></div><div className="grid grid-cols-[50px_1fr] items-center gap-2 p-3 text-[10px] text-[#003865]"><span className="font-bold">{activeTab === 'new' ? 'State' : 'Quote'}</span>{activeTab === 'new' ? <select aria-label="Quote state" value={state.ui.quoteState} onChange={(event) => setQuoteState(event.target.value as StateName)} className="h-[27px] rounded border border-[#cbd5df] bg-white px-2 text-[11px] text-[#2e3a43]">{SUPPORTED_STATES.map((name) => <option key={name}>{name}</option>)}</select> : !hasExisting ? <select className="h-[27px] rounded border border-[#cbd5df] bg-white px-2 text-[11px] text-[#7b8995]"><option>Find existing quote</option></select> : <select aria-label="Existing quote" value={choice} onChange={(event) => setPick(event.target.value as 'personal' | 'commercial')} className="h-[27px] rounded border border-[#cbd5df] bg-white px-2 text-[11px] text-[#2e3a43]">{existingQuote && <option value="personal">{existingQuote}</option>}{commercial && <option value="commercial">{commercial}</option>}</select>}<span /><button onClick={activeTab === 'new' ? onSelect : choice === 'commercial' ? openCommercial : onOpenExisting} disabled={activeTab === 'existing' && !hasExisting} className="h-[32px] rounded border-2 border-[#f26722] bg-[#003865] text-[14px] font-bold text-white shadow-[0_0_0_1px_#0073cf] hover:bg-[#005081]">{activeTab === 'new' ? 'Select Product(s)' : 'Open Quote'}</button></div></section>;
 }
 
-const GUIDE_PRODUCTS: [string, string][] = [['auto', 'Auto'], ['motorcycle', 'Motorcycle/ATV'], ['boat', 'Boat/PWC'], ['motorhome', 'Motor Home'], ['trailer', 'Travel Trailer'], ['renters', 'Renters (HO4)'], ['commercialAuto', 'Commercial Auto'], ['bop', 'Businessowners / Contractor GL'], ['mgmt', 'EPLI / NPDO / Cyber']];
+const GUIDE_PRODUCTS: [string, string][] = [['auto', 'Auto'], ['motorcycle', 'Motorcycle/ATV'], ['boat', 'Boat/PWC'], ['motorhome', 'Motor Home'], ['trailer', 'Travel Trailer'], ['snowmobile', 'Snowmobile'], ['renters', 'Renters (HO4)'], ['commercialAuto', 'Commercial Auto'], ['bop', 'Businessowners / Contractor GL'], ['mgmt', 'EPLI / NPDO / Cyber']];
 
 function LeftColumn(quoteActions: QuoteActions) {
   const { openPage } = useQuote();

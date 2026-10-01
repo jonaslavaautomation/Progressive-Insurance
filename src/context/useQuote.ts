@@ -77,6 +77,10 @@ export interface QuoteContextValue {
   setTrainerMode: (on: boolean) => void;
   /** State for the next new quote (dashboard New Quote card). */
   setQuoteState: (state: StateName) => void;
+  /** Rates the quote without the RECALCULATE button (renters rates as you type). */
+  rateQuietly: () => void;
+  /** Bundle & Save: adds Auto to the quote with the household vehicles found. */
+  addHouseholdVehicles: (vehicles: { year: string; make: string; model: string; body: string }[]) => void;
   /** Confirmation number of the last successful servicing transaction. */
   lastConfirmation: () => string;
   setPolicyTab: (tab: PolicyTab) => void;
@@ -87,6 +91,8 @@ export interface QuoteContextValue {
   startCommercialQuote: (products: CommercialKey[]) => void;
   updateCommercial: (update: (quote: CommercialQuote) => CommercialQuote) => void;
   openCommercial: () => void;
+  /** Deletes the unbound commercial quote. */
+  discardCommercial: () => void;
   /** Binds every product on the commercial quote; returns the issued policy ids. */
   bindCommercial: () => string[];
 }

@@ -4,6 +4,7 @@ import type { PolicyRecord } from '@/types/policy';
 import { CLAIMS_LINE } from '@/servicing/portal/portalUtils';
 import { rulesFor } from '@/data/states';
 import { notify } from '@/services/activity';
+import { LOGO_RATIO, loadLogoImage } from '@/services/pdf/logo';
 
 const W = 1050;
 const H = 640;
@@ -19,13 +20,21 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, x: number, y: number,
   return y + lineHeight;
 }
 
-function drawCard(ctx: CanvasRenderingContext2D, policy: PolicyRecord, unit: PolicyRecord['units'][number], top: number, agency: string) {
+function drawCard(ctx: CanvasRenderingContext2D, policy: PolicyRecord, unit: PolicyRecord['units'][number], top: number, agency: string, logo: HTMLImageElement | null) {
   const navy = '#003865';
   ctx.fillStyle = '#fff'; ctx.fillRect(0, top, W, H);
   ctx.strokeStyle = navy; ctx.lineWidth = 6; ctx.strokeRect(3, top + 3, W - 6, H - 6);
   ctx.fillStyle = navy; ctx.fillRect(3, top + 3, W - 6, 64);
   ctx.fillStyle = '#fff'; ctx.font = 'bold 26px Roboto, Arial, sans-serif';
   ctx.fillText(rulesFor(policy.state).idCardTitle.toUpperCase(), 28, top + 45);
+  if (logo) {
+    // White badge so the dark LAVA lettering shows on the navy band.
+    const h = 40;
+    const w = h * LOGO_RATIO;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.roundRect(W - w - 34, top + 11, w + 16, h + 6, 6); ctx.fill();
+    ctx.drawImage(logo, W - w - 26, top + 14, w, h);
+  }
   ctx.fillStyle = '#fde8ea'; ctx.fillRect(3, top + 67, W - 6, 36);
   ctx.fillStyle = '#c8102e'; ctx.font = 'bold 19px Roboto, Arial, sans-serif';
   ctx.fillText('TRAINING SIMULATION ONLY. NOT A VALID INSURANCE CARD OR PROOF OF COVERAGE.', 28, top + 92);
@@ -50,16 +59,17 @@ function drawCard(ctx: CanvasRenderingContext2D, policy: PolicyRecord, unit: Pol
   ctx.fillText(`Report a claim 24/7: ${CLAIMS_LINE} (training line)`, 28, Math.min(next + 8, top + H - 22));
 }
 
-export function downloadIdCards(policy: PolicyRecord, agency: string) {
+export async function downloadIdCards(policy: PolicyRecord, agency: string) {
   notify({ kind: 'document', title: 'Auto ID cards generated (saved as image)', detail: `${policy.productName} #${policy.policyNumber} · ${policy.insured.name}: ${policy.units.map((unit) => unit.label).join(', ')}.`, target: { view: 'proof', policyId: policy.id } });
   const units = policy.units.length ? policy.units : [{ label: policy.productName, details: [], idNumber: '', coverages: [], premium: 0 }];
+  const logo = await loadLogoImage();
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = units.length * H + (units.length - 1) * GAP;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   ctx.fillStyle = '#f1f6f9'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  units.forEach((unit, index) => drawCard(ctx, policy, unit, index * (H + GAP), agency));
+  units.forEach((unit, index) => drawCard(ctx, policy, unit, index * (H + GAP), agency, logo));
   canvas.toBlob((blob) => {
     if (!blob) return;
     const link = document.createElement('a');

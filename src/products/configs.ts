@@ -287,74 +287,136 @@ const trailer: ProductConfig = {
 
 // ------------------------------------------------------------------ Renters (HO4)
 
+// Renters (HO4), laid out like the carrier's renters flow: location address and eligibility on
+// Products, prior insurance and discounts on Additional Details, package and add-ons on Coverages.
+export const RENTERS_PERSONAL_PROPERTY = { min: 5000, max: 150000 };
+export const SCHEDULED_CATEGORIES = ['Jewelry', 'Watches', 'Furs', 'Fine Arts', 'Musical Instruments', 'Cameras', 'Silverware', 'Collectibles'];
+
 const rentersCoverages: CoverageDef[] = [
-  { key: 'personalProperty', label: 'Personal Property (Coverage C):*', type: 'select', scope: 'policy', required: true, default: '25000', options: choices([['15000', '$15,000'], ['25000', '$25,000'], ['40000', '$40,000'], ['60000', '$60,000'], ['100000', '$100,000']]), help: 'The total value of the renter’s belongings. Walk through each room with the customer to estimate it.' },
-  { key: 'lossOfUse', label: 'Loss of Use (Coverage D):', type: 'display', scope: 'policy', compute: ({ values }) => (values.personalProperty ? `$${(Number(values.personalProperty) * 0.2).toLocaleString('en-US')} (20% of Coverage C)` : '—') },
-  { key: 'liability', label: 'Personal Liability (Coverage E):*', type: 'select', scope: 'policy', required: true, default: '100000', options: choices([['100000', '$100,000', 28], ['300000', '$300,000', 38], ['500000', '$500,000', 48]]) },
-  { key: 'medpay', label: 'Medical Payments to Others (Coverage F):*', type: 'select', scope: 'policy', required: true, default: '1000', options: choices([['1000', '$1,000', 4], ['2000', '$2,000', 7], ['5000', '$5,000', 12]]) },
-  { key: 'deductible', label: 'Deductible:*', type: 'select', scope: 'policy', required: true, default: '500', options: choices([['250', '$250'], ['500', '$500'], ['1000', '$1,000'], ['2500', '$2,500']]) },
-  { key: 'replacementCost', label: 'Personal Property Replacement Cost:*', type: 'select', scope: 'policy', required: true, default: 'Yes', tag: true, options: YES_NO_CHOICES, help: 'Pays to replace belongings with new items instead of their depreciated value.' },
-  { key: 'waterBackup', label: 'Water Backup of Sewers or Drains:*', type: 'select', scope: 'policy', required: true, default: 'None', options: choices([['None', 'None', 0], ['5000', '$5,000', 24], ['10000', '$10,000', 38]]) },
-  { key: 'identityTheft', label: 'Identity Theft Expense:*', type: 'select', scope: 'policy', required: true, default: 'No', options: choices([['No', 'No', 0], ['Yes', 'Yes', 25]]) },
+  { key: 'homeShield', label: 'HomeShield R Package:', type: 'select', scope: 'policy', required: true, default: 'No', options: choices([['No', 'Not selected', 0], ['Yes', 'Selected', 45]]), help: 'Bundles Personal Property Replacement Cost, Water Backup ($5,000) and Identity Theft Expense coverage at a package price.' },
+  { key: 'liability', label: 'Liability Limit:*', type: 'select', scope: 'policy', required: true, default: '300000', options: choices([['100000', '$100,000', 28], ['300000', '$300,000', 38], ['500000', '$500,000', 48]]) },
+  { key: 'medpay', label: 'Medical Payments Limit:*', type: 'select', scope: 'policy', required: true, default: '5000', options: choices([['1000', '$1,000', 4], ['2000', '$2,000', 7], ['5000', '$5,000', 12]]) },
+  { key: 'deductible', label: 'All Other Perils:*', type: 'select', scope: 'policy', required: true, default: '250', options: choices([['250', '$250'], ['500', '$500'], ['1000', '$1,000'], ['2500', '$2,500']]) },
+  { key: 'jewelry', label: 'Increased Sublimit for Theft of Jewelry, Watches and Furs:*', type: 'select', scope: 'policy', required: true, default: 'None', options: choices([['None', 'None', 0], ['1000', '$1,000', 12], ['2500', '$2,500', 26], ['5000', '$5,000', 48]]), help: 'Raises the theft limit for jewelry, watches and furs above the standard $1,500.' },
+  { key: 'computer', label: 'Home Computer Coverage:*', type: 'select', scope: 'policy', required: true, default: 'None', options: choices([['None', 'None', 0], ['2500', '$2,500', 8], ['5000', '$5,000', 14], ['10000', '$10,000', 25]]), help: 'Covers computers and related equipment for perils not otherwise covered, such as power surges and accidental damage.' },
 ];
+
+const PRIOR_FACTORS: Record<string, number> = { 'No prior renters insurance': 1.15 };
+const CLAIM_FACTORS: Record<string, number> = { '0 Claims': 1, '1 Claim': 1.3, '2 Claims': 1.65 };
+const PACKAGE_FACTORS: Record<string, number> = { 'Progressive Auto 25/50': 0.9, 'Progressive Auto 50/100': 0.88, 'Progressive Auto 100/300': 0.86, 'Progressive Auto 250/500': 0.85, 'Other Progressive policy': 0.92 };
 
 const renters: ProductConfig = {
   key: 'renters', tileLabel: 'RENTERS (HO4)', tabLabel: 'RENTERS', name: 'Renters (HO4)', unitLabel: 'Rental Location', unitPlural: 'Rental Locations', multiUnit: false, maxUnits: 1, termMonths: 12, motorized: false, usesMvr: false, minimumPremium: 100,
   unitFields: [
-    { key: 'sameAsMailing', label: 'Rental Address same as Mailing Address:*', type: 'select', required: true, options: YES_NO_CHOICES, default: 'Yes' },
-    { key: 'street', label: 'Street Address:*', type: 'text', required: true, showIf: ({ values }) => values.sameAsMailing === 'No' },
+    { key: 'sameAsMailing', label: 'Endorse location address to mailing address on effective date:*', type: 'select', required: true, options: YES_NO_CHOICES, default: 'Yes', help: 'Yes when the customer lives at the rental (the mailing address becomes the location address on the effective date). No when the location is a different address.' },
+    { key: 'street', label: 'Address Line 1:*', type: 'text', required: true, showIf: ({ values }) => values.sameAsMailing === 'No' },
+    { key: 'street2', label: 'Address Line 2:', type: 'text', showIf: ({ values }) => values.sameAsMailing === 'No' },
     { key: 'city', label: 'City:*', type: 'text', required: true, showIf: ({ values }) => values.sameAsMailing === 'No' },
-    { key: 'garagingZip', label: 'ZIP Code:*', type: 'zip', required: true, help: 'The rental location’s ZIP determines the territory rate. It must be in North Carolina.' },
-    { key: 'dwelling', label: 'Dwelling Type:*', type: 'select', required: true, options: choices(['Apartment', 'Condo (rented)', 'Single Family Home (rented)', 'Townhouse (rented)', 'Duplex']) },
-    { key: 'units', label: 'Units in Building:*', type: 'select', required: true, tag: true, options: choices(['1', '2 - 4', '5 - 10', '11 or more']) },
-    { key: 'yearBuilt', label: 'Year Built:*', type: 'digits', required: true },
-    { key: 'construction', label: 'Construction Type:*', type: 'select', required: true, tag: true, options: choices(['Frame', 'Masonry', 'Fire Resistive']) },
-    { key: 'smoke', label: 'Smoke Detectors:*', type: 'select', required: true, tag: true, options: YES_NO_CHOICES, divider: true },
-    { key: 'deadbolts', label: 'Deadbolt Locks:*', type: 'select', required: true, tag: true, options: YES_NO_CHOICES },
-    { key: 'alarm', label: 'Burglar/Fire Alarm:*', type: 'select', required: true, tag: true, options: choices(['None', 'Local Alarm', 'Central Station Monitored']) },
-    { key: 'sprinklers', label: 'Automatic Sprinklers:*', type: 'select', required: true, tag: true, options: YES_NO_CHOICES },
-    { key: 'hydrant', label: 'Fire Hydrant within 1,000 feet:*', type: 'select', required: true, options: YES_NO_CHOICES },
+    { key: 'garagingZip', label: 'Zip Code:*', type: 'zip', required: true, help: 'The location ZIP determines the territory rate. It must be in the quote state.' },
+    { key: 'dwelling', label: 'Residence Type:*', type: 'select', required: true, options: choices(['Apartment', 'Condo', 'Single Family', 'Townhouse', 'Duplex', 'Mobile Home']) },
+    { key: 'dogBreed', label: 'Ineligible dog breed on premises', type: 'select', options: YES_NO_CHOICES, default: 'No' },
+    { key: 'verifiedNone', label: 'I have verified that NONE of these conditions exist', type: 'select', options: YES_NO_CHOICES, default: '' },
+    { key: 'personalProperty', label: 'Personal Property:*', type: 'money', required: true, help: 'The total replacement value of the customer’s belongings: furniture, clothing, electronics, kitchen items. Most renters need $15,000-$40,000.' },
   ],
   coverages: rentersCoverages,
   questions: [
-    { key: 'dogs', label: 'Does anyone in the household own a dog with a bite history or of a restricted breed?*', type: 'select', required: true, options: YES_NO_CHOICES, ineligibleIf: 'Yes', ineligibleMessage: 'Households with dogs that have a bite history or are a restricted breed are not eligible for Renters.' },
-    { key: 'business', label: 'Is any business conducted at the residence?*', type: 'select', required: true, options: YES_NO_CHOICES },
-    { key: 'vacant', label: 'Will the residence be vacant or unoccupied for more than 60 consecutive days?*', type: 'select', required: true, options: YES_NO_CHOICES, ineligibleIf: 'Yes', ineligibleMessage: 'Residences vacant more than 60 days are not eligible.' },
-    { key: 'losses', label: 'Number of property losses in the past 3 years:*', type: 'select', required: true, options: choices(['0', '1', '2 or more']) },
+    { key: 'priorInsurer', label: 'Prior Renters Insurer:*', type: 'select', required: true, options: choices(['No prior renters insurance', 'Allstate', 'American Family', 'Erie', 'Farmers', 'GEICO', 'Lemonade', 'Liberty Mutual', 'Nationwide', 'Progressive', 'State Farm', 'USAA', 'Other']) },
+    { key: 'priorLiability', label: 'Prior Renters Liability Limit:*', type: 'select', required: true, options: choices(['$100,000', '$300,000', '$500,000']), showIf: ({ values }) => !!values.priorInsurer && values.priorInsurer !== 'No prior renters insurance' },
+    { key: 'claims', label: 'Reported claims excluding wind, hail, or lightning in the past 3 years:*', type: 'select', required: true, options: choices(['0 Claims', '1 Claim', '2 Claims', '3 or more Claims']), ineligibleIf: '3 or more Claims', ineligibleMessage: 'Applicants with 3 or more claims in the past 3 years are not eligible for Renters.' },
+    { key: 'esign', label: 'E-Signature:', type: 'select', options: YES_NO_CHOICES },
+    { key: 'packagePolicy', label: 'Package Policy:*', type: 'select', required: true, options: choices(['None', 'Progressive Auto 25/50', 'Progressive Auto 50/100', 'Progressive Auto 100/300', 'Progressive Auto 250/500', 'Other Progressive policy']), help: 'A Progressive auto policy (current or quoted together) earns the package discount.' },
+    { key: 'securedSubdivision', label: 'Secured Subdivision:', type: 'select', options: YES_NO_CHOICES, help: 'Gated community or building with a doorman or controlled access.' },
+    { key: 'paperless', label: 'Apply Paperless and accept documents and bills delivered through email?*', type: 'select', required: true, options: YES_NO_CHOICES },
   ],
   unitRules: (values): Record<string, string> => {
-    const year = Number(values.yearBuilt);
-    return values.yearBuilt && (year < 1850 || year > new Date().getFullYear()) ? { yearBuilt: 'Enter a valid four-digit year built.' } : {};
+    const errors: Record<string, string> = {};
+    if (values.dogBreed === 'Yes') errors.dogBreed = 'An ineligible dog breed on premises makes this risk ineligible for Renters.';
+    else if (values.verifiedNone !== 'Yes') errors.verifiedNone = 'Confirm that none of the ineligible conditions exist.';
+    const amount = money(values.personalProperty ?? '');
+    if (values.personalProperty && (amount < RENTERS_PERSONAL_PROPERTY.min || amount > RENTERS_PERSONAL_PROPERTY.max)) errors.personalProperty = `Personal Property must be between $${RENTERS_PERSONAL_PROPERTY.min.toLocaleString('en-US')} and $${RENTERS_PERSONAL_PROPERTY.max.toLocaleString('en-US')}.`;
+    return errors;
   },
   describe: (unit) => unit.values.dwelling ? `${unit.values.dwelling}${unit.values.garagingZip ? ` · ${unit.values.garagingZip}` : ''}` : 'Rental Location',
   rate(ctx, quote): ProductRateResult {
-    const discounts = commonDiscounts(ctx, quote);
+    const a = quote.answers;
+    const packaged = a.packagePolicy && a.packagePolicy !== 'None';
+    const discounts = commonDiscounts({ ...ctx, paperless: ctx.paperless || a.paperless === 'Yes', multiPolicy: ctx.multiPolicy && !packaged }, quote, [[!!packaged, 'Package Policy', PACKAGE_FACTORS[a.packagePolicy] ?? 0.9], [a.securedSubdivision === 'Yes', 'Secured Subdivision', 0.95]]);
     const c = quote.coverages;
+    const def = (key: string) => rentersCoverages.find((entry) => entry.key === key);
     const units = quote.units.map((unit): UnitPremium => {
       const v = unit.values;
-      const def = (key: string) => rentersCoverages.find((entry) => entry.key === key);
-      const construction = factor({ Frame: 1.1, Masonry: 1, 'Fire Resistive': 0.9 }, v.construction);
-      const buildingUnits = factor({ '1': 1.05, '2 - 4': 1, '5 - 10': 0.95, '11 or more': 0.9 }, v.units);
-      const age = Number(v.yearBuilt) && Number(v.yearBuilt) < 1970 ? 1.15 : 1;
-      const protection = (v.smoke === 'No' ? 1.1 : 1) * (v.deadbolts === 'Yes' ? 0.97 : 1) * factor({ 'Local Alarm': 0.97, 'Central Station Monitored': 0.92 }, v.alarm) * (v.sprinklers === 'Yes' ? 0.9 : 1) * (v.hydrant === 'No' ? 1.2 : 1);
+      const dwelling = factor({ Apartment: 1, Condo: 0.95, 'Single Family': 1.12, Townhouse: 1, Duplex: 1.05, 'Mobile Home': 1.3 }, v.dwelling);
       const ded = factor({ '250': 1.15, '500': 1, '1000': 0.88, '2500': 0.75 }, c.deductible);
-      const losses = factor({ '0': 1, '1': 1.3, '2 or more': 1.7 }, quote.answers.losses);
-      const business = quote.answers.business === 'Yes' ? 1.15 : 1;
-      const contents = (Number(c.personalProperty) || 25000) / 1000 * 6.2 * ctx.territory(v.garagingZip ?? '') * construction * buildingUnits * age * protection * ded * (c.replacementCost === 'Yes' ? 1.12 : 1) * losses * business * ctx.scoreFactor * discounts.factor;
+      const history = (CLAIM_FACTORS[a.claims] ?? 1) * (PRIOR_FACTORS[a.priorInsurer] ?? 1);
+      const contents = (money(v.personalProperty ?? '') || 15000) / 1000 * 4.1 * ctx.territory(v.garagingZip ?? '') * dwelling * ded * history * ctx.scoreFactor * discounts.factor;
+      const scheduled = parseScheduled(c.scheduled).reduce((sum, item) => sum + item.value / 100 * (item.category === 'Jewelry' || item.category === 'Watches' || item.category === 'Furs' ? 1.4 : 0.6), 0);
       const amounts = {
         personalProperty: round2(contents),
-        liability: round2(baseOf(def('liability'), c.liability) * business),
+        liability: round2(baseOf(def('liability'), c.liability) * discounts.factor),
         medpay: baseOf(def('medpay'), c.medpay),
-        waterBackup: baseOf(def('waterBackup'), c.waterBackup),
-        identityTheft: baseOf(def('identityTheft'), c.identityTheft),
+        homeShield: baseOf(def('homeShield'), c.homeShield),
+        jewelry: baseOf(def('jewelry'), c.jewelry),
+        computer: baseOf(def('computer'), c.computer),
+        scheduled: round2(scheduled),
       };
       return { unitId: unit.id, label: renters.describe(unit), amounts, total: round2(Object.values(amounts).reduce((sum, amount) => sum + amount, 0)) };
     });
-    return { units, policy: {}, discounts: discounts.names, factors: [...reportFactors(ctx), ...discounts.factors] };
+    return { units, policy: {}, discounts: discounts.names, factors: [{ label: 'Claims and prior insurance', value: pct((CLAIM_FACTORS[a.claims] ?? 1) * (PRIOR_FACTORS[a.priorInsurer] ?? 1)) }, ...reportFactors(ctx), ...discounts.factors] };
   },
 };
 
-export const PRODUCT_CONFIGS: Record<OtherProductKey, ProductConfig> = { motorcycle, boat, motorhome, trailer, renters };
+export interface ScheduledItem { id: string; category: string; description: string; value: number }
+/** Itemized scheduled personal property is stored on the coverages as JSON. */
+export function parseScheduled(text: string | undefined): ScheduledItem[] {
+  try { return text ? (JSON.parse(text) as ScheduledItem[]) : []; } catch { return []; }
+}
+
+const snowmobile: ProductConfig = {
+  key: 'snowmobile', tileLabel: 'SNOWMOBILE', tabLabel: 'SNOWMOBILE', name: 'Snowmobile', unitLabel: 'Snowmobile', unitPlural: 'Snowmobiles', multiUnit: true, maxUnits: 6, termMonths: 12, motorized: true, usesMvr: true, idField: 'vin', minimumPremium: 75,
+  unitFields: [
+    { key: 'type', label: 'Snowmobile Type:*', type: 'select', required: true, options: choices(['Trail', 'Crossover', 'Mountain', 'Utility', 'Youth']), help: 'Mountain sleds carry the highest physical damage rates; youth sleds the lowest.' },
+    vinField(),
+    { key: 'year', label: 'Year:*', type: 'select', required: true, options: YEAR_CHOICES },
+    { key: 'make', label: 'Make:*', type: 'select', required: true, options: choices(['Arctic Cat', 'Lynx', 'Polaris', 'Ski-Doo', 'Yamaha', 'Other']) },
+    { key: 'model', label: 'Model:*', type: 'text', required: true },
+    { key: 'cc', label: 'Engine Size (CC):*', type: 'digits', required: true, help: 'Engine displacement in cubic centimeters (e.g. 600, 850).' },
+    { key: 'value', label: 'Market Value:*', type: 'money', required: true, tag: true },
+    zipField,
+    { key: 'storage', label: 'Off-Season Storage:*', type: 'select', required: true, tag: true, options: choices(['Locked garage or shed', 'Enclosed trailer', 'Outdoors / covered']) },
+  ],
+  coverages: motorcycleCoverages,
+  questions: [
+    { key: 'racing', label: 'Is any snowmobile used for racing, hill climbs or competitions?*', type: 'select', required: true, options: YES_NO_CHOICES, ineligibleIf: 'Yes', ineligibleMessage: 'Snowmobiles used for racing or competitions are not eligible.' },
+    { key: 'safetyCourse', label: 'Has the principal operator completed a snowmobile safety course?*', type: 'select', required: true, tag: true, options: YES_NO_CHOICES },
+    { key: 'trailPermit', label: 'Are the snowmobiles registered and trail-permitted in the state?*', type: 'select', required: true, options: YES_NO_CHOICES },
+  ],
+  describe: (unit) => describeVehicle(unit, 'New Snowmobile'),
+  rate(ctx, quote): ProductRateResult {
+    const course = answered(quote, 'safetyCourse');
+    const discounts = commonDiscounts(ctx, quote, [[course, 'Snowmobile Safety Course', 0.9]]);
+    const units = unitRate(ctx, quote, snowmobile, (unit, base) => {
+      const v = unit.values;
+      const type = factor({ Trail: 1, Crossover: 1.1, Mountain: 1.3, Utility: 0.85, Youth: 0.5 }, v.type);
+      const cc = band(Number(v.cc) || 600, [[250, 0.7], [600, 0.95], [850, 1.1]], 1.25);
+      const value = clamp(Math.sqrt((money(v.value) || 10000) / 10000), 0.5, 1.8);
+      const storage = factor({ 'Locked garage or shed': 0.9, 'Enclosed trailer': 0.95, 'Outdoors / covered': 1.15 }, v.storage);
+      const territory = ctx.territory(v.garagingZip ?? '');
+      const people = ctx.driverFactor * ctx.priorFactor * ctx.scoreFactor * ctx.mvrFactor;
+      // Snowmobiles are ridden a few months a year, so liability is a fraction of a motorcycle's.
+      return {
+        bipd: base('bipd') * 0.6 * type * cc * territory * people * discounts.factor,
+        umbi: base('umbi') * 0.6 * territory,
+        medpay: base('medpay') * type,
+        comp: base('comp') * value * storage * territory * ctx.scoreFactor * discounts.factor,
+        coll: base('coll') * 0.8 * type * cc * value * people * discounts.factor,
+        cpe: base('cpe'), contents: base('contents'), roadside: base('roadside'),
+      };
+    }, snowmobile.describe);
+    return { units, policy: {}, discounts: discounts.names, factors: [...reportFactors(ctx), { label: 'Primary operator factor', value: pct(ctx.driverFactor) }, ...discounts.factors] };
+  },
+};
+
+export const PRODUCT_CONFIGS: Record<OtherProductKey, ProductConfig> = { motorcycle, boat, motorhome, trailer, snowmobile, renters };
 export const OTHER_PRODUCTS = Object.keys(PRODUCT_CONFIGS) as OtherProductKey[];
 
 /** Config for any non-Auto product, personal or commercial. */

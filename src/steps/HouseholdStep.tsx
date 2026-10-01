@@ -6,7 +6,7 @@ import { fieldHints } from '@/data/trainingHints';
 import { useQuote } from '@/context/useQuote';
 import { ageOn, ratingDate } from '@/utils/dates';
 import { driverName, vehicleLabel } from '@/utils/ratingEngine';
-import { isLicensed, monthsLicensed } from '@/utils/validation';
+import { isLicensed, monthsLicensed, needsLicensedDrivers } from '@/utils/validation';
 import { WizardLayout } from '@/components/wizard/WizardLayout';
 import { AddButton, RemoveButton, WizardCard, WizardField, WizardRadio, WizardSelect } from '@/components/wizard/primitives';
 
@@ -45,6 +45,7 @@ export function HouseholdStep() {
   const youthful = age !== null && age < 25;
   const vehicleOptions = vehicles.map((vehicle, i) => ({ value: vehicle.id, label: vehicleLabel(vehicle, i) }));
   const occupations = OCCUPATIONS[driver.employment] ?? [];
+  const licensing = needsLicensedDrivers(state);
 
   const setEmployment = (employment: string) => {
     const options = OCCUPATIONS[employment] ?? [];
@@ -84,6 +85,7 @@ export function HouseholdStep() {
           <WizardField id={id('dob')} label="Date of Birth:*" placeholder="MM/DD/YYYY" mask="date" value={driver.dob} onChange={setAge} />
           <WizardField id={id('ssn')} label="Social Security Number:" placeholder="XXX-XX-XXXX" mask="ssn" value={driver.ssn} onChange={(ssn) => set({ ssn })} />
           <WizardSelect id={id('gender')} label="Gender:*" options={GENDERS} value={driver.gender} onChange={(gender) => set({ gender })} />
+          {licensing && <>
           <WizardSelect id={id('education')} label="Highest Level of Education:*" options={EDUCATION_LEVELS} value={driver.education} onChange={(education) => set({ education })} />
           <WizardSelect id={id('employment')} label="Employment:*" options={EMPLOYMENT} value={driver.employment} onChange={setEmployment} />
           <WizardSelect id={id('occupation')} label="Occupation:*" disabled={!driver.employment} options={occupations} value={driver.occupation} onChange={(occupation) => set({ occupation })} />
@@ -94,7 +96,9 @@ export function HouseholdStep() {
           <WizardField id={id('licenseNumber')} label="License Number:" disabled={!licensed || !driver.licenseStatus} value={driver.licenseNumber} onChange={(licenseNumber) => set({ licenseNumber: licenseNumber.toUpperCase().slice(0, 16) })} />
           <WizardSelect id={id('previousLicenseState')} label="Previous License State:*" help hint={fieldHints.previousLicenseState} disabled={!licensed || months === null || months >= 36} options={US_STATES} value={driver.previousLicenseState} onChange={(previousLicenseState) => set({ previousLicenseState })} />
           <WizardRadio id={id('stateFiling')} label="State Filing:*" name={`filing-${driver.id}`} help hint={fieldHints.stateFiling} value={driver.stateFiling} onChange={(stateFiling) => set({ stateFiling })} />
+          </>}
         </WizardCard>
+        {licensing && <>
         <WizardCard title="Auto Drivers" subtitle={name}>
           {isInsured ? <WizardField id={id('operatorType')} label="Principal/Occasional Operator:*" help disabled value={driver.operatorType} /> : <WizardSelect id={id('operatorType')} label="Principal/Occasional Operator:*" help options={OPERATOR_TYPES} value={driver.operatorType} onChange={(operatorType) => set({ operatorType })} />}
           <WizardField id={id('ageFirstLicensed')} label="Age First Licensed (in the U.S., Canada or Puerto Rico):*" help hint={fieldHints.ageFirstLicensed} disabled={!licensed} mask="digits" value={driver.ageFirstLicensed} onChange={(ageFirstLicensed) => set({ ageFirstLicensed })} />
@@ -105,6 +109,7 @@ export function HouseholdStep() {
           {youthful ? <WizardSelect id={id('goodStudent')} label="Good Student:*" tag options={YES_NO} value={driver.goodStudent} onChange={(goodStudent) => set({ goodStudent: goodStudent as YesNo })} /> : <WizardField label="Good Student:*" tag disabled value={driver.goodStudent} />}
         </WizardCard>
         <WizardCard title="Accidents / Violations" titleHelp={fieldHints.incidents} subtitle={name}><IncidentRows driver={driver} /></WizardCard>
+        </>}
       </div>
       <WizardCard title="Household Members" split={false} className="w-[280px] shrink-0">
         {drivers.length > 1 && <ul>{drivers.map((entry) => <li key={entry.id}><button type="button" onClick={() => setActiveId(entry.id)} className={`flex w-full items-center gap-2 border-b border-[#edf1f3] px-[21px] py-[11px] text-left text-[14px] text-[#003865] hover:bg-[#e8f4fa] ${entry.id === driver.id ? 'bg-[#eef3f6] font-bold' : ''}`}><UserRound size={18} strokeWidth={1.6} /><span className="flex-1">{driverName(entry)}</span><span className="text-[11px] font-medium text-[#5c6670]">{entry.relationship || 'Member'} · {entry.driverStatus || '—'}</span></button></li>)}</ul>}

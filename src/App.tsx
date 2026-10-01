@@ -21,9 +21,10 @@ import { BillingPage, ClaimsPage, CrossSellPage, EsignPage, ProspectsPage } from
 import { AgencyPage, CommissionsPage, NewsPage, ProductGuidesPage, ProductionPage, SupportPage } from '@/servicing/portal/AgencyPages';
 import { SessionGuard } from '@/components/SessionGuard';
 import { ActivityPage } from '@/servicing/portal/ActivityPage';
+import { BookBuilderPage, ExistingQuotesPage, NewQuotePage } from '@/servicing/portal/NewBusinessPages';
 import type { PortalPage } from '@/context/quoteStore';
 
-const portalPages: Record<PortalPage, () => JSX.Element> = { activity: ActivityPage, billing: BillingPage, esign: EsignPage, claims: ClaimsPage, prospects: ProspectsPage, crossSell: CrossSellPage, productGuides: ProductGuidesPage, agency: AgencyPage, production: ProductionPage, commissions: CommissionsPage, news: NewsPage, support: SupportPage };
+const portalPages: Record<PortalPage, () => JSX.Element> = { newQuote: NewQuotePage, existingQuotes: ExistingQuotesPage, bookBuilder: BookBuilderPage, activity: ActivityPage, billing: BillingPage, esign: EsignPage, claims: ClaimsPage, prospects: ProspectsPage, crossSell: CrossSellPage, productGuides: ProductGuidesPage, agency: AgencyPage, production: ProductionPage, commissions: CommissionsPage, news: NewsPage, support: SupportPage };
 
 // Index matches STEPS in quoteStore.
 const stepScreens = [NamedInsuredStep, ProductsStep, HouseholdStep, AdditionalDetailsStep, CoveragesStep, PortfolioStep, PointOfSaleStep, FinalSaleStep];
@@ -59,7 +60,8 @@ function Screen() {
   if (ui.view === 'pending') return <PendingList />;
   if (ui.view === 'customer') return <CustomerSummary key={ui.customerKey} />;
   if (ui.view === 'proof') return <ProofCenter key={ui.policyId} />;
-  if (ui.view === 'portal') { const Page = portalPages[ui.portalPage]; return <Page key={ui.portalPage} />; }
+  const picker = modalOpen && ui.view !== 'dashboard' ? <ProductModal onCancel={() => setModalOpen(false)} onContinue={startNewQuote} onCommercial={startCommercial} /> : null;
+  if (ui.view === 'portal') { const Page = portalPages[ui.portalPage]; return <><Page key={ui.portalPage} />{picker}</>; }
   if (ui.view !== 'dashboard') return <Step key={ui.step} />;
   return <div className="app-zoom"><Dashboard onSelectProduct={() => setModalOpen(true)} onOpenExisting={() => goToStep(ui.step)} existingQuote={existingQuote} showBindingBanner={modalOpen} />{modalOpen && <ProductModal onCancel={() => setModalOpen(false)} onContinue={startNewQuote} onCommercial={startCommercial} />}</div>;
 }

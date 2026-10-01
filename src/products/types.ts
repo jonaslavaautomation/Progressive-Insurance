@@ -2,7 +2,7 @@
 // Travel Trailer, Renters). Auto keeps its dedicated model in src/types/quote.ts.
 import type { BillPlan, RatingFactor } from '@/types/quote';
 
-export type OtherProductKey = 'motorcycle' | 'boat' | 'motorhome' | 'trailer' | 'renters';
+export type OtherProductKey = 'motorcycle' | 'boat' | 'motorhome' | 'trailer' | 'snowmobile' | 'renters';
 export type ProductKey = 'auto' | OtherProductKey;
 /** Commercial Lines products (quoted in the separate Commercial flow). */
 export type CommercialKey = 'commercialAuto' | 'bop' | 'mgmt';
