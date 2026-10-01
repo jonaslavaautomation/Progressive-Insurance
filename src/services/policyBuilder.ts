@@ -49,7 +49,7 @@ export function autoUnits(quote: QuoteData, rating: RatingResult): { units: Unit
       { label: 'Uninsured/Underinsured Motorist BI', value: optionLabel(UM_BI, coverages.uninsuredMotorist), premium: rating.umbi },
       ...(coverages.umpd && coverages.umpd !== 'None' ? [{ label: 'Uninsured Motorist Property Damage', value: optionLabel(UMPD, coverages.umpd), premium: rating.umpd }] : []),
       ...(coverages.pip ? [{ label: 'Personal Injury Protection', value: optionLabel(PIP_OPTIONS, coverages.pip), premium: rating.pip }] : []),
-      { label: 'Snapshot', value: coverages.snapshot || 'Do Not Participate' },
+      { label: 'DriveSense', value: coverages.snapshot || 'Do Not Participate' },
     ],
   };
 }

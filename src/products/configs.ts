@@ -293,7 +293,7 @@ export const RENTERS_PERSONAL_PROPERTY = { min: 5000, max: 150000 };
 export const SCHEDULED_CATEGORIES = ['Jewelry', 'Watches', 'Furs', 'Fine Arts', 'Musical Instruments', 'Cameras', 'Silverware', 'Collectibles'];
 
 const rentersCoverages: CoverageDef[] = [
-  { key: 'homeShield', label: 'HomeShield R Package:', type: 'select', scope: 'policy', required: true, default: 'No', options: choices([['No', 'Not selected', 0], ['Yes', 'Selected', 45]]), help: 'Bundles Personal Property Replacement Cost, Water Backup ($5,000) and Identity Theft Expense coverage at a package price.' },
+  { key: 'homeShield', label: 'HomeGuard Package:', type: 'select', scope: 'policy', required: true, default: 'No', options: choices([['No', 'Not selected', 0], ['Yes', 'Selected', 45]]), help: 'Bundles Personal Property Replacement Cost, Water Backup ($5,000) and Identity Theft Expense coverage at a package price.' },
   { key: 'liability', label: 'Liability Limit:*', type: 'select', scope: 'policy', required: true, default: '300000', options: choices([['100000', '$100,000', 28], ['300000', '$300,000', 38], ['500000', '$500,000', 48]]) },
   { key: 'medpay', label: 'Medical Payments Limit:*', type: 'select', scope: 'policy', required: true, default: '5000', options: choices([['1000', '$1,000', 4], ['2000', '$2,000', 7], ['5000', '$5,000', 12]]) },
   { key: 'deductible', label: 'All Other Perils:*', type: 'select', scope: 'policy', required: true, default: '250', options: choices([['250', '$250'], ['500', '$500'], ['1000', '$1,000'], ['2500', '$2,500']]) },
@@ -303,7 +303,7 @@ const rentersCoverages: CoverageDef[] = [
 
 const PRIOR_FACTORS: Record<string, number> = { 'No prior renters insurance': 1.15 };
 const CLAIM_FACTORS: Record<string, number> = { '0 Claims': 1, '1 Claim': 1.3, '2 Claims': 1.65 };
-const PACKAGE_FACTORS: Record<string, number> = { 'Progressive Auto 25/50': 0.9, 'Progressive Auto 50/100': 0.88, 'Progressive Auto 100/300': 0.86, 'Progressive Auto 250/500': 0.85, 'Other Progressive policy': 0.92 };
+const PACKAGE_FACTORS: Record<string, number> = { 'LAVA Auto 25/50': 0.9, 'LAVA Auto 50/100': 0.88, 'LAVA Auto 100/300': 0.86, 'LAVA Auto 250/500': 0.85, 'Other LAVA policy': 0.92 };
 
 const renters: ProductConfig = {
   key: 'renters', tileLabel: 'RENTERS (HO4)', tabLabel: 'RENTERS', name: 'Renters (HO4)', unitLabel: 'Rental Location', unitPlural: 'Rental Locations', multiUnit: false, maxUnits: 1, termMonths: 12, motorized: false, usesMvr: false, minimumPremium: 100,
@@ -320,11 +320,11 @@ const renters: ProductConfig = {
   ],
   coverages: rentersCoverages,
   questions: [
-    { key: 'priorInsurer', label: 'Prior Renters Insurer:*', type: 'select', required: true, options: choices(['No prior renters insurance', 'Allstate', 'American Family', 'Erie', 'Farmers', 'GEICO', 'Lemonade', 'Liberty Mutual', 'Nationwide', 'Progressive', 'State Farm', 'USAA', 'Other']) },
+    { key: 'priorInsurer', label: 'Prior Renters Insurer:*', type: 'select', required: true, options: choices(['No prior renters insurance', 'Allstate', 'American Family', 'Erie', 'Farmers', 'GEICO', 'Lemonade', 'Liberty Mutual', 'Nationwide', 'State Farm', 'USAA', 'Other']) },
     { key: 'priorLiability', label: 'Prior Renters Liability Limit:*', type: 'select', required: true, options: choices(['$100,000', '$300,000', '$500,000']), showIf: ({ values }) => !!values.priorInsurer && values.priorInsurer !== 'No prior renters insurance' },
     { key: 'claims', label: 'Reported claims excluding wind, hail, or lightning in the past 3 years:*', type: 'select', required: true, options: choices(['0 Claims', '1 Claim', '2 Claims', '3 or more Claims']), ineligibleIf: '3 or more Claims', ineligibleMessage: 'Applicants with 3 or more claims in the past 3 years are not eligible for Renters.' },
     { key: 'esign', label: 'E-Signature:', type: 'select', options: YES_NO_CHOICES },
-    { key: 'packagePolicy', label: 'Package Policy:*', type: 'select', required: true, options: choices(['None', 'Progressive Auto 25/50', 'Progressive Auto 50/100', 'Progressive Auto 100/300', 'Progressive Auto 250/500', 'Other Progressive policy']), help: 'A Progressive auto policy (current or quoted together) earns the package discount.' },
+    { key: 'packagePolicy', label: 'Package Policy:*', type: 'select', required: true, options: choices(['None', 'LAVA Auto 25/50', 'LAVA Auto 50/100', 'LAVA Auto 100/300', 'LAVA Auto 250/500', 'Other LAVA policy']), help: 'A LAVA auto policy (current or quoted together) earns the package discount.' },
     { key: 'securedSubdivision', label: 'Secured Subdivision:', type: 'select', options: YES_NO_CHOICES, help: 'Gated community or building with a doorman or controlled access.' },
     { key: 'paperless', label: 'Apply Paperless and accept documents and bills delivered through email?*', type: 'select', required: true, options: YES_NO_CHOICES },
   ],

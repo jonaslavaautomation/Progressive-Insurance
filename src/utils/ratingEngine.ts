@@ -110,7 +110,7 @@ export function rateQuote(quote: QuoteData): RatingResult {
   const appliedDiscounts: string[] = [];
   if (homeowner) appliedDiscounts.push('Homeowner');
   if (multiPolicy) appliedDiscounts.push('Multi Policy');
-  if (snapshot) appliedDiscounts.push('Snapshot Participation');
+  if (snapshot) appliedDiscounts.push('DriveSense Participation');
   if (paperless) appliedDiscounts.push('Paperless');
   if (prior.factor < 1) appliedDiscounts.push('Continuous Insurance');
 
@@ -159,7 +159,7 @@ export function rateQuote(quote: QuoteData): RatingResult {
     { label: 'Territory (garaging ZIP)', value: pct(territoryFactor(quote.vehicles[0]?.garagingZip ?? '')) },
     ...(homeowner ? [{ label: 'Homeowner discount', value: '−7%' }] : []),
     ...(multiPolicy ? [{ label: 'Multi Policy discount', value: '−8%' }] : []),
-    ...(snapshot ? [{ label: 'Snapshot participation discount', value: '−15%' }] : []),
+    ...(snapshot ? [{ label: 'DriveSense participation discount', value: '−15%' }] : []),
     ...(paperless ? [{ label: 'Paperless discount', value: '−3%' }] : []),
     { label: 'Paid in Full discount (Pay In Full plan only)', value: `−${PAY_IN_FULL_DISCOUNT * 100}%` },
   ];
@@ -172,7 +172,7 @@ export function rateQuote(quote: QuoteData): RatingResult {
     fullTermPremium,
     billPlans,
     appliedDiscounts,
-    eligibleDiscounts: [...(multiPolicy ? [] : ['Multi Policy']), ...(snapshot ? [] : ['Snapshot Participation'])],
+    eligibleDiscounts: [...(multiPolicy ? [] : ['Multi Policy']), ...(snapshot ? [] : ['DriveSense Participation'])],
     factors,
     reportsApplied: applied,
   };

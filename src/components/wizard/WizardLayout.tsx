@@ -1,4 +1,4 @@
-// Wizard chrome matching the FAO quote screens: fixed 60px header, fixed 200px stepper,
+// Wizard chrome for the LAVA Training quote screens: fixed 60px header, fixed 200px stepper,
 // fixed 57px action bar, and a scrolling content pane between them.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AlertTriangle, ArrowLeft, ArrowRight, Lightbulb } from 'lucide-react';
@@ -19,7 +19,7 @@ import { activeProducts } from '@/utils/ratingEngine';
 const focusable = 'outline-none focus-visible:shadow-[0_0_0_2px_#fff,0_0_0_4px_#e87722]';
 
 export function Logo({ className = 'text-[19px]' }: { className?: string }) {
-  return <span className={`whitespace-nowrap font-light tracking-[-.4px] ${className}`}>FOR<b className="font-bold">AGENTS</b>ONLY</span>;
+  return <span className={`whitespace-nowrap font-light tracking-[-.4px] ${className}`}>LAVA<b className="font-bold">TRAINING</b></span>;
 }
 
 function HeaderItem({ label, value }: { label: string; value: string }) {
@@ -87,8 +87,8 @@ export function ActionBar({ backLabel, nextLabel, onBack, onNext, center, center
 }
 
 export function PageLinks() {
-  const links = ['Privacy Statement', 'Terms of Use', 'Contact Us', 'Site Map', 'Do Not Sell or Share My Personal Information (CA Residents Only)'];
-  return <footer className="mx-[20px] mb-[18px] mt-[18px] flex max-w-[1070px] flex-wrap items-center gap-x-[8px] gap-y-1 border-t border-[#cfd8de] pt-[14px] text-[11px] text-[#2e3a43] print:hidden">{links.map((link, index) => <span key={link} className="flex items-center gap-[8px]">{index > 0 && <span className="text-[#7b858a]">|</span>}<LegalLink label={link} className="underline hover:text-[#0073cf]" /></span>)}<span className="ml-[12px]">Copyright 1997-{new Date().getFullYear()} Progressive Casualty Insurance Company. All rights reserved.</span></footer>;
+  const links = ['About LAVA Training', 'Privacy Statement', 'Terms of Use', 'Contact Us', 'Site Map', 'Do Not Sell or Share My Personal Information (CA Residents Only)'];
+  return <footer className="mx-[20px] mb-[18px] mt-[18px] flex max-w-[1070px] flex-wrap items-center gap-x-[8px] gap-y-1 border-t border-[#cfd8de] pt-[14px] text-[11px] text-[#2e3a43] print:hidden">{links.map((link, index) => <span key={link} className="flex items-center gap-[8px]">{index > 0 && <span className="text-[#7b858a]">|</span>}<LegalLink label={link} className="underline hover:text-[#0073cf]" /></span>)}<span className="ml-[12px]">© {new Date().getFullYear()} LAVA Automation. LAVA Training is a training simulator, not affiliated with, endorsed by, or sponsored by Progressive Casualty Insurance Company or its affiliates.</span></footer>;
 }
 
 function ValidationSummary({ errors, target, onSelect }: { errors: Record<string, string>; target: string; onSelect: (id: string) => void }) {

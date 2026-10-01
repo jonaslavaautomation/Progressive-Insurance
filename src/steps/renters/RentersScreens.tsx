@@ -191,7 +191,7 @@ export function RentersCoveragesContent({ billPlans }: { billPlans: ReactNode })
     setDraft({ id: '', category: draft.category, description: '', value: 0 });
   };
   return <div className="mt-[20px] max-w-[1100px] space-y-[20px]">
-    {!prefs.defaults && <div role="status" className="flex w-fit items-start gap-2 rounded-[3px] border border-[#cfdbe3] bg-white px-[14px] py-[10px] text-[13px]"><AlertTriangle size={17} className="mt-px shrink-0 fill-[#e87722] text-white" /><span><b>Please update your agent default coverage selections.</b><br /><button type="button" onClick={() => openPage('newQuote')} className="text-[#0073cf] underline">FAO homepage &gt; New Business menu &gt; Quote Preferences &gt; Default Coverages</button></span></div>}
+    {!prefs.defaults && <div role="status" className="flex w-fit items-start gap-2 rounded-[3px] border border-[#cfdbe3] bg-white px-[14px] py-[10px] text-[13px]"><AlertTriangle size={17} className="mt-px shrink-0 fill-[#e87722] text-white" /><span><b>Please update your agent default coverage selections.</b><br /><button type="button" onClick={() => openPage('newQuote')} className="text-[#0073cf] underline">LAVA Training homepage &gt; New Business menu &gt; Quote Preferences &gt; Default Coverages</button></span></div>}
     <Card title="Property Details">
       <div className="px-[20px] py-[14px] text-[13.5px]">
         <p className="font-bold">Address: {[address, `${rules.code} ${atMailing ? mailing.zip : unit.values.garagingZip ?? ''}`].filter(Boolean).join(', ').toUpperCase()}</p>
@@ -200,9 +200,9 @@ export function RentersCoveragesContent({ billPlans }: { billPlans: ReactNode })
       <div className="border-t border-[#edf1f3] px-[20px] py-[16px]">
         <button type="button" id="coverage.renters.policy.homeShield" aria-pressed={c.homeShield === 'Yes'} onClick={() => set('homeShield')(c.homeShield === 'Yes' ? 'No' : 'Yes')} className={`mx-auto flex items-center gap-3 rounded-[3px] border-2 px-[16px] py-[10px] text-left text-[14px] ${c.homeShield === 'Yes' ? 'border-[#0073cf] bg-[#e8f4fa]' : 'border-[#9aa6ae] bg-white hover:border-[#0073cf]'}`}>
           <input type="checkbox" readOnly checked={c.homeShield === 'Yes'} tabIndex={-1} className="h-[17px] w-[17px] accent-[#003865]" />
-          <span><b className="block">HomeShield R Package</b><span className="text-[12.5px]">{formatCurrency(amounts.homeShield || 45)}</span></span><ShieldCheck size={26} className="text-[#003865]" />
+          <span><b className="block">HomeGuard Package</b><span className="text-[12.5px]">{formatCurrency(amounts.homeShield || 45)}</span></span><ShieldCheck size={26} className="text-[#003865]" />
         </button>
-        <p className="mt-2 flex items-center justify-center gap-2 text-[12px] text-[#5c6670]">{coverage('homeShield').help}<HelpDot text={coverage('homeShield').help} label="HomeShield R Package" /></p>
+        <p className="mt-2 flex items-center justify-center gap-2 text-[12px] text-[#5c6670]">{coverage('homeShield').help}<HelpDot text={coverage('homeShield').help} label="HomeGuard Package" /></p>
       </div>
     </Card>
     <div className="grid grid-cols-2 gap-[20px]">

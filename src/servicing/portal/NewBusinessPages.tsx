@@ -59,7 +59,7 @@ function DefaultCoveragesModal({ onClose }: { onClose: (message?: string) => voi
       {field('Liability Limit', <SelectControl value={draft.renters.liability} options={rentersOptions('liability')} onChange={(liability) => renters({ liability })} />)}
       {field('Medical Payments Limit', <SelectControl value={draft.renters.medpay} options={rentersOptions('medpay')} onChange={(medpay) => renters({ medpay })} />)}
       {field('All Other Perils deductible', <SelectControl value={draft.renters.deductible} options={rentersOptions('deductible')} onChange={(deductible) => renters({ deductible })} />)}
-      {field('HomeShield R Package', <SelectControl value={draft.renters.homeShield} options={rentersOptions('homeShield')} onChange={(homeShield) => renters({ homeShield })} />)}
+      {field('HomeGuard Package', <SelectControl value={draft.renters.homeShield} options={rentersOptions('homeShield')} onChange={(homeShield) => renters({ homeShield })} />)}
     </div>
     <InlineError message={error} />
   </Modal>;
@@ -177,8 +177,8 @@ export function BookBuilderPage() {
   const { state, openPage } = useQuote();
   const cross = crossSellOpportunities(state.policies).length;
   const winBack = prospects(state.policies).length;
-  return <PortalLayout crumbs={[{ label: 'New Business' }, { label: 'Book Builder Program' }]}>
-    <PageTitle title="Book Builder Program" intro="Grow your book with leads from your own customers: bundle opportunities, win-backs and requotes. Book Builder agencies earn bonus points toward their Paths to Partnership tier for every bundled policy." />
+  return <PortalLayout crumbs={[{ label: 'New Business' }, { label: 'Book Growth Program' }]}>
+    <PageTitle title="Book Growth Program" intro="Grow your book with leads from your own customers: bundle opportunities, win-backs and requotes. Book Growth agencies earn bonus points toward their LAVA Agency Growth tier for every bundled policy." />
     <div className="mt-5 grid max-w-[980px] grid-cols-3 gap-4">{([['Bundle opportunities', String(cross), 'Customers missing a product that pairs with what they have.', 'crossSell'], ['Win-back prospects', String(winBack), 'Cancelled, expired or non-renewed customers to requote.', 'prospects'], ['Policies in force', String(state.policies.filter((policy) => policy.status === 'Active' || policy.status === 'Pending Cancel').length), 'Your current book of business.', 'production']] as [string, string, string, string][]).map(([title, value, text, page]) => <section key={title} className="rounded-[3px] border border-[#cfdbe3] p-4"><div className="text-[11px] font-bold uppercase text-[#5c6670]">{title}</div><div className="mt-1 text-[28px] font-bold text-[#003865]">{value}</div><p className="mt-1 text-[12.5px]">{text}</p><button type="button" onClick={() => openPage(page as never)} className={`mt-3 ${blueButton}`}>View</button></section>)}</div>
     <h2 className="mt-8 text-[16px] font-bold text-[#003865]">How it works</h2>
     <ol className="mt-2 max-w-[980px] list-decimal space-y-1 pl-5 text-[13px]"><li>Work the bundle list: quote Renters for auto-only customers and Auto for renters-only customers.</li><li>Call win-back prospects 30 days before their prior policy&rsquo;s anniversary.</li><li>Every bound bundle adds the Multi Policy discount and counts toward your tier.</li></ol>

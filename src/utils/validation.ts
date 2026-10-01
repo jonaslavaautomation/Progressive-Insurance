@@ -206,7 +206,7 @@ function validateCoverages(quote: QuoteData, errors: FieldErrors) {
   const { coverages } = quote;
   required(errors, 'coverages.bodilyInjuryPd', coverages.bodilyInjuryPd, 'Bodily Injury & Property Damage is required.');
   required(errors, 'coverages.medicalPayments', coverages.medicalPayments, 'Medical Payment is required.');
-  required(errors, 'coverages.snapshot', coverages.snapshot, 'Snapshot Enrollment is required.');
+  required(errors, 'coverages.snapshot', coverages.snapshot, 'DriveSense Enrollment is required.');
   required(errors, 'coverages.uninsuredMotorist', coverages.uninsuredMotorist, 'Uninsured/Underinsured Motorist Bodily Injury is required.');
   const rules = rulesFor(quote.policy.quoteState);
   if (coverages.bodilyInjuryPd && !rules.liability.includes(coverages.bodilyInjuryPd)) errors['coverages.bodilyInjuryPd'] = `Select a liability limit available in ${rules.name} (minimum: ${rules.minimumText})`;

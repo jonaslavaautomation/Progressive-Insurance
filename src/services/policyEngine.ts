@@ -12,7 +12,7 @@ export const otherNoticeDays = (policy: PolicyRecord) => rulesFor(policy.state).
 const filesFs1 = (policy: PolicyRecord) => policy.product === 'auto' && !!rulesFor(policy.state).reporting?.system.includes('FS-1');
 
 export const BILL_LEAD_DAYS = 20;
-/** Late fee applies when a payment is more than 2 days past its due date (Progressive installment filing). */
+/** Late fee applies when a payment is more than 2 days past its due date. */
 export const LATE_AFTER_DAYS = 2;
 export const LATE_FEE = 25;
 export const RETURNED_PAYMENT_FEE = 25;

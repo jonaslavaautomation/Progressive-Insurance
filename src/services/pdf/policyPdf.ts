@@ -53,11 +53,9 @@ function pageHeader(ctx: Ctx) {
   }
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(15);
-  doc.text('FOR', wordmarkX, 33);
+  doc.text('LAVA', wordmarkX, 33);
   doc.setFont('helvetica', 'bold');
-  doc.text('AGENTS', wordmarkX + doc.getTextWidth('FOR') + 1, 33);
-  doc.setFont('helvetica', 'normal');
-  doc.text('ONLY', wordmarkX + doc.getTextWidth('FORAGENTS') + 4, 33);
+  doc.text('TRAINING', wordmarkX + doc.getTextWidth('LAVA') + 1, 33);
   doc.setFontSize(11); doc.setFont('helvetica', 'bold');
   doc.text(ctx.title, PAGE_W - MARGIN, 26, { align: 'right' });
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
@@ -83,6 +81,8 @@ function pageFooters(doc: jsPDF, policy: PolicyRecord) {
     doc.line(MARGIN, PAGE_H - 36, PAGE_W - MARGIN, PAGE_H - 36);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...GREY);
     doc.text(`Policy #${policy.policyNumber} · Named insured: ${policy.insured.name} · Agent code ${policy.agentCode}`, MARGIN, PAGE_H - 24);
+    doc.setFontSize(6.5);
+    doc.text('LAVA Training simulator by LAVA Automation. Not affiliated with, endorsed by, or sponsored by Progressive Casualty Insurance Company. Not a real insurance document.', MARGIN, PAGE_H - 14);
     doc.text(`Page ${page} of ${pages}`, PAGE_W - MARGIN, PAGE_H - 24, { align: 'right' });
   }
 }
@@ -286,7 +286,7 @@ function coverLetter(ctx: Ctx) {
 
 function create(policy: PolicyRecord, title: string, copy?: PacketCopy, logo?: string | null): Ctx {
   const doc = new jsPDF({ unit: 'pt', format: 'letter' });
-  doc.setProperties({ title: `${title} - Policy ${policy.policyNumber}`, subject: 'Training simulation - not a valid insurance document', creator: 'ForAgentsOnly training portal' });
+  doc.setProperties({ title: `${title} - Policy ${policy.policyNumber}`, subject: 'Training simulation - not a valid insurance document', creator: 'LAVA Training portal' });
   const ctx: Ctx = { doc, y: 0, policy, title, copy, logo };
   pageHeader(ctx);
   return ctx;

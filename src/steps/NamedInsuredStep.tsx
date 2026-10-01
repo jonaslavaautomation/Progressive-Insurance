@@ -7,7 +7,7 @@ import { WizardLayout } from '@/components/wizard/WizardLayout';
 import { AddLink, FormCheckbox, FormInput, FormPhone, FormSection, FormSelect, HelpDot } from '@/components/wizard/primitives';
 
 const MAX_PHONES = 3;
-const DISCLOSURE = 'Like most insurance companies, Progressive uses information from you and other sources, such as your driving, claims and credit histories, to calculate an accurate price for your insurance. New or updated information may be used to calculate your renewal premium. Its Privacy Policy explains how Progressive discloses and protects your personal information and how you may access and correct it. I can provide a copy at your request.';
+const DISCLOSURE = 'Like most insurance companies, LAVA Training uses information from you and other sources, such as your driving, claims and credit histories, to calculate an accurate price for your insurance. New or updated information may be used to calculate your renewal premium. Its Privacy Policy explains how LAVA Training discloses and protects your personal information and how you may access and correct it. I can provide a copy at your request.';
 
 export function NamedInsuredStep() {
   const { state, updateInsured, updateAddress } = useQuote();
@@ -21,7 +21,7 @@ export function NamedInsuredStep() {
     <p className="mb-[10px] text-[12px] text-[#2e3a43]">(* Indicates required field)</p>
     <div className="grid grid-cols-[560px_560px] items-start gap-[22px]">
       <div className="space-y-[22px]">
-        <FormSection title="Policy"><FormInput label="PGR Agent Code:*" value={policy.agentCode} disabled hint={fieldHints.agentCode} /></FormSection>
+        <FormSection title="Policy"><FormInput label="LAVA Agent Code:*" value={policy.agentCode} disabled hint={fieldHints.agentCode} /></FormSection>
         <FormSection title="Principal Named Insured (all products)">
           <FormInput id="insured.firstName" label="First Name:*" value={insured.firstName} onChange={set('firstName')} />
           <FormInput id="insured.middleInitial" label="Middle Initial:" value={insured.middleInitial} onChange={(value) => updateInsured({ middleInitial: value.slice(-1).toUpperCase() })} />

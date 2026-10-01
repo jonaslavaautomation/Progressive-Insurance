@@ -120,7 +120,7 @@ function quoteFor(customer: PracticeCustomer, agent: AgentProfile, effectiveDate
   if (customer.renters) {
     const renters = createProductQuote('renters', generateQuoteNumber(), customer.zip);
     renters.units[0].values = { ...renters.units[0].values, sameAsMailing: 'Yes', garagingZip: customer.zip, dwelling: 'Apartment', dogBreed: 'No', verifiedNone: 'Yes', personalProperty: '20000' };
-    renters.answers = { priorInsurer: 'State Farm', priorLiability: '$300,000', claims: '0 Claims', esign: 'Yes', packagePolicy: 'Progressive Auto 100/300', securedSubdivision: 'No', paperless: 'Yes' };
+    renters.answers = { priorInsurer: 'State Farm', priorLiability: '$300,000', claims: '0 Claims', esign: 'Yes', packagePolicy: 'LAVA Auto 100/300', securedSubdivision: 'No', paperless: 'Yes' };
     renters.billPlan = customer.renters;
     quote.productQuotes = { renters };
   }

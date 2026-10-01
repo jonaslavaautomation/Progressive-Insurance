@@ -1,4 +1,4 @@
-// SmartView "Policies pending cancel or renewal": three tabs (non-payment, underwriting, renewals)
+// LAVA Alerts "Policies pending cancel or renewal": three tabs (non-payment, underwriting, renewals)
 // with sorting, filtering, paging, export, print and Make Payment.
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Info } from 'lucide-react';
