@@ -1,11 +1,14 @@
-// Vercel Routing Middleware: every request (pages, scripts, images, PDFs) must present valid
-// credentials before any of the app is sent. Visitors without them get a 401 and never receive
-// the JavaScript bundle, so there is nothing to inspect.
+// Vercel Routing Middleware: when the login gate is on, every request (pages, scripts, images,
+// PDFs) must present valid credentials before any of the app is sent. Visitors without them get a
+// 401 and never receive the JavaScript bundle, so there is nothing to inspect.
 //
-// Configure in Vercel → Project → Settings → Environment Variables (Production and Preview):
+// The gate is OFF until it is switched on, so the site is open while it is being built.
+// Turn it on in Vercel → Project → Settings → Environment Variables (Production and Preview),
+// then redeploy:
+//   SITE_LOGIN = "on"
 //   SITE_USERS = "alice:<sha256-hex-of-password>,bob:<sha256-hex>"   (one entry per trainee)
 // Generate a hash with:  node -e "console.log(require('crypto').createHash('sha256').update(process.argv[1]).digest('hex'))" "the-password"
-// Fails closed: if SITE_USERS is missing or empty, the site returns 503 instead of opening up.
+// Fails closed once on: if SITE_USERS has no valid entry, the site returns 503 instead of opening up.
 
 export const config = { matcher: '/(.*)' };
 
@@ -45,7 +48,11 @@ const deny = (status: 401 | 503, message: string) => new Response(message, {
   },
 });
 
+/** Continue to the static app (Vercel's "next()" for framework-agnostic middleware). */
+const pass = () => new Response(null, { headers: { 'x-middleware-next': '1' } });
+
 export default async function middleware(request: Request): Promise<Response> {
+  if (process.env.SITE_LOGIN?.trim().toLowerCase() !== 'on') return pass();
   const users = parseUsers(process.env.SITE_USERS);
   if (!users.size) return deny(503, 'LAVA Training access is not configured. Ask an administrator to set SITE_USERS.');
   const header = request.headers.get('authorization') ?? '';
@@ -58,6 +65,5 @@ export default async function middleware(request: Request): Promise<Response> {
   const expected = users.get(name) ?? '0'.repeat(64);
   const ok = split > 0 && safeEqual(await sha256Hex(password), expected) && users.has(name);
   if (!ok) return deny(401, 'Invalid user name or password.');
-  // Continue to the static app (Vercel's "next()" for framework-agnostic middleware).
-  return new Response(null, { headers: { 'x-middleware-next': '1' } });
+  return pass();
 }

@@ -53,7 +53,7 @@ These are required for a SOC 2 report and cannot be implemented in code:
 
 ## Configuration checklist (before going live)
 
-- [ ] Set `SITE_USERS` in Vercel for Production and Preview (see `.env.example`). Until it is set, the site returns 503.
+- [ ] Turn on the login gate: set `SITE_LOGIN=on` and `SITE_USERS` in Vercel for Production and Preview (see `.env.example`), then redeploy. **The gate is currently off while the app is being built, so the site is open to anyone with the URL: keep only fictitious data in it.**
 - [ ] Enable MFA on every GitHub and Vercel account.
 - [ ] Turn on GitHub branch protection for `main` (required review and passing CI).
 - [ ] Optionally enable Vercel Deployment Protection or an SSO proxy for MFA.
