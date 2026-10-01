@@ -20,4 +20,8 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
+  // Production hardening: no source maps, no console/debugger statements, no license or code
+  // comments in the shipped bundle.
+  build: { sourcemap: false },
+  esbuild: { drop: process.env.NODE_ENV === 'production' || process.argv.includes('build') ? ['console', 'debugger'] : [], legalComments: 'none' },
 });

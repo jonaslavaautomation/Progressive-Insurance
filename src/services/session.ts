@@ -17,9 +17,14 @@ function readPreviousLogin(): string {
   }
 }
 
-interface SessionState { signedOut: boolean; reason: 'manual' | 'timeout' | ''; lastLogin: string }
+interface SessionState { signedOut: boolean; reason: 'manual' | 'timeout' | 'cleared' | ''; lastLogin: string }
 
-let session: SessionState = { signedOut: false, reason: '', lastLogin: readPreviousLogin() };
+/** Set by signOutAndClear so the reloaded page opens on the signed-out screen. */
+function clearedFlag(): boolean {
+  try { const cleared = sessionStorage.getItem('fao-cleared') === '1'; sessionStorage.removeItem('fao-cleared'); return cleared; } catch { return false; }
+}
+const cleared = clearedFlag();
+let session: SessionState = cleared ? { signedOut: true, reason: 'cleared', lastLogin: '' } : { signedOut: false, reason: '', lastLogin: readPreviousLogin() };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((listener) => listener());
 
@@ -43,11 +48,22 @@ export function signIn() {
 let sessionNoted = false;
 /** Records the start of this browser session once, as the signed-in agent. */
 export function noteSessionStart(name: string) {
-  if (sessionNoted) return;
+  if (sessionNoted || session.signedOut) return;
   sessionNoted = true;
   // A reload in the same tab is the same session.
   try { if (sessionStorage.getItem('fao-session-noted')) return; sessionStorage.setItem('fao-session-noted', '1'); } catch { /* storage unavailable */ }
   notify({ kind: 'account', title: 'Signed in', detail: `Session started on this browser. Previous sign-in: ${formatLogin(session.lastLogin)}.`, by: name });
+}
+
+/** Signs out and erases everything LAVA Training stored in this browser (policies, quotes, activity,
+ * preferences, profile), for shared or public computers. */
+export function signOutAndClear() {
+  try {
+    for (const key of Object.keys(localStorage)) if (key.startsWith('fao-')) localStorage.removeItem(key);
+    sessionStorage.clear();
+    sessionStorage.setItem('fao-cleared', '1');
+  } catch { /* storage unavailable */ }
+  window.location.replace(window.location.pathname);
 }
 
 /** "09/29/2026 4:12 PM" from the stored ISO time (real clock, not the training clock). */

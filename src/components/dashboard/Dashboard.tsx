@@ -6,7 +6,7 @@ import { claimsOf, crossSellOpportunities, inForce, paperlessPending, prospects,
 import { guideRequest } from '@/servicing/portal/portalUtils';
 import { SUPPORTED_STATES, type StateName } from '@/data/states';
 import { dayDiff } from '@/services/policyEngine';
-import { formatLogin, sessionStore, signOut } from '@/services/session';
+import { formatLogin, sessionStore, signOut, signOutAndClear } from '@/services/session';
 import { runWithSpinner } from '@/services/processing';
 import { LegalLink } from '@/components/LegalLink';
 import { NotificationBell } from '@/components/NotificationBell';
@@ -109,6 +109,7 @@ function AgentGreeting() {
       <p className="text-[9.5px] font-normal leading-[13px] text-[#5c6670]">Shows the training clock, hints, sample data and trainer tools.</p>
       <div className="border-t border-[#e4ecf1] pt-2 text-[9.5px] font-normal text-[#5c6670]">Last login: {formatLogin(session.lastLogin)}</div>
       <button type="button" onClick={() => signOut('manual')} className="flex w-full items-center justify-center gap-1 border border-[#003865] py-1 text-[10px] font-bold text-[#003865] hover:bg-[#e8f4fa]"><LogOut size={12} />SIGN OUT</button>
+      <button type="button" onClick={() => { if (window.confirm('Sign out and erase all LAVA Training data stored on this computer (policies, quotes, activity and preferences)? Use this on shared computers.')) signOutAndClear(); }} className="w-full text-center text-[9.5px] font-bold text-[#c8102e] underline">Sign out and clear this computer</button>
     </form>}
   </div>;
 }
