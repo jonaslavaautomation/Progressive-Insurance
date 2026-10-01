@@ -3,7 +3,8 @@
 // once MVR/CLUE/prior-insurance reports are applied, verified factors replace the preliminary ones.
 import type { BillPlan, BillPlanQuote, CoverageKey, Driver, QuoteData, RatingFactor, RatingResult, Vehicle, VehiclePremium } from '@/types/quote';
 import type { ProductKey } from '@/products/types';
-import { BI_PD, COLL_DEDUCTIBLES, CUSTOM_EQUIPMENT_MAX, ETE, INCIDENT_CODES, MED_PAY, OTC_DEDUCTIBLES, OWNED_RESIDENCES, TOWING, UMPD, UM_BI, optionFor } from '@/data/options';
+import { BI_PD, COLL_DEDUCTIBLES, CUSTOM_EQUIPMENT_MAX, ETE, INCIDENT_CODES, MED_PAY, OTC_DEDUCTIBLES, OWNED_RESIDENCES, PIP_OPTIONS, TOWING, UMPD, UM_BI, optionFor } from '@/data/options';
+import { rulesFor, stateForZip } from '@/data/states';
 import { ageOn, ratingDate } from '@/utils/dates';
 import { moneyToNumber } from '@/utils/masks';
 
@@ -51,7 +52,11 @@ export function driverFactor(driver: Driver, on: Date): number {
 
 export function territoryFactor(zip: string): number {
   const prefix = zip.slice(0, 3);
-  return ({ '276': 1, '275': 0.97, '277': 0.95, '282': 1.12, '274': 1.02 } as Record<string, number>)[prefix] ?? 0.93;
+  const state = stateForZip(zip);
+  if (!state || state === 'North Carolina') return ({ '276': 1, '275': 0.97, '277': 0.95, '282': 1.12, '274': 1.02 } as Record<string, number>)[prefix] ?? 0.93;
+  // Other states: statewide rate level, with metro ZIPs surcharged and the rest slightly below.
+  const rules = rulesFor(state);
+  return Math.round(rules.rateLevel * (rules.metroPrefixes.includes(prefix) ? 1.12 : 0.96) * 1000) / 1000;
 }
 
 function usageFactor(vehicle: Vehicle): number {
@@ -139,7 +144,8 @@ export function rateQuote(quote: QuoteData): RatingResult {
   const count = quote.vehicles.length;
   const umbi = round2((optionFor(UM_BI, coverages.uninsuredMotorist)?.base ?? 0) * count * territoryFactor(quote.vehicles[0]?.garagingZip ?? ''));
   const umpd = round2((optionFor(UMPD, coverages.umpd)?.base ?? 0) * count);
-  const fullTermPremium = round2(vehicles.reduce((sum, vehicle) => sum + vehicle.total, 0) + umbi + umpd);
+  const pip = round2((optionFor(PIP_OPTIONS, coverages.pip ?? '')?.base ?? 0) * count * territoryFactor(quote.vehicles[0]?.garagingZip ?? ''));
+  const fullTermPremium = round2(vehicles.reduce((sum, vehicle) => sum + vehicle.total, 0) + umbi + umpd + pip);
 
   const billPlans = buildBillPlans(fullTermPremium, TERM_MONTHS);
   if (quote.pointOfSale.billPlan === 'PIF' || quote.pointOfSale.billPlan === '') appliedDiscounts.splice(1, 0, 'Paid in Full');
@@ -162,6 +168,7 @@ export function rateQuote(quote: QuoteData): RatingResult {
     vehicles,
     umbi,
     umpd,
+    pip,
     fullTermPremium,
     billPlans,
     appliedDiscounts,

@@ -13,22 +13,29 @@ import { blueButton, cell, headCell } from '@/servicing/portal/pageStyles';
 import { guideRequest } from '@/servicing/portal/portalUtils';
 import { inForce, monthKey } from '@/servicing/portal/bookStats';
 import { formatCurrency } from '@/utils/masks';
+import { SUPPORTED_STATES, rulesFor, type StateRules } from '@/data/states';
 import { parseDate } from '@/utils/dates';
 
 // ------------------------------------------------------------------ Product guides
 
 const choiceLabels = (field: FieldDef) => (typeof field.options === 'function' ? ['Depends on the other selections'] : (field.options ?? []).map((option) => option.label));
 
-const AUTO_GUIDE: [string, string][] = [
-  ['Policy term', '6 months, North Carolina only'],
-  ['Minimum liability', 'Bodily Injury & Property Damage 50/100/50 (North Carolina financial responsibility limits)'],
-  ['UM/UIM', 'Uninsured/Underinsured Motorist Bodily Injury cannot exceed the Bodily Injury limit. UMPD is included with liability.'],
-  ['Physical damage', 'Collision requires Other Than Collision (comprehensive) on the same vehicle. Lienholders and lessors require both.'],
-  ['Drivers', 'List every licensed household member age 15 or older. Drivers may be rated or excluded; excluded drivers need a signed exclusion form.'],
-  ['Reports', 'CLUE (claims history) and MVR (driving record) are ordered at Point of Sale. The premium re-rates when reports differ from what was disclosed.'],
-  ['Bill plans', 'Pay In Full, EFT, recurring card, Pay By Mail and two-payment plans. Paid in Full receives the largest discount.'],
-  ['Binding', 'Effective date today through 60 days ahead. VINs are required for every vehicle before binding.'],
-];
+function autoGuide(rules: StateRules): [string, string][] {
+  return [
+    ['Policy term', `6 months, ${rules.name}`],
+    ['Minimum coverage', rules.minimumText],
+    ['Uninsured / underinsured motorist', rules.um.text],
+    ['Personal Injury Protection', rules.pip ? rules.pip.text : `Not part of the ${rules.name} auto policy.`],
+    ['Medical Payments', rules.medPay.includes('None') ? (rules.medPay.length > 1 ? 'Optional.' : 'Not offered (PIP covers medical expenses).') : `Required: at least $${Number(rules.medPay[0]).toLocaleString('en-US')}.`],
+    ['Insurance required?', rules.insuranceRequired ? 'Yes' : 'No. A policy that is purchased must meet the state minimums.'],
+    ['No-fault state', rules.noFault ? 'Yes' : 'No'],
+    ['Cancellation notice', rules.noticeText],
+    ['State reporting', rules.reporting ? rules.reporting.text : 'No electronic insurance reporting requirement in this portal.'],
+    ['Removing a vehicle', rules.plateSurrender ? `The plate must be surrendered at ${rules.plateSurrender.agency} or moved to another insured vehicle first; otherwise ${rules.plateSurrender.consequence}` : 'No plate surrender step.'],
+    ['Physical damage', 'Collision requires Other Than Collision (comprehensive) on the same vehicle. Lienholders and lessors require both.'],
+    ['Reports and binding', 'CLUE and MVR are ordered at Point of Sale. Effective date today through 60 days ahead; VINs required before binding.'],
+  ];
+}
 
 function ConfigGuide({ config }: { config: ProductConfig }) {
   const rules = config.questions.filter((question) => question.ineligibleIf);
@@ -46,13 +53,14 @@ function ConfigGuide({ config }: { config: ProductConfig }) {
 export function ProductGuidesPage() {
   const guides = useMemo(() => [{ key: 'auto', name: 'Auto' }, ...Object.values(PRODUCT_CONFIGS).map((config) => ({ key: config.key, name: config.name })), ...Object.values(COMMERCIAL_CONFIGS).map((config) => ({ key: config.key, name: config.name }))], []);
   const [active, setActive] = useState(() => { const requested = guideRequest.product; guideRequest.product = ''; return requested || 'auto'; });
+  const [guideState, setGuideState] = useState(() => { const requested = guideRequest.state; guideRequest.state = ''; return requested || 'North Carolina'; });
   const config = active === 'auto' ? null : PRODUCT_CONFIGS[active as keyof typeof PRODUCT_CONFIGS] ?? COMMERCIAL_CONFIGS[active as keyof typeof COMMERCIAL_CONFIGS];
   return <PortalLayout crumbs={[{ label: 'Products' }, { label: 'Product Guides & Underwriting' }]}>
-    <PageTitle title="Product Guides & Underwriting" intro="North Carolina product rules, coverages and eligibility. Guides are generated from the same rules the quoting system uses." />
+    <PageTitle title="Product Guides & Underwriting" intro="Product rules, coverages and eligibility for North Carolina, Texas, Florida, Wisconsin, New Hampshire and Oregon. Guides are generated from the same rules the quoting system uses." />
     <div className="mt-5 flex gap-6">
       <nav aria-label="Products" className="w-[240px] shrink-0 border border-[#cfdbe3]">{guides.map((guide) => <button key={guide.key} type="button" onClick={() => setActive(guide.key)} className={`block w-full border-b border-[#e4ecf1] px-3 py-[9px] text-left text-[12.5px] font-bold last:border-b-0 ${active === guide.key ? 'bg-[#003865] text-white' : 'text-[#003865] hover:bg-[#e8f4fa]'}`}>{guide.name}</button>)}</nav>
       <div className="min-w-0 flex-1"><h2 className="mb-3 font-slab text-[20px] font-bold">{config?.name ?? 'Auto'}</h2>
-        {config ? <ConfigGuide config={config} /> : <table className="w-full max-w-[980px] border-collapse text-[12.5px]"><tbody>{AUTO_GUIDE.map(([label, value]) => <tr key={label}><td className="w-[30%] border border-[#d7e0e6] bg-[#f6f9fb] px-3 py-[6px] font-medium">{label}</td><td className="border border-[#d7e0e6] px-3 py-[6px]">{value}</td></tr>)}</tbody></table>}
+        {config ? <ConfigGuide config={config} /> : <><label className="mb-3 block text-[12px] font-bold">State<select aria-label="Guide state" value={guideState} onChange={(event) => setGuideState(event.target.value)} className="ml-2 h-[28px] rounded-[2px] border border-[#8194a5] px-1 text-[12.5px] font-normal">{SUPPORTED_STATES.map((name) => <option key={name}>{name}</option>)}</select></label><table className="w-full max-w-[980px] border-collapse text-[12.5px]"><tbody>{autoGuide(rulesFor(guideState)).map(([label, value]) => <tr key={label}><td className="w-[30%] border border-[#d7e0e6] bg-[#f6f9fb] px-3 py-[6px] font-medium">{label}</td><td className="border border-[#d7e0e6] px-3 py-[6px]">{value}</td></tr>)}</tbody></table></>}
       </div>
     </div>
   </PortalLayout>;
@@ -78,7 +86,7 @@ export function AgencyPage() {
         <button type="button" onClick={() => { if (!draft.name.trim() || !draft.agencyName.trim() || !draft.agencyCode.trim()) { setNotice('Agent name, agency name and producer code are all required.'); return; } updateAgent({ name: draft.name.trim(), agencyName: draft.agencyName.trim(), agencyCode: draft.agencyCode.trim() }); setNotice('Agency profile saved.'); }} className={`mt-4 ${blueButton}`}>Save Profile</button>
       </section>
       <section className="rounded-[3px] border border-[#cfdbe3] p-4 text-[13px]"><h2 className="mb-3 text-[15px] font-bold text-[#003865]">Appointments</h2>
-        <table className="w-full border-collapse"><tbody>{([['State', 'North Carolina'], ['Lines', 'Personal Auto, Special Lines, Renters, Commercial Lines'], ['Appointment status', 'Active'], ['e-Signature', 'Enabled'], ['Payment methods', 'EFT, card by secure IVR, customer online payment']] as [string, string][]).map(([label, value]) => <tr key={label}><td className="w-[40%] border border-[#d7e0e6] bg-[#f6f9fb] px-3 py-[6px] font-medium">{label}</td><td className="border border-[#d7e0e6] px-3 py-[6px]">{value}</td></tr>)}</tbody></table>
+        <table className="w-full border-collapse"><tbody>{([['States', SUPPORTED_STATES.join(', ')], ['Lines', 'Personal Auto, Special Lines, Renters, Commercial Lines'], ['Appointment status', 'Active'], ['e-Signature', 'Enabled'], ['Payment methods', 'EFT, card by secure IVR, customer online payment']] as [string, string][]).map(([label, value]) => <tr key={label}><td className="w-[40%] border border-[#d7e0e6] bg-[#f6f9fb] px-3 py-[6px] font-medium">{label}</td><td className="border border-[#d7e0e6] px-3 py-[6px]">{value}</td></tr>)}</tbody></table>
       </section>
     </div>
     <h2 className="mt-8 text-[16px] font-bold text-[#003865]">Producers in this agency</h2>

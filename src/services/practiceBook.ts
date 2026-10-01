@@ -1,4 +1,5 @@
-// The agency's reference book of business: five fictitious customers. Every name, address, phone
+// The agency's reference book of business: five fictitious customers, one in each of the states
+// where Progressive holds the largest auto share (TX, FL, WI, OR, NH). Every name, address, phone
 // number, email and VIN is invented. Each account is issued years ago and lived forward day by day
 // on the policy engine (bills, on-time payments, renewals, a late payment, claims, policy changes),
 // so its history, documents and current status are what a real account would show.
@@ -8,10 +9,11 @@ import type { ProductKey } from '@/products/types';
 import { createSampleQuote, generateQuoteNumber } from '@/context/quoteStore';
 import { createProductQuote } from '@/products/engine';
 import { buildPolicies, generatePolicyNumber } from '@/services/policyBuilder';
-import { NC_OTHER_NOTICE_DAYS, dayDiff, makePayment, processDay, requestCancel, shiftDate } from '@/services/policyEngine';
+import { dayDiff, makePayment, otherNoticeDays, processDay, requestCancel, shiftDate } from '@/services/policyEngine';
 import { lookupVehicleDetails } from '@/data/vehicleCatalog';
 import { rateQuote, ratingSignature } from '@/utils/ratingEngine';
 import { setClock } from '@/utils/clock';
+import type { StateName } from '@/data/states';
 import { addMonths, formatDate, parseDate } from '@/utils/dates';
 
 /** Reference accounts are recognised by this email domain. */
@@ -25,6 +27,7 @@ interface AccountEvent {
 }
 
 interface PracticeCustomer {
+  state: StateName;
   first: string; last: string; dob: string; street: string; city: string; zip: string; phone: string;
   vehicle: [year: string, make: string, model: string, body: string]; vin: string;
   producer: string;
@@ -66,12 +69,12 @@ function claim(input: Omit<ClaimRecord, 'id' | 'lossDate' | 'reportedOn' | 'clai
 
 const CUSTOMERS: PracticeCustomer[] = [
   {
-    first: 'Jordan', last: 'Rivers', dob: '03/14/1988', street: '410 Maple Practice Ct', city: 'Raleigh', zip: '27609', phone: '919-555-0181', vehicle: ['2022', 'Honda', 'Accord', 'Sedan 4D'], vin: '1HGCV1F30NA000101',
+    state: 'Texas', first: 'Jordan', last: 'Rivers', dob: '03/14/1988', street: '410 Maple Practice Ct', city: 'Austin', zip: '78745', phone: '512-555-0181', vehicle: ['2022', 'Honda', 'Accord', 'Sedan 4D'], vin: '1HGCV1F30NA000101',
     producer: 'Lane, Parker', currentTermDaysAgo: fixed(45), priorTerms: 8, autoPlan: 'MAIL', scenario: 'nonpayment', unpaid: ['auto'], lateMonth: '03/2024',
-    events: [{ daysAgo: 800, apply: note('Policy change processed', 'Mailing address updated from 22 Oak Sample St, Raleigh 27603 to 410 Maple Practice Ct, Raleigh 27609. Garaging territory re-rated. No premium change.') }],
+    events: [{ daysAgo: 800, apply: note('Policy change processed', 'Mailing address updated from 22 Oak Sample St, Austin 78702 to 410 Maple Practice Ct, Austin 78745. Garaging territory re-rated. No premium change.') }],
   },
   {
-    first: 'Casey', last: 'Morgan', dob: '11/02/1993', street: '88 Willow Training Ln', city: 'Holly Springs', zip: '27540', phone: '919-555-0164', vehicle: ['2019', 'Toyota', 'RAV4', 'Utility 4D'], vin: '2T3F1RFV5KW000202',
+    state: 'Florida', first: 'Casey', last: 'Morgan', dob: '11/02/1993', street: '88 Willow Training Ln', city: 'Tampa', zip: '33606', phone: '813-555-0164', vehicle: ['2019', 'Toyota', 'RAV4', 'Utility 4D'], vin: '2T3F1RFV5KW000202',
     producer: 'Reyes, Dana', currentTermDaysAgo: fixed(44), priorTerms: 14, autoPlan: 'EFT', renters: 'MAIL', scenario: 'nonpayment', unpaid: ['renters'],
     events: [
       { daysAgo: 1510, product: 'renters', apply: claim({ type: 'Theft - personal property', description: 'Laptop and bicycle stolen from the apartment storage unit. Police report filed.', status: 'Closed - Paid', paid: 1250, adjuster: 'Property Claims Team 4', atFault: 'No', unit: 'Apartment', lossDaysBefore: 2 }) },
@@ -79,27 +82,27 @@ const CUSTOMERS: PracticeCustomer[] = [
     ],
   },
   {
-    first: 'Taylor', last: 'Brooks', dob: '07/21/1979', street: '1250 Sample Hwy 64 E', city: 'Mocksville', zip: '27028', phone: '704-555-0137', vehicle: ['2021', 'Ford', 'F-150', 'SuperCrew Pickup'], vin: '1FTFW1E84MK000303',
+    state: 'Wisconsin', first: 'Taylor', last: 'Brooks', dob: '07/21/1979', street: '1250 Sample Hwy 151', city: 'Madison', zip: '53704', phone: '608-555-0137', vehicle: ['2021', 'Ford', 'F-150', 'SuperCrew Pickup'], vin: '1FTFW1E84MK000303',
     producer: 'Quinn, Avery', currentTermDaysAgo: fixed(70), priorTerms: 10, autoPlan: 'MAIL2', scenario: 'underwriting',
-    events: [{ daysAgo: 1010, apply: claim({ type: 'Collision - at fault', description: 'Insured rear-ended another vehicle at a stop light on US-64. No injuries. Both vehicles repaired.', status: 'Closed - Paid', paid: 4812.4, adjuster: 'Auto Claims Team 12', atFault: 'Yes', unit: '2021 Ford F-150', lossDaysBefore: 1 }) }],
+    events: [{ daysAgo: 1010, apply: claim({ type: 'Collision - at fault', description: 'Insured rear-ended another vehicle at a stop light on US-151. No injuries. Both vehicles repaired.', status: 'Closed - Paid', paid: 4812.4, adjuster: 'Auto Claims Team 12', atFault: 'Yes', unit: '2021 Ford F-150', lossDaysBefore: 1 }) }],
   },
   {
-    first: 'Riley', last: 'Carter', dob: '01/30/1985', street: '298 Example Forest Dr', city: 'Hendersonville', zip: '28739', phone: '828-555-0152', vehicle: ['2023', 'Chevrolet', 'Silverado 1500', 'Crew Cab Pickup'], vin: '1GCUDDED0PZ000404',
+    state: 'Oregon', first: 'Riley', last: 'Carter', dob: '01/30/1985', street: '298 Example Forest Dr', city: 'Portland', zip: '97206', phone: '503-555-0152', vehicle: ['2023', 'Chevrolet', 'Silverado 1500', 'Crew Cab Pickup'], vin: '1GCUDDED0PZ000404',
     producer: 'Lane, Parker', currentTermDaysAgo: expiringIn(20), priorTerms: 6, autoPlan: 'PIF', scenario: 'renewal',
-    events: [{ daysAgo: 620, apply: claim({ type: 'Comprehensive - glass', description: 'Windshield cracked by a rock on I-26. Replaced by a network glass shop.', status: 'Closed - Paid', paid: 385, adjuster: 'Glass Claims Unit', atFault: 'No', unit: '2023 Chevrolet Silverado 1500', lossDaysBefore: 0 }) }],
+    events: [{ daysAgo: 620, apply: claim({ type: 'Comprehensive - glass', description: 'Windshield cracked by a rock on I-84. Replaced by a network glass shop.', status: 'Closed - Paid', paid: 385, adjuster: 'Glass Claims Unit', atFault: 'No', unit: '2023 Chevrolet Silverado 1500', lossDaysBefore: 0 }) }],
   },
   {
-    first: 'Morgan', last: 'Ellis', dob: '09/09/1990', street: '15 Harbor Demo St', city: 'Wilmington', zip: '28401', phone: '910-555-0119', vehicle: ['2020', 'Honda', 'CR-V', 'Utility 4D'], vin: '5J6RW2H50LA000505',
+    state: 'New Hampshire', first: 'Morgan', last: 'Ellis', dob: '09/09/1990', street: '15 Harbor Demo St', city: 'Manchester', zip: '03104', phone: '603-555-0119', vehicle: ['2020', 'Honda', 'CR-V', 'Utility 4D'], vin: '5J6RW2H50LA000505',
     producer: 'Reyes, Dana', currentTermDaysAgo: fixed(30), priorTerms: 12, autoPlan: 'EFT', scenario: 'active',
     events: [
       { daysAgo: 1150, apply: note('Policy change processed', 'Replaced 2016 Honda Civic (VIN 19XFC2F59GE000999) with 2020 Honda CR-V (VIN 5J6RW2H50LA000505). Lienholder removed. Additional premium $38.20.') },
-      { daysAgo: 9, apply: claim({ type: 'Comprehensive - animal strike', description: 'Struck a deer on NC-133 at night. Front bumper and headlight damage. Vehicle drivable.', status: 'Open - Assigned', paid: 0, adjuster: 'Auto Claims Team 7', atFault: 'No', unit: '2020 Honda CR-V', lossDaysBefore: 1 }) },
+      { daysAgo: 9, apply: claim({ type: 'Comprehensive - animal strike', description: 'Struck a deer on NH-101 at night. Front bumper and headlight damage. Vehicle drivable.', status: 'Open - Assigned', paid: 0, adjuster: 'Auto Claims Team 7', atFault: 'No', unit: '2020 Honda CR-V', lossDaysBefore: 1 }) },
     ],
   },
 ];
 
 function quoteFor(customer: PracticeCustomer, agent: AgentProfile, effectiveDate: string, agentCode: string): QuoteData {
-  const base = createSampleQuote(agent);
+  const base = createSampleQuote(agent, customer.state);
   const [year, make, model, body] = customer.vehicle;
   const vehicle = { ...base.vehicles[0], year, make, model, bodyStyle: body, ...lookupVehicleDetails(year, make, model, body), vin: customer.vin, garagingZip: customer.zip };
   const email = `${customer.first}.${customer.last}${PRACTICE_DOMAIN}`.toLowerCase();
@@ -162,7 +165,7 @@ export function buildPracticeBook(agent: AgentProfile, agentCode: string, day: s
         const opened = { ...record, claims: [], history: [...record.history, { id: uid('his'), date: start, event: 'Reference account', detail: 'Fictitious customer included in the agency book for reference and practice.' }] };
         let next = live(opened, customer, start, day, currentStart, customer.events ?? []);
         if (customer.scenario === 'underwriting' && next.product === 'auto') {
-          next = requestCancel(next, { kind: 'company', reason: 'Underwriting: an undisclosed household driver was found on the MVR and CLUE reports', effectiveDate: shiftDate(day, NC_OTHER_NOTICE_DAYS), method: 'Pro Rata' }, day);
+          next = requestCancel(next, { kind: 'company', reason: 'Underwriting: an undisclosed household driver was found on the MVR and CLUE reports', effectiveDate: shiftDate(day, Math.max(otherNoticeDays(next), 30)), method: 'Pro Rata' }, day);
         }
         records.push(next);
       }

@@ -7,6 +7,7 @@ import { customerKey } from '@/servicing/policyFilters';
 import { formatCurrency } from '@/utils/masks';
 import { BackLink, PortalLayout } from '@/servicing/portal/PortalLayout';
 import { POLICY_ICONS, customerSince } from '@/servicing/portal/portalUtils';
+import { rulesFor } from '@/data/states';
 
 
 /** Short status line shown in red under a policy that needs attention. */
@@ -37,7 +38,7 @@ function PolicyCard({ policy }: { policy: PolicyRecord }) {
   return <section className={`mb-4 overflow-hidden rounded-[3px] border ${tone.border}`}>
     <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 px-[10px] py-[12px] text-white ${tone.bar}`}>
       <button type="button" onClick={() => openPolicy(policy.id)} className="text-[14px] font-bold underline underline-offset-2 hover:text-[#fff3e6]">{product} Policy</button>
-      <span className="text-[14px] font-bold">{policy.policyNumber}, NC</span>
+      <span className="text-[14px] font-bold">{policy.policyNumber}, {rulesFor(policy.state).code}</span>
       <span className="text-[11.5px]">Coverage from {policy.effectiveDate} to {policy.expirationDate}</span>
     </div>
     <div className="bg-white px-[16px] py-[12px]">
@@ -50,6 +51,7 @@ function PolicyCard({ policy }: { policy: PolicyRecord }) {
           {policy.status === 'Active' || policy.status === 'Pending Cancel'
             ? <li><button type="button" onClick={() => openPolicy(policy.id, 'summary', policy.status === 'Active' ? 'change' : '')} className={link}><ChevronRight size={13} className="text-[#e87722]" />Quote or Make Changes to {policy.product === 'auto' || policy.product === 'commercialAuto' ? 'Drivers, Vehicles, Coverage, or Contact Info' : 'Coverage or Contact Info'}</button></li>
             : <li><button type="button" onClick={() => openPolicy(policy.id)} className={link}><ChevronRight size={13} className="text-[#e87722]" />View policy and reinstatement options</button></li>}
+          {policy.status === 'Active' && <li className="flex flex-wrap gap-x-4"><button type="button" onClick={() => openPolicy(policy.id, 'summary', 'address')} className={link}><ChevronRight size={13} className="text-[#e87722]" />Change Address</button>{(policy.product === 'auto') && <><button type="button" onClick={() => openPolicy(policy.id, 'summary', 'addVehicle')} className={link}><ChevronRight size={13} className="text-[#e87722]" />Add a Vehicle</button><button type="button" onClick={() => openPolicy(policy.id, 'summary', 'removeVehicle')} className={link}><ChevronRight size={13} className="text-[#e87722]" />Remove a Vehicle</button></>}</li>}
           <li><button type="button" onClick={() => openPolicy(policy.id, 'billing')} className={link}><ChevronRight size={13} className="text-[#e87722]" />{lastPaymentLine(policy)}</button></li>
         </ul>
       </div>

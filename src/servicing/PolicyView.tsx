@@ -5,6 +5,7 @@ import type { PolicyDocument, PolicyRecord } from '@/types/policy';
 import type { PolicyTab } from '@/context/quoteStore';
 import { useQuote } from '@/context/useQuote';
 import { runWithSpinner } from '@/services/processing';
+import { rulesFor } from '@/data/states';
 import { formatCurrency } from '@/utils/masks';
 import { parseDate } from '@/utils/dates';
 import { buildBillPlans } from '@/utils/ratingEngine';
@@ -13,6 +14,7 @@ import { Modal } from '@/components/wizard/Modal';
 import { modalButton } from '@/components/wizard/modalStyles';
 import { InlineError, SelectControl, TextControl, WizardCard, WizardRow } from '@/components/wizard/primitives';
 import { DocumentPreview } from '@/servicing/PolicyDocuments';
+import { PacketButtons } from '@/servicing/PacketButtons';
 import { ChangePolicyModal } from '@/servicing/ChangePolicy';
 import { DOCUMENT_TITLES } from '@/servicing/documentTitles';
 import { ServiceLayout, StatusBadge, TrainingClock, dangerButton, outlineButton, solidButton } from '@/servicing/ServiceChrome';
@@ -92,7 +94,7 @@ function CancelModal({ policy, onClose }: { policy: PolicyRecord; onClose: (mess
       <label className="col-span-2">Reason<SelectControl value={reason} options={kind === 'insured' ? INSURED_REASONS : COMPANY_REASONS} onChange={setReason} /></label>
       {kind === 'insured' && <fieldset className="col-span-2"><legend className="mb-1 font-bold">Refund method</legend><div className="flex gap-6">{(['Pro Rata', 'Short Rate'] as const).map((value) => <label key={value} className="flex items-center gap-2"><input type="radio" name="cancel-method" checked={method === value} onChange={() => setMethod(value)} className="h-[18px] w-[18px] accent-[#003865]" />{value}{value === 'Short Rate' && <span className="text-[12px] text-[#5c6670]">(keeps {engine.SHORT_RATE_PENALTY * 100}% of unearned premium)</span>}</label>)}</div></fieldset>}
     </div>
-    {kind === 'company' && <p className="mt-3 rounded-[3px] bg-[#fff6ee] px-3 py-2 text-[13px] text-[#9a4a0b]">North Carolina requires at least {engine.NC_OTHER_NOTICE_DAYS} days&rsquo; written notice for a company cancellation other than nonpayment (N.C. Gen. Stat. § 58-36-85). A Notice of Cancellation will be mailed now.</p>}
+    {kind === 'company' && <p className="mt-3 rounded-[3px] bg-[#fff6ee] px-3 py-2 text-[13px] text-[#9a4a0b]">{rulesFor(policy.state).name} requires at least {engine.otherNoticeDays(policy)} days&rsquo; written notice for a company cancellation other than nonpayment{policy.state === 'North Carolina' ? ' (N.C. Gen. Stat. § 58-36-85)' : ''}. A Notice of Cancellation will be mailed now.</p>}
     {quote && <table className="mt-3 w-full border-collapse text-[13px]"><tbody>
       {[['Days in force', `${quote.used} of ${quote.termDays}`], ['Premium earned', formatCurrency(quote.earned)], ...(quote.penalty ? [['Short rate penalty (included above)', formatCurrency(quote.penalty)]] : []), ['Payments received', formatCurrency(quote.paid)], ...(quote.fees ? [['Fees assessed', formatCurrency(quote.fees)]] : []), [quote.refund > 0 ? 'Estimated refund to customer' : 'Earned premium still due', formatCurrency(quote.refund > 0 ? quote.refund : quote.balanceDue)]].map(([label, value]) => <tr key={label}><td className="border border-[#d7e0e6] px-3 py-[6px]">{label}</td><td className="border border-[#d7e0e6] px-3 py-[6px] text-right font-bold">{value}</td></tr>)}
     </tbody></table>}
@@ -225,9 +227,9 @@ function BillingTab({ policy, open }: { policy: PolicyRecord; open: (dialog: Dia
 
 function DocumentsTab({ policy, openDoc }: { policy: PolicyRecord; openDoc: (document: PolicyDocument) => void }) {
   const cell = 'border-b border-[#edf1f3] px-[14px] py-[10px] text-left';
-  return <WizardCard title="Documents & Downloads" split={false} className="w-[1100px]" subtitle={<span className="text-[13px] font-medium">{policy.documents.length} documents</span>}>
+  return <div className="w-[1100px] space-y-[20px]"><WizardCard title="Policy Packet & Declarations" split={false}><div className="px-[21px] py-[14px]"><p className="mb-3 text-[13px] text-[#5c6670]">Download the current Declarations Page or a complete policy packet as a PDF. Each packet includes the declarations{['auto', 'motorcycle', 'motorhome', 'trailer', 'commercialAuto'].includes(policy.product) ? ', ID cards' : ''} and the application summary.</p><PacketButtons policy={policy} /></div></WizardCard><WizardCard title="Documents & Downloads" split={false} className="w-[1100px]" subtitle={<span className="text-[13px] font-medium">{policy.documents.length} documents</span>}>
     <table className="w-full border-collapse text-[14px]"><thead><tr className="text-[12px] uppercase tracking-[.3px] text-[#5c6670]"><th className={cell}>Date</th><th className={cell}>Document</th><th className={cell}>Term</th><th className={cell} /></tr></thead><tbody>{[...policy.documents].reverse().map((entry) => <tr key={entry.id} className="hover:bg-[#f6f9fb]"><td className={cell}>{entry.date}</td><td className={cell}><span className="flex items-center gap-2"><FileText size={16} className="text-[#003865]" />{DOCUMENT_TITLES[entry.type]}</span></td><td className={cell}>{entry.term}</td><td className={`${cell} text-right`}><button type="button" onClick={() => openDoc(entry)} className="font-bold text-[#0073cf] underline underline-offset-2">View / Print</button></td></tr>)}</tbody></table>
-  </WizardCard>;
+  </WizardCard></div>;
 }
 
 function HistoryTab({ policy }: { policy: PolicyRecord }) {
@@ -240,7 +242,8 @@ function HistoryTab({ policy }: { policy: PolicyRecord }) {
 export function PolicyView() {
   const { state, setPolicyTab, openPolicies, servicePolicy, engine, lastConfirmation } = useQuote();
   const policy = state.policies.find((entry) => entry.id === state.ui.policyId);
-  const [dialog, setDialog] = useState<Dialog>(() => (state.ui.policyIntent === 'change' ? 'change' : null));
+  const intent = state.ui.policyIntent;
+  const [dialog, setDialog] = useState<Dialog>(() => (intent && policy?.status === 'Active' ? 'change' : null));
   const [document, setDocument] = useState<PolicyDocument | null>(null);
   const [message, setMessage] = useState('');
   if (!policy) return <ServiceLayout back={{ label: 'Policy Search', onClick: () => openPolicies(state.ui.policyQuery) }}><p className="text-[14px]">Policy not found.</p></ServiceLayout>;
@@ -278,7 +281,7 @@ export function PolicyView() {
     {dialog === 'reinstate' && <ReinstateModal policy={policy} onClose={close} />}
     {dialog === 'billplan' && <BillPlanModal policy={policy} onClose={close} />}
     {dialog === 'nonrenew' && <NonRenewModal policy={policy} onClose={close} />}
-    {dialog === 'change' && <ChangePolicyModal policy={policy} onClose={close} />}
+    {dialog === 'change' && <ChangePolicyModal policy={policy} onClose={close} initialType={intent === 'address' || intent === 'addVehicle' || intent === 'removeVehicle' ? intent : undefined} />}
     {document && <DocumentPreview policy={policy} document={document} onClose={() => setDocument(null)} />}
   </ServiceLayout>;
 }

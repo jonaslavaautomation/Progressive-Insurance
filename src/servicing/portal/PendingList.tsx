@@ -12,6 +12,7 @@ import { PaymentModal } from '@/servicing/PolicyView';
 import { Modal } from '@/components/wizard/Modal';
 import { modalButton } from '@/components/wizard/modalStyles';
 import { PortalLayout } from '@/servicing/portal/PortalLayout';
+import { rulesFor } from '@/data/states';
 
 const TABS: [PendingTab, string][] = [['nonpayment', 'Pending Cancellation Due to Non-Payment'], ['underwriting', 'Pending Cancellation Due to Underwriting Reasons'], ['renewals', 'Pending Renewals']];
 
@@ -48,7 +49,7 @@ const phoneLink = (phone: string) => phone.replace(/^(\d{3})-(\d{3})-(\d{4})$/, 
 
 function rowsFor(tab: PendingTab, policies: PolicyRecord[], day: string, minimumDue: (policy: PolicyRecord, day: string) => number): Row[] {
   return policies.flatMap((policy) => {
-    const base = { policy, insured: lastFirst(policy), policyNumber: policy.policyNumber, product: shortProduct(policy), state: 'NC', agentCode: policy.agentCode.split(' ')[0], producer: policy.agentName, reason: '' };
+    const base = { policy, insured: lastFirst(policy), policyNumber: policy.policyNumber, product: shortProduct(policy), state: rulesFor(policy.state).code, agentCode: policy.agentCode.split(' ')[0], producer: policy.agentName, reason: '' };
     if (tab === 'renewals') return policy.renewal?.status === 'Offered' && policy.status === 'Active' ? [{ ...base, date: policy.renewal.effectiveDate, amount: policy.renewal.dueToday }] : [];
     const pending = policy.pendingCancel;
     if (!pending || policy.status !== 'Pending Cancel') return [];

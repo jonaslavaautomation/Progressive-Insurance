@@ -30,7 +30,7 @@ function saveAgent(agent: AgentProfile) {
   try { localStorage.setItem(AGENT_KEY, JSON.stringify(agent)); } catch { /* storage unavailable */ }
 }
 
-const POLICIES_KEY = 'fao-training-policies-v3';
+const POLICIES_KEY = 'fao-training-policies-v4';
 const TRAINER_KEY = 'fao-trainer-mode';
 
 function loadTrainerMode(): boolean {
@@ -114,7 +114,7 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     updateVehicle: (id, patch) => dispatch({ type: 'updateVehicle', id, patch }),
     removeVehicle: (id) => dispatch({ type: 'removeVehicle', id }),
     addDriver: () => {
-      const driver = createDriver();
+      const driver = createDriver({ licenseState: stateRef.current.policy.quoteState });
       dispatch({ type: 'addDriver', driver });
       return driver.id;
     },
@@ -195,6 +195,7 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'setTrainerMode', on });
     },
     lastConfirmation: () => confirmationRef.current,
+    setQuoteState: (quoteState) => dispatch({ type: 'setQuoteState', state: quoteState }),
     loadPracticeBook: () => {
       const current = stateRef.current;
       if (hasPracticeBook(current.policies)) return;
@@ -229,9 +230,12 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     showDocuments: () => dispatch({ type: 'showDocuments' }),
     toggleHints: () => dispatch({ type: 'toggleHints' }),
     toggleKeyboardHelp: () => dispatch({ type: 'toggleKeyboardHelp' }),
-    loadSampleQuote: () => dispatch({ type: 'load', data: createSampleQuote(stateRef.current.agent), maxStep: 3 }),
+    loadSampleQuote: () => dispatch({ type: 'load', data: createSampleQuote(stateRef.current.agent, stateRef.current.policy.quoteState), maxStep: 3 }),
     resetQuote: () => dispatch({ type: 'reset' }),
-    startCommercialQuote: (products) => dispatch({ type: 'setCommercial', quote: createCommercialQuote(products), show: true }),
+    startCommercialQuote: (products) => {
+      const quote = createCommercialQuote(products);
+      dispatch({ type: 'setCommercial', quote: { ...quote, business: { ...quote.business, state: stateRef.current.ui.quoteState } }, show: true });
+    },
     updateCommercial: (update) => {
       const quote = stateRef.current.commercial;
       if (quote) dispatch({ type: 'setCommercial', quote: update(quote) });

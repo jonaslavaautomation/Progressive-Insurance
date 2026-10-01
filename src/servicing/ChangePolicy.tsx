@@ -8,23 +8,24 @@ import type { CommercialKey, OtherProductKey, ProductConfig, ProductQuote } from
 import { useQuote } from '@/context/useQuote';
 import { runWithSpinner } from '@/services/processing';
 import { createDriver, createVehicle } from '@/context/quoteStore';
-import { ANNUAL_MILES, BI_PD, COLL_DEDUCTIBLES, ETE, GENDERS, MARITAL_STATUSES, MED_PAY, OTC_DEDUCTIBLES, PRIMARY_USES, RELATIONSHIPS, TOWING, UM_BI, US_STATES, coverageOptions } from '@/data/options';
-import { MODEL_YEARS, bodyStylesFor, lookupVehicleDetails, makesFor, modelsFor } from '@/data/vehicleCatalog';
+import { ANNUAL_MILES, BI_PD, PIP_OPTIONS, COLL_DEDUCTIBLES, ETE, GENDERS, MARITAL_STATUSES, MED_PAY, OTC_DEDUCTIBLES, PRIMARY_RESIDENCES, PRIMARY_USES, RELATIONSHIPS, TOWING, UM_BI, US_STATES, coverageOptions } from '@/data/options';
+import { MODEL_YEARS, bodyStylesFor, decodeVin, lookupVehicleDetails, makesFor, modelsFor } from '@/data/vehicleCatalog';
 import { configFor } from '@/products/configs';
 import { DRIVER_ACCIDENTS, DRIVER_EXPERIENCE, DRIVER_LICENSE_TYPES, DRIVER_VIOLATIONS } from '@/commercial/configs';
 import { createUnit, fieldContext } from '@/products/engine';
 import { commercialContext, createCommercialDriver } from '@/commercial/engine';
 import { driverName, vehicleName } from '@/utils/ratingEngine';
 import { formatCurrency } from '@/utils/masks';
-import { ageOn } from '@/utils/dates';
-import { EMAIL, PHONE, VIN, checkField, type FieldErrors } from '@/utils/validation';
+import { ageOn, parseDate } from '@/utils/dates';
+import { EMAIL, PHONE, VIN, checkField, setValidationState, type FieldErrors } from '@/utils/validation';
+import { rulesFor, stateOptions } from '@/data/states';
 import { MAX_BACKDATE_DAYS, MAX_FUTURE_DAYS, applyChange, previewChange, validateChangeDate } from '@/services/endorsement';
 import { Modal } from '@/components/wizard/Modal';
 import { modalButton } from '@/components/wizard/modalStyles';
 import { InlineError, SelectControl, TextControl } from '@/components/wizard/primitives';
 import { ConfigField } from '@/components/products/Editors';
 
-type ChangeType = 'address' | 'contact' | 'addVehicle' | 'replaceVehicle' | 'removeVehicle' | 'addDriver' | 'removeDriver' | 'coverages' | 'lienholder' | 'addUnit' | 'removeUnit';
+export type ChangeType = 'address' | 'contact' | 'addVehicle' | 'replaceVehicle' | 'removeVehicle' | 'addDriver' | 'removeDriver' | 'coverages' | 'lienholder' | 'addUnit' | 'removeUnit';
 const TYPE_LABELS: Record<ChangeType, string> = {
   address: 'Change address', contact: 'Update phone / email', addVehicle: 'Add a vehicle', replaceVehicle: 'Replace a vehicle', removeVehicle: 'Remove a vehicle',
   addDriver: 'Add a driver', removeDriver: 'Remove or exclude a driver', coverages: 'Change coverages', lienholder: 'Add or remove a lienholder / loss payee',
@@ -32,7 +33,6 @@ const TYPE_LABELS: Record<ChangeType, string> = {
 };
 
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-const NC_ZIP = /^2[78]\d{3}$/;
 
 function Field({ label, children, wide = false }: { label: string; children: ReactNode; wide?: boolean }) {
   return <label className={`block text-[13px] ${wide ? 'col-span-2' : ''}`}><span className="mb-1 block font-medium">{label}</span>{children}</label>;
@@ -74,31 +74,96 @@ function labelFor(type: ChangeType, policy: PolicyRecord): string {
   return TYPE_LABELS[type];
 }
 
-interface EditorProps { policy: PolicyRecord; draft: PolicySource; onSave: (draft: PolicySource, description: string, extra?: { vehicles?: boolean; lienholders?: PolicyRecord['lienholders']; added?: PolicyRecord['lienholders'] }) => void; lienholders: PolicyRecord['lienholders'] }
+interface EditorProps { policy: PolicyRecord; draft: PolicySource; onSave: (draft: PolicySource, description: string, extra?: { vehicles?: boolean; lienholders?: PolicyRecord['lienholders']; added?: PolicyRecord['lienholders'] }) => void; lienholders: PolicyRecord['lienholders']; effectiveDate: string }
+
+// ------------------------------------------------------------------ Address change (guided)
+
+const STREET_WORDS: [RegExp, string][] = [
+  [/\bstreet\b/gi, 'ST'], [/\bavenue\b/gi, 'AVE'], [/\blane\b/gi, 'LN'], [/\bdrive\b/gi, 'DR'], [/\bcourt\b/gi, 'CT'], [/\broad\b/gi, 'RD'], [/\bboulevard\b/gi, 'BLVD'],
+  [/\bhighway\b/gi, 'HWY'], [/\bcircle\b/gi, 'CIR'], [/\bplace\b/gi, 'PL'], [/\btrail\b/gi, 'TRL'], [/\bparkway\b/gi, 'PKWY'], [/\bterrace\b/gi, 'TER'],
+  [/\bnorth\b/gi, 'N'], [/\bsouth\b/gi, 'S'], [/\beast\b/gi, 'E'], [/\bwest\b/gi, 'W'], [/\bapartment\b|\bapt\.?(?=\s|$)/gi, 'APT'], [/\bsuite\b/gi, 'STE'], [/\bunit\b/gi, 'UNIT'],
+];
+const standardizeLine = (text: string) => STREET_WORDS.reduce((value, [pattern, abbr]) => value.replace(pattern, abbr), text.trim().replace(/[.,]/g, '').replace(/\s+/g, ' ')).toUpperCase();
+/** Deterministic ZIP+4 so the same address always verifies the same way. */
+const zip4 = (text: string) => String(1000 + ([...text].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 9000, 7) % 9000)).padStart(4, '0');
+const PO_BOX = /\bP\.?\s*O\.?\s*BOX\b|\bPOST OFFICE BOX\b/i;
+
+interface AddressDraft { line1: string; line2: string; city: string; state: string; zip: string }
 
 function AddressEditor({ policy, draft, onSave }: EditorProps) {
   const personal = draft.kind === 'personal';
-  const current = personal ? draft.quote.insured.address : { line1: draft.quote.business.street, city: draft.quote.business.city, zip: draft.quote.business.zip };
-  const [line1, setLine1] = useState(current.line1);
-  const [city, setCity] = useState(current.city);
-  const [zip, setZip] = useState(current.zip);
+  const current: AddressDraft = personal
+    ? { line1: draft.quote.insured.address.line1, line2: draft.quote.insured.address.line2, city: draft.quote.insured.address.city, state: draft.quote.insured.address.state || policy.state, zip: draft.quote.insured.address.zip }
+    : { line1: draft.quote.business.street, line2: '', city: draft.quote.business.city, state: draft.quote.business.state || policy.state, zip: draft.quote.business.zip };
+  const rules = rulesFor(policy.state);
+  const [step, setStep] = useState<'enter' | 'verify' | 'garage'>('enter');
+  const [entered, setEntered] = useState<AddressDraft>({ ...current, line1: '', line2: '', city: '', zip: '' });
+  const [moved, setMoved] = useState<'moved' | 'mailing'>('moved');
+  const [residence, setResidence] = useState(personal ? draft.quote.additional.primaryResidence : '');
+  const [useSuggested, setUseSuggested] = useState(true);
+  const units = personal
+    ? draft.quote.vehicles.map((vehicle) => ({ id: vehicle.id, label: vehicleName(vehicle), zip: vehicle.garagingZip }))
+    : (productQuoteOf(draft, policy)?.units ?? []).filter((unit) => 'garagingZip' in unit.values).map((unit) => ({ id: unit.id, label: configOf(policy)?.describe(unit) ?? 'Unit', zip: unit.values.garagingZip }));
+  const [garaged, setGaraged] = useState<string[]>(units.map((unit) => unit.id));
   const [error, setError] = useState('');
-  const save = () => {
-    if (!line1.trim() || !city.trim()) { setError('Enter the street address and city.'); return; }
-    if (!NC_ZIP.test(zip)) { setError('The new address must be in North Carolina (ZIP 27xxx or 28xxx). A move to another state requires a new policy in that state.'); return; }
-    const next = clone(draft);
-    const oldZip = current.zip;
-    if (next.kind === 'personal') {
-      next.quote.insured.address = { ...next.quote.insured.address, line1, city, zip };
-      next.quote.vehicles = next.quote.vehicles.map((vehicle) => (vehicle.garagingZip === oldZip ? { ...vehicle, garagingZip: zip } : vehicle));
-      for (const product of Object.values(next.quote.productQuotes)) if (product) product.units = product.units.map((unit) => (unit.values.garagingZip === oldZip ? { ...unit, values: { ...unit.values, garagingZip: zip } } : unit));
-    } else {
-      next.quote.business = { ...next.quote.business, street: line1, city, zip };
-      for (const product of Object.values(next.quote.productQuotes)) if (product) product.units = product.units.map((unit) => (unit.values.garagingZip === oldZip ? { ...unit, values: { ...unit.values, garagingZip: zip } } : unit));
-    }
-    onSave(next, `Address changed to ${line1}, ${city} ${zip}${zip !== oldZip ? ' (garaging territory re-rated)' : ''}`);
+  const set = (patch: Partial<AddressDraft>) => setEntered({ ...entered, ...patch });
+  const suggested: AddressDraft = { line1: standardizeLine(entered.line1), line2: standardizeLine(entered.line2), city: entered.city.trim().toUpperCase(), state: entered.state, zip: `${entered.zip}-${zip4(`${entered.line1}${entered.zip}`)}` };
+  const chosen = useSuggested ? suggested : entered;
+
+  const verify = () => {
+    if (!entered.line1.trim() || !entered.city.trim()) { setError('Enter the new street address and city.'); return; }
+    if (entered.state !== rules.name) { setError(`A move to ${entered.state} can't be handled as a policy change. Quote a new policy in ${entered.state}, then cancel this policy effective the day coverage starts there (after the ${rules.code} plates are surrendered, where required).`); return; }
+    if (!rules.zip.test(entered.zip)) { setError(`Enter a valid ${rules.name} ZIP code (${rules.zipHint}).`); return; }
+    if (moved === 'moved' && PO_BOX.test(entered.line1)) { setError('A PO Box can be a mailing address, but vehicles must be garaged at a street address. Choose "Mailing address only" or enter the street address.'); return; }
+    if (entered.line1.trim().toLowerCase() === current.line1.trim().toLowerCase() && entered.zip === current.zip) { setError('The new address is the same as the address on the policy.'); return; }
+    setError('');
+    setStep('verify');
   };
-  return <div className="grid grid-cols-2 gap-3"><Field label="Street address" wide><TextControl value={line1} onChange={setLine1} /></Field><Field label="City"><TextControl value={city} onChange={setCity} /></Field><Field label="ZIP code"><TextControl value={zip} mask="zip" onChange={setZip} /></Field><p className="col-span-2 text-[12px] text-[#5c6670]">Vehicles and units garaged at the old ZIP ({current.zip}) move to the new address. Policy #{policy.policyNumber}.</p><div className="col-span-2"><InlineError message={error} /><SaveButton onClick={save} /></div></div>;
+  const confirmAddress = () => { setGaraged(moved === 'moved' ? units.map((unit) => unit.id) : []); setStep('garage'); };
+  const save = () => {
+    const zip = chosen.zip.slice(0, 5);
+    const address = { line1: chosen.line1, line2: chosen.line2, city: chosen.city, zip };
+    const next = clone(draft);
+    if (next.kind === 'personal') {
+      next.quote.insured.address = { ...next.quote.insured.address, ...address, state: rules.name, poBox: PO_BOX.test(chosen.line1) };
+      next.quote.vehicles = next.quote.vehicles.map((vehicle) => (garaged.includes(vehicle.id) ? { ...vehicle, garagingZip: zip } : vehicle));
+      if (residence) next.quote.additional.primaryResidence = residence;
+    } else next.quote.business = { ...next.quote.business, street: [chosen.line1, chosen.line2].filter(Boolean).join(' '), city: chosen.city, zip };
+    for (const product of Object.values(next.quote.productQuotes)) if (product) product.units = product.units.map((unit) => (garaged.includes(unit.id) ? { ...unit, values: { ...unit.values, garagingZip: zip } } : unit));
+    const garagingNote = garaged.length ? `garaging moved to ${zip} for ${garaged.length} of ${units.length} ${personal ? 'vehicle' : 'unit'}${units.length > 1 ? 's' : ''} (territory re-rated)` : 'mailing address only, garaging unchanged';
+    onSave(next, `Address changed to ${[chosen.line1, chosen.line2].filter(Boolean).join(' ')}, ${chosen.city} ${chosen.zip} (${useSuggested ? 'USPS-verified' : 'as entered'}); ${garagingNote}`, { vehicles: garaged.length > 0 });
+  };
+
+  const steps = ['New address', 'Verify', personal ? 'Vehicles' : 'Units'];
+  const index = step === 'enter' ? 0 : step === 'verify' ? 1 : 2;
+  return <div>
+    <ol className="mb-4 flex gap-2 text-[12px]">{steps.map((label, position) => <li key={label} className={`flex items-center gap-1 rounded-full px-3 py-1 font-bold ${position === index ? 'bg-[#003865] text-white' : position < index ? 'bg-[#e6f4ef] text-[#0b5d3f]' : 'bg-[#eef3f6] text-[#5c6670]'}`}>{position + 1}. {label}</li>)}</ol>
+    {step === 'enter' && <div className="grid grid-cols-2 gap-3">
+      <p className="col-span-2 rounded-[3px] bg-[#f6f9fb] px-3 py-2 text-[12px]">Current address: <b>{[current.line1, current.line2].filter(Boolean).join(' ')}, {current.city} {current.zip}</b></p>
+      <Field label="What changed?" wide><SelectControl value={moved} options={[{ value: 'moved', label: 'Customer moved (mailing and garaging address)' }, { value: 'mailing', label: 'Mailing address only (vehicles stay garaged where they are)' }]} onChange={(value) => setMoved(value as 'moved' | 'mailing')} /></Field>
+      <Field label="Street address" wide><TextControl value={entered.line1} onChange={(line1) => set({ line1 })} placeholder="e.g. 120 Oak Sample Street" /></Field>
+      <Field label="Apt / suite / unit (optional)"><TextControl value={entered.line2} onChange={(line2) => set({ line2 })} /></Field>
+      <Field label="City"><TextControl value={entered.city} onChange={(city) => set({ city })} /></Field>
+      <Field label="State"><SelectControl value={entered.state} options={US_STATES} onChange={(state) => set({ state })} /></Field>
+      <Field label="ZIP code"><TextControl value={entered.zip} mask="zip" onChange={(zip) => set({ zip })} /></Field>
+      {personal && moved === 'moved' && <Field label="Residence at the new address"><SelectControl value={residence} options={PRIMARY_RESIDENCES} onChange={setResidence} /></Field>}
+      <p className="col-span-2 text-[12px] text-[#5c6670]">Use the date the customer moved as the change effective date. Rates follow the garaging ZIP, so the premium may go up or down.</p>
+      <div className="col-span-2"><InlineError message={error} /><SaveButton onClick={verify} label="Verify Address" /></div>
+    </div>}
+    {step === 'verify' && <div className="space-y-3 text-[13px]">
+      <p>We checked the address against the U.S. Postal Service format. Choose the address to use:</p>
+      {([[true, 'Suggested (USPS standardized)', suggested], [false, 'As entered', entered]] as [boolean, string, AddressDraft][]).map(([value, label, address]) => <label key={label} className={`flex cursor-pointer items-start gap-3 rounded-[3px] border px-3 py-2 ${useSuggested === value ? 'border-[#0073cf] bg-[#e8f4fa]' : 'border-[#cfdbe3]'}`}><input type="radio" name="address-choice" checked={useSuggested === value} onChange={() => setUseSuggested(value)} className="mt-1 h-[16px] w-[16px] accent-[#003865]" /><span><b className="block">{label}</b>{[address.line1, address.line2].filter(Boolean).join(' ')}<br />{address.city}, {rules.code} {address.zip}</span></label>)}
+      <div className="flex gap-2"><button type="button" onClick={() => setStep('enter')} className={modalButton.secondary}>Edit Address</button><SaveButton onClick={confirmAddress} label="Use This Address" /></div>
+    </div>}
+    {step === 'garage' && <div className="space-y-3 text-[13px]">
+      <p><b>{[chosen.line1, chosen.line2].filter(Boolean).join(' ')}, {chosen.city}, {rules.code} {chosen.zip}</b></p>
+      {units.length ? <>
+        <p>{moved === 'moved' ? 'Confirm every vehicle now kept overnight at the new address.' : 'Mailing address only: vehicles stay garaged at their current ZIP. Check any that did move.'}</p>
+        <ul className="space-y-1">{units.map((unit) => <li key={unit.id}><label className="flex items-center gap-2"><input type="checkbox" checked={garaged.includes(unit.id)} onChange={(event) => setGaraged(event.target.checked ? [...garaged, unit.id] : garaged.filter((entry) => entry !== unit.id))} className="h-[16px] w-[16px] accent-[#003865]" />{unit.label} <span className="text-[#5c6670]">garaged {unit.zip || '—'}{garaged.includes(unit.id) ? ` → ${chosen.zip.slice(0, 5)}` : ''}</span></label></li>)}</ul>
+      </> : <p>No garaged units on this policy.</p>}
+      <div className="flex gap-2"><button type="button" onClick={() => setStep('verify')} className={modalButton.secondary}>Back</button><SaveButton onClick={save} label="Save Address Change" /></div>
+    </div>}
+  </div>;
 }
 
 function ContactEditor({ draft, onSave }: EditorProps) {
@@ -117,9 +182,17 @@ function ContactEditor({ draft, onSave }: EditorProps) {
   return <div className="grid grid-cols-2 gap-3"><Field label="Email"><TextControl value={email} onChange={setEmail} /></Field><Field label="Phone"><TextControl value={phone} mask="phone" onChange={setPhone} /></Field><div className="col-span-2"><InlineError message={error} /><SaveButton onClick={save} /></div></div>;
 }
 
-function VehicleForm({ initial, onSubmit, submitLabel }: { initial?: Vehicle; onSubmit: (vehicle: Partial<Vehicle>) => string; submitLabel?: string }) {
-  const [v, setV] = useState({ year: '', make: '', model: '', bodyStyle: '', vin: '', primaryUse: initial?.primaryUse ?? '1A - Pleasure', annualMiles: initial?.annualMiles ?? '10,000 - 11,999', ownershipLength: 'Less than 1 month' });
+// ------------------------------------------------------------------ Vehicles
+
+type Ownership = 'Owned' | 'Financed' | 'Leased';
+interface VehicleMeta { acquired: string; ownership: Ownership; lender: { name: string; address: string; loanNumber: string }; copyFrom: string; driverId: string }
+
+function VehicleForm({ draft, initial, onSubmit, submitLabel, effectiveDate, showCoverage }: { draft: { kind: 'personal'; quote: QuoteData }; initial?: Vehicle; onSubmit: (vehicle: Partial<Vehicle>, meta: VehicleMeta) => string; submitLabel?: string; effectiveDate: string; showCoverage: boolean }) {
+  const [v, setV] = useState({ year: '', make: '', model: '', bodyStyle: '', vin: '', primaryUse: initial?.primaryUse ?? '1A - Pleasure', annualMiles: initial?.annualMiles ?? '10,000 - 11,999', ownershipLength: 'Less than 1 month', garagingZip: initial?.garagingZip ?? draft.quote.insured.address.zip });
+  const rated = draft.quote.drivers.filter((driver) => driver.driverStatus === 'Rated');
+  const [meta, setMeta] = useState<VehicleMeta>({ acquired: effectiveDate, ownership: 'Owned', lender: { name: '', address: '', loanNumber: '' }, copyFrom: draft.quote.vehicles[0]?.id ?? 'liability', driverId: rated[0]?.id ?? '' });
   const [error, setError] = useState('');
+  const [decoded, setDecoded] = useState('');
   const set = (patch: Partial<typeof v>) => {
     const next = { ...v, ...patch };
     if (!makesFor(next.year).includes(next.make)) next.make = '';
@@ -128,70 +201,146 @@ function VehicleForm({ initial, onSubmit, submitLabel }: { initial?: Vehicle; on
     if (!bodies.includes(next.bodyStyle)) next.bodyStyle = bodies.length === 1 ? bodies[0] : '';
     setV(next);
   };
-  const submit = () => {
-    if (!v.year || !v.make || !v.model || !v.bodyStyle) { setError('Select year, make, model and body style.'); return; }
-    if (!VIN.test(v.vin)) { setError('Enter the 17-character VIN.'); return; }
-    setError(onSubmit({ ...v, ...lookupVehicleDetails(v.year, v.make, v.model, v.bodyStyle) }));
+  const decode = () => {
+    const result = decodeVin(v.vin);
+    if (!result) { setDecoded('VIN not recognized. Select the year, make and model manually.'); return; }
+    set({ ...result });
+    setDecoded(`VIN decoded: ${result.year} ${result.make} ${result.model} ${result.bodyStyle}. Confirm it matches the vehicle.`);
   };
-  return <div className="grid grid-cols-2 gap-3">
+  const days = ageOn(meta.acquired) === null ? null : dayDiffStrings(meta.acquired, effectiveDate);
+  const submit = () => {
+    if (!VIN.test(v.vin)) { setError('Enter the 17-character VIN (no I, O or Q).'); return; }
+    if (draft.quote.vehicles.some((vehicle) => vehicle.vin === v.vin && vehicle.id !== initial?.id)) { setError('That VIN is already on the policy.'); return; }
+    if (!v.year || !v.make || !v.model || !v.bodyStyle) { setError('Select year, make, model and body style.'); return; }
+    if (days === null) { setError('Enter the date the customer took ownership (MM/DD/YYYY).'); return; }
+    if (days < 0) { setError('The purchase date cannot be after the change effective date.'); return; }
+    if (!rulesFor(draft.quote.policy.quoteState).zip.test(v.garagingZip)) { setError(`The vehicle must be garaged in ${rulesFor(draft.quote.policy.quoteState).name} (${rulesFor(draft.quote.policy.quoteState).zipHint}).`); return; }
+    if (meta.ownership !== 'Owned' && (!meta.lender.name.trim() || !meta.lender.address.trim())) { setError(`Enter the ${meta.ownership === 'Leased' ? 'leasing company' : 'lender'} name and mailing address. They are listed on the policy as ${meta.ownership === 'Leased' ? 'lessor' : 'lienholder'}.`); return; }
+    if (showCoverage && meta.ownership !== 'Owned' && meta.copyFrom === 'liability') { setError('Financed and leased vehicles need Comprehensive and Collision. Copy coverage from a vehicle that carries them.'); return; }
+    if (showCoverage && meta.ownership !== 'Owned') {
+      const source = draft.quote.vehicles.find((vehicle) => vehicle.id === meta.copyFrom);
+      if (source && (source.compDeductible === 'None' || source.collDeductible === 'None')) { setError(`${vehicleName(source)} has no physical damage coverage. Lenders require Comprehensive and Collision; copy from a different vehicle or add them under Change coverages.`); return; }
+    }
+    setError(onSubmit({ ...v, ...lookupVehicleDetails(v.year, v.make, v.model, v.bodyStyle) }, meta));
+  };
+  return <div className="grid max-h-[460px] grid-cols-2 gap-3 overflow-y-auto overflow-x-hidden pr-1 [&>*]:min-w-0">
+    <Field label="VIN" wide><span className="flex min-w-0 gap-2"><span className="min-w-0 flex-1"><TextControl value={v.vin} mask="vin" onChange={(vin) => { set({ vin }); setDecoded(''); }} /></span><button type="button" onClick={decode} className={`shrink-0 ${modalButton.secondary}`}>Decode VIN</button></span></Field>
+    {decoded && <p className="col-span-2 text-[12px] text-[#0b5d3f]">{decoded}</p>}
     <Field label="Year"><SelectControl value={v.year} options={MODEL_YEARS} onChange={(year) => set({ year })} /></Field>
     <Field label="Make"><SelectControl value={v.make} options={makesFor(v.year)} onChange={(make) => set({ make })} /></Field>
     <Field label="Model"><SelectControl value={v.model} options={modelsFor(v.year, v.make)} onChange={(model) => set({ model })} /></Field>
     <Field label="Body style"><SelectControl value={v.bodyStyle} options={bodyStylesFor(v.make, v.model)} onChange={(bodyStyle) => set({ bodyStyle })} /></Field>
-    <Field label="VIN" wide><TextControl value={v.vin} mask="vin" onChange={(vin) => set({ vin })} /></Field>
+    <Field label="Date the customer took ownership"><TextControl value={meta.acquired} mask="date" onChange={(acquired) => setMeta({ ...meta, acquired })} /></Field>
+    <Field label="Ownership"><SelectControl value={meta.ownership} options={['Owned', 'Financed', 'Leased']} onChange={(ownership) => setMeta({ ...meta, ownership: ownership as Ownership })} /></Field>
+    {days !== null && days > 30 && <p className="col-span-2 rounded-[3px] bg-[#fff6ee] px-3 py-2 text-[12px] text-[#9a4a0b]">Owned {days} days before the change date. The 30-day newly acquired vehicle grace period has passed, so coverage for this vehicle starts on the change effective date ({effectiveDate}), not the purchase date.</p>}
+    {days !== null && days >= 0 && days <= 30 && <p className="col-span-2 text-[12px] text-[#0b5d3f]">Within the 30-day newly acquired vehicle period.</p>}
+    {meta.ownership !== 'Owned' && <>
+      <Field label={meta.ownership === 'Leased' ? 'Leasing company' : 'Lender (lienholder)'}><TextControl value={meta.lender.name} onChange={(name) => setMeta({ ...meta, lender: { ...meta.lender, name } })} /></Field>
+      <Field label="Lender mailing address"><TextControl value={meta.lender.address} onChange={(address) => setMeta({ ...meta, lender: { ...meta.lender, address } })} /></Field>
+      <Field label="Loan / lease number (optional)"><TextControl value={meta.lender.loanNumber} onChange={(loanNumber) => setMeta({ ...meta, lender: { ...meta.lender, loanNumber } })} /></Field>
+    </>}
+    <Field label="Garaging ZIP"><TextControl value={v.garagingZip} mask="zip" onChange={(garagingZip) => set({ garagingZip })} /></Field>
     <Field label="Primary use"><SelectControl value={v.primaryUse} options={PRIMARY_USES} onChange={(primaryUse) => set({ primaryUse })} /></Field>
     <Field label="Annual miles"><SelectControl value={v.annualMiles} options={ANNUAL_MILES} onChange={(annualMiles) => set({ annualMiles })} /></Field>
+    {rated.length > 0 && <Field label="Primary driver"><SelectControl value={meta.driverId} options={rated.map((driver) => ({ value: driver.id, label: driverName(driver) }))} onChange={(driverId) => setMeta({ ...meta, driverId })} /></Field>}
+    {showCoverage && <Field label="Coverage for this vehicle" wide><SelectControl value={meta.copyFrom} options={[...draft.quote.vehicles.map((vehicle) => ({ value: vehicle.id, label: `Same as ${vehicleName(vehicle)} (OTC ${vehicle.compDeductible}, Collision ${vehicle.collDeductible})` })), { value: 'liability', label: 'Liability only (no Comprehensive or Collision)' }]} onChange={(copyFrom) => setMeta({ ...meta, copyFrom })} /></Field>}
     <div className="col-span-2"><InlineError message={error} /><SaveButton onClick={submit} label={submitLabel} /></div>
   </div>;
 }
 
-function AddVehicleEditor({ draft, onSave }: EditorProps) {
-  if (draft.kind !== 'personal') return null;
-  return <VehicleForm onSubmit={(fields) => {
-    const next = clone(draft) as { kind: 'personal'; quote: QuoteData };
-    const vehicle = { ...createVehicle(next.quote.insured.address.zip), ...fields, rideshare: 'No' as const, delivery: 'No' as const };
-    next.quote.vehicles.push(vehicle);
-    onSave(next, `Added ${vehicleName(vehicle)} (VIN ${vehicle.vin})`, { vehicles: true });
-    return '';
-  }} submitLabel="Add Vehicle" />;
+/** Days from `from` to `to` (MM/DD/YYYY), or null when either date is invalid. */
+function dayDiffStrings(from: string, to: string): number | null {
+  const a = parseDate(from);
+  const b = parseDate(to);
+  return a && b ? Math.round((b.getTime() - a.getTime()) / 86_400_000) : null;
 }
 
-function ReplaceVehicleEditor({ draft, onSave }: EditorProps) {
+function lienFor(meta: VehicleMeta, label: string): PolicyRecord['lienholders'][number] | null {
+  if (meta.ownership === 'Owned') return null;
+  return { id: `lh-${Math.random().toString(36).slice(2, 9)}`, unit: label, name: meta.lender.name.trim(), address: meta.lender.address.trim(), loanNumber: meta.lender.loanNumber.trim(), kind: meta.ownership === 'Leased' ? 'Lessor' : 'Lienholder' };
+}
+
+function AddVehicleEditor({ draft, onSave, lienholders, effectiveDate }: EditorProps) {
+  if (draft.kind !== 'personal') return null;
+  const personal = draft as { kind: 'personal'; quote: QuoteData };
+  return <VehicleForm draft={personal} effectiveDate={effectiveDate} showCoverage submitLabel="Add Vehicle" onSubmit={(fields, meta) => {
+    const next = clone(personal);
+    const source = next.quote.vehicles.find((vehicle) => vehicle.id === meta.copyFrom);
+    const coverage = source ? { compDeductible: source.compDeductible, collDeductible: source.collDeductible, rental: source.rental, roadside: source.roadside } : { compDeductible: 'None', collDeductible: 'None', rental: 'None', roadside: 'None' };
+    const vehicle = { ...createVehicle(next.quote.insured.address.zip), ...fields, ...coverage, rideshare: 'No' as const, delivery: 'No' as const };
+    next.quote.vehicles.push(vehicle);
+    if (meta.driverId) next.quote.drivers = next.quote.drivers.map((driver) => (driver.id === meta.driverId && !driver.primaryVehicleId ? { ...driver, primaryVehicleId: vehicle.id } : driver));
+    const lien = lienFor(meta, vehicleName(vehicle));
+    onSave(next, `Added ${vehicleName(vehicle)} (VIN ${vehicle.vin}), ${meta.ownership.toLowerCase()}, acquired ${meta.acquired}; ${source ? `coverage copied from ${vehicleName(source)}` : 'liability only'}${lien ? `; ${lien.kind.toLowerCase()} ${lien.name}` : ''}`, { vehicles: true, ...(lien ? { lienholders: [...lienholders, lien], added: [lien] } : {}) });
+    return '';
+  }} />;
+}
+
+function ReplaceVehicleEditor({ draft, onSave, lienholders, effectiveDate }: EditorProps) {
   const vehicles = draft.kind === 'personal' ? draft.quote.vehicles : [];
   const [target, setTarget] = useState(vehicles[0]?.id ?? '');
   if (draft.kind !== 'personal') return null;
+  const personal = draft as { kind: 'personal'; quote: QuoteData };
   const old = vehicles.find((vehicle) => vehicle.id === target);
   return <div className="space-y-3"><Field label="Vehicle being replaced"><SelectControl value={target} options={vehicles.map((vehicle) => ({ value: vehicle.id, label: vehicleName(vehicle) }))} onChange={setTarget} /></Field>
-    <p className="text-[12px] text-[#5c6670]">The new vehicle keeps the replaced vehicle&rsquo;s coverages and garaging.</p>
-    <VehicleForm initial={old} onSubmit={(fields) => {
+    <p className="text-[12px] text-[#5c6670]">The new vehicle takes the replaced vehicle&rsquo;s coverages, driver assignment and place on the policy, so there is no gap in coverage. Move the NC plate to the new vehicle or surrender it to the DMV.</p>
+    <VehicleForm key={target} draft={personal} initial={old} effectiveDate={effectiveDate} showCoverage={false} submitLabel="Replace Vehicle" onSubmit={(fields, meta) => {
       if (!old) return 'Select the vehicle being replaced.';
-      const next = clone(draft) as { kind: 'personal'; quote: QuoteData };
+      if (meta.ownership !== 'Owned' && (old.compDeductible === 'None' || old.collDeductible === 'None')) return `${vehicleName(old)} has no Comprehensive/Collision. Lenders require both; add them under Change coverages first.`;
+      const next = clone(personal);
       next.quote.vehicles = next.quote.vehicles.map((vehicle) => (vehicle.id === old.id ? { ...vehicle, ...fields } : vehicle));
-      onSave(next, `Replaced ${vehicleName(old)} with ${[fields.year, fields.make, fields.model].join(' ')} (VIN ${fields.vin})`, { vehicles: true });
+      const newLabel = [fields.year, fields.make, fields.model].join(' ');
+      const lien = lienFor(meta, newLabel);
+      const kept = lienholders.filter((holder) => holder.unit !== vehicleName(old));
+      onSave(next, `Replaced ${vehicleName(old)} with ${newLabel} (VIN ${fields.vin}), acquired ${meta.acquired}${lien ? `; ${lien.kind.toLowerCase()} ${lien.name}` : ''}${kept.length < lienholders.length ? '; prior lienholder removed' : ''}`, { vehicles: true, lienholders: lien ? [...kept, lien] : kept, ...(lien ? { added: [lien] } : {}) });
       return '';
-    }} submitLabel="Replace Vehicle" /></div>;
+    }} /></div>;
 }
 
-function RemoveVehicleEditor({ draft, onSave, lienholders }: EditorProps) {
+const plateOptions = (agency: string) => [
+  { value: 'transferred', label: 'Plate moved to a replacement vehicle on this policy' },
+  { value: 'surrendered', label: `Plate surrendered to ${agency}` },
+  { value: 'insuredElsewhere', label: 'Vehicle is insured on another policy' },
+  { value: 'stillRegistered', label: 'Plate is still registered and has not been surrendered' },
+];
+
+function RemoveVehicleEditor({ policy, draft, onSave, lienholders }: EditorProps) {
+  const plateRule = rulesFor(policy.state).plateSurrender;
+  const stateName = rulesFor(policy.state).name;
   const vehicles = draft.kind === 'personal' ? draft.quote.vehicles : [];
   const [target, setTarget] = useState(vehicles[0]?.id ?? '');
   const [reason, setReason] = useState('');
+  const [plate, setPlate] = useState('');
+  const [receipt, setReceipt] = useState('');
   const [error, setError] = useState('');
   if (draft.kind !== 'personal') return null;
+  const old = vehicles.find((vehicle) => vehicle.id === target);
+  const lien = lienholders.find((holder) => old && holder.unit === vehicleName(old));
   const save = () => {
-    if (vehicles.length < 2) { setError('A policy needs at least one vehicle. To remove the last vehicle, cancel the policy.'); return; }
+    if (vehicles.length < 2) { setError('A policy needs at least one vehicle. To remove the last vehicle, surrender the plate and cancel the policy.'); return; }
     if (!reason) { setError('Select why the vehicle is being removed.'); return; }
-    const old = vehicles.find((vehicle) => vehicle.id === target)!;
+    if (plateRule && !plate) { setError(`Tell us what happened to the ${stateName} license plate.`); return; }
+    if (plateRule && plate === 'stillRegistered') { setError(`${stateName} requires insurance on every registered vehicle. Have the customer surrender the plate at ${plateRule.agency} (or move it to another insured vehicle) first. Otherwise ${plateRule.consequence}`); return; }
+    if (plate === 'surrendered' && !receipt.trim()) { setError('Enter the DMV plate surrender receipt number.'); return; }
     const next = clone(draft) as { kind: 'personal'; quote: QuoteData };
     next.quote.vehicles = next.quote.vehicles.filter((vehicle) => vehicle.id !== target);
     next.quote.drivers = next.quote.drivers.map((driver) => (driver.primaryVehicleId === target ? { ...driver, primaryVehicleId: '' } : driver));
-    onSave(next, `Removed ${vehicleName(old)} (${reason})`, { vehicles: true, lienholders: lienholders.filter((holder) => holder.unit !== vehicleName(old)) });
+    const plateNote = !plateRule ? 'no plate surrender required' : plate === 'surrendered' ? `plate surrendered to ${plateRule.agency} (receipt ${receipt.trim()})` : plate === 'transferred' ? 'plate moved to a replacement vehicle' : 'vehicle insured on another policy';
+    onSave(next, `Removed ${vehicleName(old!)} (${reason}); ${plateNote}${lien ? `; ${lien.kind.toLowerCase()} ${lien.name} removed` : ''}`, { vehicles: true, lienholders: lienholders.filter((holder) => holder.unit !== vehicleName(old!)) });
   };
-  return <div className="grid grid-cols-2 gap-3"><Field label="Vehicle"><SelectControl value={target} options={vehicles.map((vehicle) => ({ value: vehicle.id, label: vehicleName(vehicle) }))} onChange={setTarget} /></Field><Field label="Reason"><SelectControl value={reason} options={['Sold', 'Traded in', 'Total loss', 'Given away', 'No longer drivable']} onChange={setReason} /></Field><div className="col-span-2"><InlineError message={error} /><SaveButton onClick={save} label="Remove Vehicle" /></div></div>;
+  return <div className="grid grid-cols-2 gap-3">
+    <Field label="Vehicle"><SelectControl value={target} options={vehicles.map((vehicle) => ({ value: vehicle.id, label: vehicleName(vehicle) }))} onChange={setTarget} /></Field>
+    <Field label="Reason"><SelectControl value={reason} options={['Sold', 'Traded in', 'Replaced (new vehicle already added)', 'Total loss', 'Given away', 'No longer drivable']} onChange={setReason} /></Field>
+    {plateRule && <Field label={`${stateName} license plate`} wide><SelectControl value={plate} options={plateOptions(plateRule.agency)} onChange={setPlate} /></Field>}
+    {plateRule && plate === 'surrendered' && <Field label="DMV surrender receipt number"><TextControl value={receipt} onChange={setReceipt} /></Field>}
+    {lien && <p className="col-span-2 rounded-[3px] bg-[#fff6ee] px-3 py-2 text-[12px] text-[#9a4a0b]">{lien.kind} <b>{lien.name}</b> is listed on this vehicle and will be removed and notified.</p>}
+    <p className="col-span-2 text-[12px] text-[#5c6670]">Replacing the vehicle? Add the new one first (or use Replace a vehicle) so there is no gap in coverage.</p>
+    <div className="col-span-2"><InlineError message={error} /><SaveButton onClick={save} label="Remove Vehicle" /></div>
+  </div>;
 }
 
 function AddDriverEditor({ draft, onSave }: EditorProps) {
-  const [d, setD] = useState({ firstName: '', lastName: '', dob: '', gender: '', maritalStatus: '', relationship: '', licenseState: 'North Carolina', licenseNumber: '', ageFirstLicensed: '16', driverStatus: 'Rated', licenseType: DRIVER_LICENSE_TYPES[0], experience: '', violations: '0', accidents: '0' });
+  const [d, setD] = useState({ firstName: '', lastName: '', dob: '', gender: '', maritalStatus: '', relationship: '', licenseState: draft.kind === 'personal' ? draft.quote.policy.quoteState : draft.quote.business.state, licenseNumber: '', ageFirstLicensed: '16', driverStatus: 'Rated', licenseType: DRIVER_LICENSE_TYPES[0], experience: '', violations: '0', accidents: '0' });
   const [error, setError] = useState('');
   const set = (patch: Partial<typeof d>) => setD({ ...d, ...patch });
   const commercial = draft.kind === 'commercial';
@@ -257,19 +406,25 @@ function RemoveDriverEditor({ draft, onSave }: EditorProps) {
   return <div className="grid grid-cols-2 gap-3"><Field label="Driver"><SelectControl value={target} options={options} onChange={setTarget} /></Field>{draft.kind === 'personal' && <Field label="Action"><SelectControl value={action} options={['Exclude from the policy', 'Remove (no longer lives in household)']} onChange={setAction} /></Field>}<div className="col-span-2"><InlineError message={error} /><SaveButton onClick={save} label="Save Driver Change" /></div></div>;
 }
 
-function AutoCoverageEditor({ draft, onSave }: EditorProps) {
+function AutoCoverageEditor({ policy, draft, onSave }: EditorProps) {
+  const rules = rulesFor(policy.state);
   const [next, setNext] = useState(() => clone(draft) as { kind: 'personal'; quote: QuoteData });
   const c = next.quote.coverages;
   const setCov = (patch: Partial<typeof c>) => setNext({ ...next, quote: { ...next.quote, coverages: { ...c, ...patch } } });
   const setVehicle = (vehicleId: string, patch: Partial<Vehicle>) => setNext({ ...next, quote: { ...next.quote, vehicles: next.quote.vehicles.map((vehicle) => (vehicle.id === vehicleId ? { ...vehicle, ...patch } : vehicle)) } });
   const [error, setError] = useState('');
   const save = () => {
-    if (Number(c.uninsuredMotorist.split('/')[0]) > Number(c.bodilyInjuryPd.split('/')[0])) { setError('UM/UIM limits cannot be higher than Bodily Injury limits in North Carolina.'); return; }
+    const per = (value: string) => (/^\d/.test(value) ? Number(value.split('/')[0]) : 0);
+    if (rules.um.rule === 'matchLiability' && per(c.uninsuredMotorist) !== per(c.bodilyInjuryPd)) { setError('New Hampshire requires UM/UIM limits equal to the Bodily Injury limits.'); return; }
+    if (c.uninsuredMotorist !== 'Rejected' && per(c.uninsuredMotorist) > per(c.bodilyInjuryPd)) { setError(`UM/UIM limits cannot be higher than Bodily Injury limits in ${rules.name}.`); return; }
+    if ((c.uninsuredMotorist === 'Rejected' || c.pip === 'Rejected') && !c.rejectionSigned) { setError(`${rules.name} requires the customer's signed rejection form. Check the box below once it is signed.`); return; }
     if (next.quote.vehicles.some((vehicle) => vehicle.collDeductible !== 'None' && vehicle.compDeductible === 'None')) { setError('Collision requires Other Than Collision coverage on the same vehicle.'); return; }
     onSave(next, 'Coverages changed');
   };
   return <div className="space-y-3">
-    <div className="grid grid-cols-3 gap-3"><Field label="Bodily Injury & Property Damage"><SelectControl value={c.bodilyInjuryPd} options={coverageOptions(BI_PD)} onChange={(bodilyInjuryPd) => setCov({ bodilyInjuryPd })} /></Field><Field label="UM/UIM Bodily Injury"><SelectControl value={c.uninsuredMotorist} options={coverageOptions(UM_BI)} onChange={(uninsuredMotorist) => setCov({ uninsuredMotorist })} /></Field><Field label="Medical Payment"><SelectControl value={c.medicalPayments} options={coverageOptions(MED_PAY)} onChange={(medicalPayments) => setCov({ medicalPayments })} /></Field></div>
+    <div className="grid grid-cols-3 gap-3"><Field label="Bodily Injury & Property Damage"><SelectControl value={c.bodilyInjuryPd} options={coverageOptions(stateOptions(BI_PD, rules.liability))} onChange={(bodilyInjuryPd) => setCov({ bodilyInjuryPd })} /></Field><Field label="UM/UIM Bodily Injury"><SelectControl value={c.uninsuredMotorist} options={coverageOptions(stateOptions(UM_BI, rules.um.choices))} onChange={(uninsuredMotorist) => setCov({ uninsuredMotorist })} /></Field><Field label="Medical Payment"><SelectControl value={c.medicalPayments} options={coverageOptions(stateOptions(MED_PAY, rules.medPay))} onChange={(medicalPayments) => setCov({ medicalPayments })} /></Field>{rules.pip && <Field label="Personal Injury Protection"><SelectControl value={c.pip} options={coverageOptions(stateOptions(PIP_OPTIONS, rules.pip.choices))} onChange={(pip) => setCov({ pip })} /></Field>}</div>
+    <p className="text-[12px] text-[#5c6670]"><b>{rules.name}:</b> {rules.minimumText}</p>
+    {(c.uninsuredMotorist === 'Rejected' || c.pip === 'Rejected') && <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={c.rejectionSigned} onChange={(event) => setCov({ rejectionSigned: event.target.checked })} className="h-[16px] w-[16px] accent-[#003865]" />The customer signed the {rules.name} rejection form.</label>}
     {next.quote.vehicles.map((vehicle) => <div key={vehicle.id} className="rounded-[3px] border border-[#cfdbe3] p-3"><div className="mb-2 text-[13px] font-bold">{vehicleName(vehicle)}</div><div className="grid grid-cols-4 gap-3">
       <Field label="Other Than Collision"><SelectControl value={vehicle.compDeductible} options={coverageOptions(OTC_DEDUCTIBLES)} onChange={(compDeductible) => setVehicle(vehicle.id, { compDeductible })} /></Field>
       <Field label="Collision"><SelectControl value={vehicle.collDeductible} options={coverageOptions(COLL_DEDUCTIBLES)} onChange={(collDeductible) => setVehicle(vehicle.id, { collDeductible })} /></Field>
@@ -377,13 +532,14 @@ const EDITORS: Record<ChangeType, (props: EditorProps) => ReactNode> = {
   lienholder: LienholderEditor, addUnit: AddUnitEditor, removeUnit: RemoveUnitEditor,
 };
 
-export function ChangePolicyModal({ policy, onClose }: { policy: PolicyRecord; onClose: (message?: string) => void }) {
+export function ChangePolicyModal({ policy, onClose, initialType }: { policy: PolicyRecord; onClose: (message?: string) => void; initialType?: ChangeType }) {
+  setValidationState(policy.state);
   const { state, servicePolicy, engine } = useQuote();
   const day = state.simDate;
   const [stage, setStage] = useState<'select' | 'edit' | 'review'>('select');
   const [effectiveDate, setEffectiveDate] = useState(day);
   const [noLoss, setNoLoss] = useState(false);
-  const [type, setType] = useState<ChangeType>(availableTypes(policy)[0]);
+  const [type, setType] = useState<ChangeType>(initialType && availableTypes(policy).includes(initialType) ? initialType : availableTypes(policy)[0]);
   const [draft, setDraft] = useState<PolicySource>(() => clone(policy.source));
   const [changes, setChanges] = useState<string[]>([]);
   const [vehiclesChanged, setVehiclesChanged] = useState(false);
@@ -433,7 +589,7 @@ export function ChangePolicyModal({ policy, onClose }: { policy: PolicyRecord; o
     </>}
     {stage === 'edit' && <>
       <div className="mb-3 flex items-center justify-between"><h3 className="font-slab text-[16px] font-bold">{labelFor(type, policy)}</h3><button type="button" onClick={() => setStage('select')} className="flex items-center gap-1 text-[13px] font-bold text-[#0073cf] underline"><ArrowLeft size={14} />Back</button></div>
-      <Editor policy={policy} draft={draft} onSave={save} lienholders={lienholders} />
+      <Editor policy={policy} draft={draft} onSave={save} lienholders={lienholders} effectiveDate={effectiveDate} />
     </>}
     {stage === 'review' && preview && <>
       <div className="rounded-[3px] border border-[#cfdbe3] px-3 py-2 text-[13px]"><div className="mb-1 font-bold">Changes effective {effectiveDate}</div><ul className="list-disc space-y-0.5 pl-5">{changes.map((change, index) => <li key={index}>{change}</li>)}</ul></div>

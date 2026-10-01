@@ -34,7 +34,7 @@ export type PolicyDocumentType =
   | 'Declarations' | 'Renewal Declarations' | 'ID Cards' | 'Application' | 'FS-1 Certificate of Insurance' | 'Billing Statement' | 'Payment Receipt'
   | 'Notice of Cancellation' | 'Cancellation Confirmation' | 'Rescission of Cancellation' | 'Reinstatement Notice' | 'Renewal Offer' | 'Non-Renewal Notice'
   | 'Expiration Notice' | 'Bill Plan Change Confirmation' | 'Returned Payment Notice'
-  | 'Amended Declarations' | 'Evidence of Insurance' | 'Certificate of Insurance';
+  | 'Amended Declarations' | 'Evidence of Insurance' | 'Certificate of Insurance' | 'Policy Packet';
 
 export interface PolicyDocument {
   id: string;

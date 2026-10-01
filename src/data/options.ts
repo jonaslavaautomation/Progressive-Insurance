@@ -66,12 +66,8 @@ export const OWNED_RESIDENCES = ['Single Family Home', 'Condo', 'Townhouse'];
 // territory factors) so the rating engine and the dropdowns stay in sync.
 export interface CoverageOption { value: string; label: string; base: number }
 
-export const BI_PD: CoverageOption[] = [
-  { value: '50/100/50', label: '50/100/50', base: 380 },
-  { value: '100/300/100', label: '100/300/100', base: 461 },
-  { value: '250/500/100', label: '250/500/100', base: 538 },
-  { value: '250/500/250', label: '250/500/250', base: 577 },
-];
+// Liability and UM choices for every supported state live in data/states (filtered per state in the UI).
+export { LIABILITY_OPTIONS as BI_PD, UM_OPTIONS as UM_BI, PIP_OPTIONS } from '@/data/states';
 export const MED_PAY: CoverageOption[] = [
   { value: 'None', label: 'None', base: 0 },
   { value: '1000', label: '$1,000', base: 16 },
@@ -101,19 +97,15 @@ export const TOWING: CoverageOption[] = [
   { value: 'None', label: 'None', base: 0 },
   { value: 'Roadside', label: 'Roadside Assistance', base: 7 },
 ];
-export const UM_BI: CoverageOption[] = [
-  { value: '50/100', label: '50/100', base: 32 },
-  { value: '100/300', label: '100/300', base: 44 },
-  { value: '250/500', label: '250/500', base: 57 },
-];
 export const UMPD: CoverageOption[] = [
   { value: '50', label: '50 w/$100 Ded', base: 1.88 },
   { value: '100', label: '100 w/$100 Ded', base: 2.61 },
+  { value: 'None', label: 'Not offered in this state', base: 0 },
 ];
 export const SNAPSHOT_OPTIONS = ['Do Not Participate', 'Enrolled - Mobile App', 'Enrolled - Plug-In Device'];
 export const CUSTOM_EQUIPMENT_MAX = 5000;
 
-export const COVERAGE_DEFAULTS = { bodilyInjuryPd: '100/300/100', medicalPayments: 'None', uninsuredMotorist: '100/300', umpd: '50', snapshot: '' };
+export const COVERAGE_DEFAULTS = { bodilyInjuryPd: '100/300/100', medicalPayments: 'None', uninsuredMotorist: '100/300', umpd: '50', snapshot: '', pip: '', rejectionSigned: false };
 export const VEHICLE_COVERAGE_DEFAULTS = { compDeductible: '500', collDeductible: '500', rental: 'None', roadside: 'None', customEquipment: '0' };
 
 export const PAYMENT_METHODS = ['Bank account (EFT)', 'Credit/debit card via secure IVR', 'Customer pays online after binding'];

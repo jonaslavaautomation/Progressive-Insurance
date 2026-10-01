@@ -4,9 +4,11 @@ import type { PortalPage } from '@/context/quoteStore';
 import { matchesStatus } from '@/servicing/policyFilters';
 import { claimsOf, crossSellOpportunities, inForce, paperlessPending, prospects, recentChanges } from '@/servicing/portal/bookStats';
 import { guideRequest } from '@/servicing/portal/portalUtils';
+import { SUPPORTED_STATES, type StateName } from '@/data/states';
 import { dayDiff } from '@/services/policyEngine';
 import { formatLogin, sessionStore, signOut } from '@/services/session';
 import { runWithSpinner } from '@/services/processing';
+import { LegalLink } from '@/components/LegalLink';
 import { parseDate } from '@/utils/dates';
 import { Bell, Bookmark, ChevronDown, CircleHelp, FileText, LogOut, Menu, Plus, RotateCcw, Search, UserRound, X } from 'lucide-react';
 
@@ -57,6 +59,39 @@ function NavMenus({ mobileOpen }: { mobileOpen: boolean }) {
   </nav>;
 }
 
+/** Bookmark (quick links) and bell (notifications from the book of business) in the global header. */
+function HeaderShortcuts() {
+  const { state, openPolicies, openPending, openPage, openProductPicker } = useQuote();
+  const [open, setOpen] = useState<'' | 'links' | 'alerts'>('');
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent | KeyboardEvent) => { if (event instanceof KeyboardEvent ? event.key === 'Escape' : !box.current?.contains(event.target as Node)) setOpen(''); };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', close);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', close); };
+  }, [open]);
+  const day = state.simDate;
+  const count = (status: string) => state.policies.filter((policy) => matchesStatus(policy, status, day)).length;
+  const openClaims = claimsOf(state.policies).filter(({ claim }) => claim.status.startsWith('Open')).length;
+  const alerts: { text: string; onClick: () => void }[] = [
+    { text: `${count('Pending Cancel')} polic${count('Pending Cancel') === 1 ? 'y' : 'ies'} pending cancellation`, onClick: () => openPending() },
+    { text: `${count('Renewal Offered')} renewal offer${count('Renewal Offered') === 1 ? '' : 's'} waiting for payment`, onClick: () => openPending('renewals') },
+    { text: `${count('Past Due')} past-due bill${count('Past Due') === 1 ? '' : 's'}`, onClick: () => openPage('billing') },
+    { text: `${openClaims} open claim${openClaims === 1 ? '' : 's'}`, onClick: () => openPage('claims') },
+    { text: `${count('e-Sign Pending')} application${count('e-Sign Pending') === 1 ? '' : 's'} waiting for e-Signature`, onClick: () => openPage('esign') },
+  ].filter((alert) => !alert.text.startsWith('0 '));
+  const links: [string, () => void][] = [['Start a New Quote', openProductPicker], ['Policy Search', () => openPolicies()], ['Pending Cancel & Renewals', () => openPending()], ['Billing Center', () => openPage('billing')], ['Claims Center', () => openPage('claims')], ['Product Guides', () => openPage('productGuides')]];
+  const panel = 'absolute right-0 top-[30px] z-50 w-[260px] rounded-[3px] border border-[#a6adb3] bg-white py-1 text-left text-[#003865] shadow-lg';
+  const item = 'block w-full px-3 py-[7px] text-left text-[11.5px] font-semibold hover:bg-[#e8f4fa] hover:text-[#0073cf]';
+  return <div ref={box} className="relative hidden items-center gap-3 sm:flex">
+    <button type="button" aria-label="Quick links" aria-expanded={open === 'links'} onClick={() => setOpen(open === 'links' ? '' : 'links')} className="hover:text-[#f5a45d]"><Bookmark size={18} fill="currentColor" /></button>
+    <button type="button" aria-label={`Notifications (${alerts.length})`} aria-expanded={open === 'alerts'} onClick={() => setOpen(open === 'alerts' ? '' : 'alerts')} className="relative hover:text-[#f5a45d]"><Bell size={18} />{alerts.length > 0 && <i className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-[#f5a45d]" />}</button>
+    {open === 'links' && <div className={panel}><div className="border-b border-[#e4ecf1] px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-[.4px] text-[#5c6670]">Quick links</div>{links.map(([label, action]) => <button key={label} type="button" onClick={() => { setOpen(''); action(); }} className={item}>{label}</button>)}</div>}
+    {open === 'alerts' && <div className={panel}><div className="border-b border-[#e4ecf1] px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-[.4px] text-[#5c6670]">Notifications</div>{alerts.length ? alerts.map((alert) => <button key={alert.text} type="button" onClick={() => { setOpen(''); alert.onClick(); }} className={item}>{alert.text}</button>) : <p className="px-3 py-2 text-[11.5px] text-[#5c6670]">You're all caught up.</p>}</div>}
+  </div>;
+}
+
 export function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const { showDashboard } = useQuote();
@@ -64,7 +99,7 @@ export function Header() {
     <div className="mx-auto flex min-h-[50px] max-w-[1440px] items-center gap-5 px-4">
       <div className="flex shrink-0 items-center gap-2"><button className="rounded p-1 md:hidden" onClick={() => setMenuOpen(!menuOpen)} aria-label="Open navigation"><Menu size={20} /></button><button type="button" onClick={showDashboard} title="Home" className="flex items-center gap-2"><span className="flex h-[32px] items-center rounded-[4px] bg-white px-[8px]"><img src="/lava-logo.png" alt="LAVA" className="h-[20px] w-auto" /></span><span className="h-[24px] w-px bg-white/30" aria-hidden /><span className="whitespace-nowrap text-[17px] font-light tracking-[-.6px]">FOR<span className="font-bold">AGENTS</span>ONLY</span></button></div>
       <NavMenus mobileOpen={menuOpen} />
-      <div className="ml-auto flex shrink-0 items-center gap-3"><Bookmark size={18} fill="currentColor" className="hidden sm:block" /><span className="relative hidden sm:block"><Bell size={18} /><i className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-[#f5a45d]" /></span><UserRound size={19} fill="white" className="hidden sm:block" /><AgentGreeting /></div>
+      <div className="ml-auto flex shrink-0 items-center gap-3"><HeaderShortcuts /><UserRound size={19} fill="white" className="hidden sm:block" /><AgentGreeting /></div>
     </div>
   </header>;
 }
@@ -111,13 +146,13 @@ function SelectField({ label, value, options, onChange }: { label: string; value
 
 type QuoteActions = { onSelect: () => void; onOpenExisting: () => void; existingQuote: string };
 function QuoteCard({ onSelect, onOpenExisting, existingQuote }: QuoteActions) {
-  const { state, openCommercial } = useQuote();
+  const { state, openCommercial, setQuoteState } = useQuote();
   const commercial = state.commercial && !state.commercial.boundPolicyIds.length ? `${state.commercial.productQuotes[state.commercial.products[0]]?.quoteNumber ?? ''} - ${state.commercial.business.name || 'New Business'} (Commercial)` : '';
   const [pick, setPick] = useState<'personal' | 'commercial'>('personal');
   const choice = existingQuote && commercial ? pick : commercial ? 'commercial' : 'personal';
   const hasExisting = !!(existingQuote || commercial);
   const [activeTab, setActiveTab] = useState<'new' | 'existing'>('new');
-  return <section className="overflow-hidden rounded-[3px] border border-[#a6adb3] bg-white"><div className="flex h-[35px] border-b border-[#a6adb3] bg-[#f0f0ee]"><button onClick={() => setActiveTab('new')} className={`flex-1 border-r border-[#a6adb3] px-2 text-[14px] font-bold ${activeTab === 'new' ? 'bg-white text-[#003865]' : 'text-[#003865]/80'}`}>New Quote</button><button onClick={() => setActiveTab('existing')} className={`flex-1 px-2 text-[14px] font-bold ${activeTab === 'existing' ? 'bg-white text-[#003865]' : 'text-[#003865]/80'}`}>Existing Quote</button></div><div className="grid grid-cols-[50px_1fr] items-center gap-2 p-3 text-[10px] text-[#003865]"><span className="font-bold">{activeTab === 'new' ? 'State' : 'Quote'}</span>{activeTab === 'new' || !hasExisting ? <select className="h-[27px] rounded border border-[#cbd5df] bg-white px-2 text-[11px] text-[#7b8995]"><option>{activeTab === 'new' ? 'North Carolina' : 'Find existing quote'}</option></select> : <select aria-label="Existing quote" value={choice} onChange={(event) => setPick(event.target.value as 'personal' | 'commercial')} className="h-[27px] rounded border border-[#cbd5df] bg-white px-2 text-[11px] text-[#2e3a43]">{existingQuote && <option value="personal">{existingQuote}</option>}{commercial && <option value="commercial">{commercial}</option>}</select>}<span /><button onClick={activeTab === 'new' ? onSelect : choice === 'commercial' ? openCommercial : onOpenExisting} disabled={activeTab === 'existing' && !hasExisting} className="h-[32px] rounded border-2 border-[#f26722] bg-[#003865] text-[14px] font-bold text-white shadow-[0_0_0_1px_#0073cf] hover:bg-[#005081]">{activeTab === 'new' ? 'Select Product(s)' : 'Open Quote'}</button></div></section>;
+  return <section className="overflow-hidden rounded-[3px] border border-[#a6adb3] bg-white"><div className="flex h-[35px] border-b border-[#a6adb3] bg-[#f0f0ee]"><button onClick={() => setActiveTab('new')} className={`flex-1 border-r border-[#a6adb3] px-2 text-[14px] font-bold ${activeTab === 'new' ? 'bg-white text-[#003865]' : 'text-[#003865]/80'}`}>New Quote</button><button onClick={() => setActiveTab('existing')} className={`flex-1 px-2 text-[14px] font-bold ${activeTab === 'existing' ? 'bg-white text-[#003865]' : 'text-[#003865]/80'}`}>Existing Quote</button></div><div className="grid grid-cols-[50px_1fr] items-center gap-2 p-3 text-[10px] text-[#003865]"><span className="font-bold">{activeTab === 'new' ? 'State' : 'Quote'}</span>{activeTab === 'new' ? <select aria-label="Quote state" value={state.ui.quoteState} onChange={(event) => setQuoteState(event.target.value as StateName)} className="h-[27px] rounded border border-[#cbd5df] bg-white px-2 text-[11px] text-[#2e3a43]">{SUPPORTED_STATES.map((name) => <option key={name}>{name}</option>)}</select> : !hasExisting ? <select className="h-[27px] rounded border border-[#cbd5df] bg-white px-2 text-[11px] text-[#7b8995]"><option>Find existing quote</option></select> : <select aria-label="Existing quote" value={choice} onChange={(event) => setPick(event.target.value as 'personal' | 'commercial')} className="h-[27px] rounded border border-[#cbd5df] bg-white px-2 text-[11px] text-[#2e3a43]">{existingQuote && <option value="personal">{existingQuote}</option>}{commercial && <option value="commercial">{commercial}</option>}</select>}<span /><button onClick={activeTab === 'new' ? onSelect : choice === 'commercial' ? openCommercial : onOpenExisting} disabled={activeTab === 'existing' && !hasExisting} className="h-[32px] rounded border-2 border-[#f26722] bg-[#003865] text-[14px] font-bold text-white shadow-[0_0_0_1px_#0073cf] hover:bg-[#005081]">{activeTab === 'new' ? 'Select Product(s)' : 'Open Quote'}</button></div></section>;
 }
 
 const GUIDE_PRODUCTS: [string, string][] = [['auto', 'Auto'], ['motorcycle', 'Motorcycle/ATV'], ['boat', 'Boat/PWC'], ['motorhome', 'Motor Home'], ['trailer', 'Travel Trailer'], ['renters', 'Renters (HO4)'], ['commercialAuto', 'Commercial Auto'], ['bop', 'Businessowners / Contractor GL'], ['mgmt', 'EPLI / NPDO / Cyber']];
@@ -128,7 +163,7 @@ function LeftColumn(quoteActions: QuoteActions) {
   return <aside className="space-y-4"><QuoteCard {...quoteActions} />
     <button type="button" onClick={() => openPage('support')} className="relative block w-full overflow-hidden rounded-[3px] bg-[#087dc1] px-3 py-3 text-center text-white shadow-sm hover:bg-[#0673b2]"><div className="absolute -left-4 top-0 h-full w-1/2 -skew-x-12 bg-white/10" /><div className="relative"><div className="text-[15px] font-bold">Training Center</div><p className="mt-1 text-[11px] font-semibold">Access all of our training pages here.</p></div></button>
     {showId && <div className="relative border border-[#003865] bg-white px-8 py-4 text-center text-[#101820] shadow-sm"><button onClick={() => setShowId(false)} aria-label="Dismiss unique ID" className="absolute right-1.5 top-1 text-[#003865] hover:text-[#e87722]"><X size={17} /></button><h2 className="text-[25px] font-bold tracking-[-1px] text-[#003865]">Unique ID<sup className="ml-1 text-[10px]">®</sup></h2><p className="mt-3 text-[11px] font-bold leading-[1.45]">There is not a producer number assigned to your Unique ID. If you have an active appointment with us, please add it now for the most personalized experience on FAO.</p><button type="button" onClick={() => openPage('agency')} className="mt-4 text-[11px] font-bold text-[#003865] underline decoration-[#e87722] decoration-2 underline-offset-2 hover:text-[#0073cf]">Add Producer Number</button></div>}
-    <div className="relative overflow-hidden border border-[#a5c8d8] bg-[#dbf3fc] px-3 py-3 text-[#1d5e80] shadow-sm"><div className="flex items-start justify-between text-[20px] leading-[1.1]"><div>Product Guides and<br />Reference Cards</div><button type="button" aria-label="Open product guides" onClick={() => openPage('productGuides')}><Plus size={20} /></button></div><div className="mt-4 space-y-2 text-[10px] font-bold"><div>State</div><select className="h-[25px] w-full border border-[#93b7c9] bg-white px-2 text-[10px]"><option>North Carolina</option></select><div>Product</div><select aria-label="Product guide" value="" onChange={(event) => { guideRequest.product = event.target.value; openPage('productGuides'); }} className="h-[25px] w-full border border-[#93b7c9] bg-white px-2 text-[10px]"><option value="">Select Product</option>{GUIDE_PRODUCTS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></div></div>
+    <div className="relative overflow-hidden border border-[#a5c8d8] bg-[#dbf3fc] px-3 py-3 text-[#1d5e80] shadow-sm"><div className="flex items-start justify-between text-[20px] leading-[1.1]"><div>Product Guides and<br />Reference Cards</div><button type="button" aria-label="Open product guides" onClick={() => openPage('productGuides')}><Plus size={20} /></button></div><div className="mt-4 space-y-2 text-[10px] font-bold"><div>State</div><select aria-label="Guide state" value={guideRequest.state || 'North Carolina'} onChange={(event) => { guideRequest.state = event.target.value; }} className="h-[25px] w-full border border-[#93b7c9] bg-white px-2 text-[10px]">{SUPPORTED_STATES.map((name) => <option key={name}>{name}</option>)}</select><div>Product</div><select aria-label="Product guide" value="" onChange={(event) => { guideRequest.product = event.target.value; openPage('productGuides'); }} className="h-[25px] w-full border border-[#93b7c9] bg-white px-2 text-[10px]"><option value="">Select Product</option>{GUIDE_PRODUCTS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></div></div>
   </aside>;
 }
 
@@ -184,7 +219,7 @@ function AgencyNews() {
 }
 
 // Page-level notice the portal shows while products are being selected (it sits under the modal overlay).
-function BindingBanner() { return <div className="bg-[#1d252b] px-3 py-[3px] text-[11px] text-white"><span className="text-[13px]">Binding Restrictions:</span> Due to wildfires in multiple states writing new business, making endorsements, or changing limits on existing policies may be unavailable in affected areas. <a href="#restrictions" className="font-bold underline">Read more</a></div>; }
+function BindingBanner() { return <div className="bg-[#1d252b] px-3 py-[3px] text-[11px] text-white"><span className="text-[13px]">Binding Restrictions:</span> Due to wildfires in multiple states writing new business, making endorsements, or changing limits on existing policies may be unavailable in affected areas. <LegalLink label="Binding Restrictions" className="font-bold underline" /></div>; }
 
 export function Dashboard({ onSelectProduct, onOpenExisting, existingQuote, showBindingBanner = false }: { onSelectProduct: () => void; onOpenExisting: () => void; existingQuote: string; showBindingBanner?: boolean }) {
   const session = useSyncExternalStore(sessionStore.subscribe, sessionStore.get);

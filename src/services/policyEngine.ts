@@ -1,9 +1,15 @@
-// Policy servicing engine: billing cycle, late fees, NC-compliant cancellation notices,
+// Policy servicing engine: billing cycle, late fees, state-compliant cancellation notices,
 // cancellation/refund math, reinstatement and renewal. Pure functions over PolicyRecord.
 import type { CancelKind, InstallmentRecord, LedgerEntry, LedgerType, PolicyDocumentType, PolicyRecord } from '@/types/policy';
 import type { BillPlan } from '@/types/quote';
 import { addDays, addMonths, daysBetween, formatDate, parseDate } from '@/utils/dates';
 import { buildBillPlans } from '@/utils/ratingEngine';
+import { rulesFor } from '@/data/states';
+
+/** Notice periods for a policy's state. */
+export const nonpaymentNoticeDays = (policy: PolicyRecord) => rulesFor(policy.state).nonpaymentNoticeDays;
+export const otherNoticeDays = (policy: PolicyRecord) => rulesFor(policy.state).otherNoticeDays;
+const filesFs1 = (policy: PolicyRecord) => policy.product === 'auto' && !!rulesFor(policy.state).reporting?.system.includes('FS-1');
 
 export const BILL_LEAD_DAYS = 20;
 /** Late fee applies when a payment is more than 2 days past its due date (Progressive installment filing). */
@@ -128,7 +134,7 @@ export function returnedPayment(policy: PolicyRecord, day: string): PolicyRecord
 
 function issueNonpaymentNotice(policy: PolicyRecord, day: string): PolicyRecord {
   if (policy.status !== 'Active') return policy;
-  const effectiveDate = shiftDate(day, NC_NONPAYMENT_NOTICE_DAYS);
+  const effectiveDate = shiftDate(day, nonpaymentNoticeDays(policy));
   const amountDue = Math.max(minimumDue(policy, day), 0.01);
   let next: PolicyRecord = { ...policy, status: 'Pending Cancel', pendingCancel: { kind: 'nonpayment', reason: 'Nonpayment of premium', noticeDate: day, effectiveDate, amountDue, method: 'Pro Rata' } };
   next = doc(next, day, 'Notice of Cancellation', { reason: 'Nonpayment of premium', effectiveDate, amountDue, kind: 'nonpayment' });
@@ -147,7 +153,7 @@ export function validateCancel(policy: PolicyRecord, request: CancelRequest, day
   if (dayDiff(policy.effectiveDate, request.effectiveDate) < 0) return 'The cancellation date cannot be before the policy effective date.';
   if (dayDiff(request.effectiveDate, policy.expirationDate) <= 0) return 'The cancellation date must be before the policy expiration date. To stop coverage at the end of the term, non-renew instead.';
   if (request.kind === 'insured' && dayDiff(request.effectiveDate, day) > 30) return 'Insured-requested cancellations cannot be backdated more than 30 days.';
-  if (request.kind === 'company' && dayDiff(day, request.effectiveDate) < NC_OTHER_NOTICE_DAYS) return `North Carolina requires at least ${NC_OTHER_NOTICE_DAYS} days' notice for a company cancellation for a reason other than nonpayment. Earliest date: ${shiftDate(day, NC_OTHER_NOTICE_DAYS)}.`;
+  if (request.kind === 'company' && dayDiff(day, request.effectiveDate) < otherNoticeDays(policy)) return `${rulesFor(policy.state).name} requires at least ${otherNoticeDays(policy)} days' notice for a company cancellation for a reason other than nonpayment. Earliest date: ${shiftDate(day, otherNoticeDays(policy))}.`;
   if (!request.reason) return 'Select a cancellation reason.';
   return '';
 }
@@ -218,7 +224,7 @@ export function reinstate(policy: PolicyRecord, method: string, day: string): Po
   next = ledger(next, day, 'Reinstatement', 0, 'Cancellation reversed');
   if (check.amount > 0) next = makePayment(next, check.amount, method, day);
   next = doc(next, day, 'Reinstatement Notice', { lapseFrom: check.lapse ? cancelled.effectiveDate : '', lapseTo: check.lapse ? shiftDate(day, -1) : '', amount: check.amount });
-  if (next.product === 'auto') next = doc(next, day, 'FS-1 Certificate of Insurance', { reason: 'Reinstatement' });
+  if (filesFs1(next)) next = doc(next, day, 'FS-1 Certificate of Insurance', { reason: 'Reinstatement' });
   return log(next, day, 'Policy reinstated', check.lapse ? `Reinstated with a lapse in coverage from ${cancelled.effectiveDate} to ${shiftDate(day, -1)}.` : 'Reinstated with no lapse in coverage.');
 }
 
@@ -252,7 +258,7 @@ export function declineRenewal(policy: PolicyRecord, day: string): PolicyRecord 
 }
 
 export function companyNonRenew(policy: PolicyRecord, reason: string, day: string): PolicyRecord | string {
-  if (dayDiff(day, policy.expirationDate) < NC_OTHER_NOTICE_DAYS) return `North Carolina requires at least ${NC_OTHER_NOTICE_DAYS} days' notice before expiration to non-renew. The deadline for this term was ${shiftDate(policy.expirationDate, -NC_OTHER_NOTICE_DAYS)}.`;
+  if (dayDiff(day, policy.expirationDate) < otherNoticeDays(policy)) return `${rulesFor(policy.state).name} requires at least ${otherNoticeDays(policy)} days' notice before expiration to non-renew. The deadline for this term was ${shiftDate(policy.expirationDate, -otherNoticeDays(policy))}.`;
   if (!reason) return 'Select a non-renewal reason.';
   let next: PolicyRecord = { ...policy, renewal: null, nonRenewal: { by: 'company', noticeDate: day, reason } };
   next = doc(next, day, 'Non-Renewal Notice', { by: 'company', reason, expirationDate: policy.expirationDate });
@@ -268,7 +274,7 @@ export function markSigned(policy: PolicyRecord, day: string): PolicyRecord {
 function renewalOffer(policy: PolicyRecord, day: string): PolicyRecord {
   // Deterministic renewal rating: filed base rate change, loyalty credit, and billing history.
   const late = policy.ledger.filter((entry) => entry.type === 'Late Fee' || entry.type === 'Returned Payment Fee').length;
-  const reasons = ['Base rate change filed for North Carolina: +3.5%', `Renewal loyalty credit (term ${policy.termNumber + 1}): -2.0%`];
+  const reasons = [`Base rate change filed for ${rulesFor(policy.state).name}: +3.5%`, `Renewal loyalty credit (term ${policy.termNumber + 1}): -2.0%`];
   let factorValue = 1.035 * 0.98;
   if (late) { factorValue *= 1 + 0.03 * late; reasons.push(`Billing history (${late} late or returned payment${late > 1 ? 's' : ''}): +${3 * late}%`); }
   const fullTermPremium = round2(policy.fullTermPremium * factorValue);
@@ -299,7 +305,7 @@ function rollRenewal(policy: PolicyRecord, day: string): PolicyRecord {
   if (policy.autopay) next = makePayment(next, plan.dueToday, policy.paymentMethod, day, true);
   next = doc(next, day, 'Renewal Declarations', {});
   next = doc(next, day, 'ID Cards', {});
-  if (next.product === 'auto') next = doc(next, day, 'FS-1 Certificate of Insurance', { reason: 'Renewal' });
+  if (filesFs1(next)) next = doc(next, day, 'FS-1 Certificate of Insurance', { reason: 'Renewal' });
   return log(next, day, 'Policy renewed', `Term ${next.termNumber} begins ${renewal.effectiveDate}. Premium $${plan.total.toFixed(2)}.`);
 }
 

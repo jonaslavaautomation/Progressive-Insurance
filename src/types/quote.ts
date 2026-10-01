@@ -133,6 +133,10 @@ export interface Coverages {
   uninsuredMotorist: string;
   umpd: string;
   snapshot: string;
+  /** Personal Injury Protection limit ('' where the state has no PIP). */
+  pip: string;
+  /** The customer signed the state form rejecting PIP and/or UM/UIM. */
+  rejectionSigned: boolean;
 }
 
 export type ReportStatus = 'not-ordered' | 'ordering' | 'cleared' | 'flagged';
@@ -245,6 +249,7 @@ export interface RatingResult {
   vehicles: VehiclePremium[];
   umbi: number;
   umpd: number;
+  pip: number;
   /** 6-month premium before the Paid-in-Full discount. */
   fullTermPremium: number;
   billPlans: BillPlanQuote[];

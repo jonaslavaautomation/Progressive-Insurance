@@ -9,6 +9,7 @@ import { stepHints } from '@/data/trainingHints';
 import { StepValidationContext } from '@/components/wizard/stepValidation';
 import { DoneCheck } from '@/components/wizard/primitives';
 import { OptionsMenu } from '@/components/wizard/OptionsMenu';
+import { LegalLink } from '@/components/LegalLink';
 import { ProductModal } from '@/components/ProductModal';
 import { currentProduct } from '@/products/active';
 import { productLabel, productTab } from '@/products/configs';
@@ -37,7 +38,7 @@ export function FormHeader({ keyboardToggle = false }: { keyboardToggle?: boolea
   const phone = insured.phones.find((entry) => entry.number)?.number ?? '';
   return <header className="flex h-[60px] shrink-0 items-center bg-[#003865] pl-[24px] pr-[26px] text-white print:hidden">
     <button type="button" onClick={showDashboard} title="Return to dashboard" className={`w-[195px] shrink-0 text-left ${focusable}`}><Logo /></button>
-    {name ? <><HeaderItem label="Customer" value={name} /><HeaderItem label="Phone" value={phone} /><HeaderItem label="Email" value={insured.email} /></> : <HeaderItem label="Product(s) Selected:" value={activeProducts(state).map(productLabel).join(', ')} />}
+    {name ? <><HeaderItem label="Customer" value={name} /><HeaderItem label="Phone" value={phone} /><HeaderItem label="Email" value={insured.email} /></> : <HeaderItem label="Product(s) Selected:" value={`${activeProducts(state).map(productLabel).join(', ')} · ${state.policy.quoteState}`} />}
     <div className="ml-auto flex shrink-0 items-center gap-[26px]"><span className="text-[12.5px] font-medium">Hello, {state.agent.name}</span>{keyboardToggle && <KeyboardToggle />}{state.ui.hintMode && <span className="flex items-center gap-1 rounded-full bg-[#e87722] px-2 py-[2px] text-[11px] font-bold"><Lightbulb size={12} /> TRAINING HINTS</span>}<OptionsMenu /></div>
   </header>;
 }
@@ -86,7 +87,7 @@ export function ActionBar({ backLabel, nextLabel, onBack, onNext, center, center
 
 export function PageLinks() {
   const links = ['Privacy Statement', 'Terms of Use', 'Contact Us', 'Site Map', 'Do Not Sell or Share My Personal Information (CA Residents Only)'];
-  return <footer className="mx-[20px] mb-[18px] mt-[18px] flex max-w-[1070px] flex-wrap items-center gap-x-[8px] gap-y-1 border-t border-[#cfd8de] pt-[14px] text-[11px] text-[#2e3a43] print:hidden">{links.map((link, index) => <span key={link} className="flex items-center gap-[8px]">{index > 0 && <span className="text-[#7b858a]">|</span>}<a href="#" onClick={(event) => event.preventDefault()} className="underline">{link}</a></span>)}<span className="ml-[12px]">Copyright 1997-{new Date().getFullYear()} Progressive Casualty Insurance Company. All rights reserved.</span></footer>;
+  return <footer className="mx-[20px] mb-[18px] mt-[18px] flex max-w-[1070px] flex-wrap items-center gap-x-[8px] gap-y-1 border-t border-[#cfd8de] pt-[14px] text-[11px] text-[#2e3a43] print:hidden">{links.map((link, index) => <span key={link} className="flex items-center gap-[8px]">{index > 0 && <span className="text-[#7b858a]">|</span>}<LegalLink label={link} className="underline hover:text-[#0073cf]" /></span>)}<span className="ml-[12px]">Copyright 1997-{new Date().getFullYear()} Progressive Casualty Insurance Company. All rights reserved.</span></footer>;
 }
 
 function ValidationSummary({ errors, target, onSelect }: { errors: Record<string, string>; target: string; onSelect: (id: string) => void }) {

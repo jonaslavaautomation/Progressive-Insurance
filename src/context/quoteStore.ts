@@ -3,6 +3,7 @@ import type { AdditionalDetails, AgentProfile, Coverages, Driver, Incident, Mail
 import { COVERAGE_DEFAULTS, VEHICLE_COVERAGE_DEFAULTS, VEHICLE_TYPES } from '@/data/options';
 import { lookupVehicleDetails } from '@/data/vehicleCatalog';
 import { emptyReports, type PosOrderResult } from '@/utils/reportSimulator';
+import { DEFAULT_STATE, rulesFor, type StateName } from '@/data/states';
 import { rateQuote, ratedDrivers, ratingSignature, selectedPlan } from '@/utils/ratingEngine';
 import { addDays, formatDate, today } from '@/utils/dates';
 import type { OtherProductKey, ProductKey, ProductQuote, ProductUnit } from '@/products/types';
@@ -13,7 +14,13 @@ import type { CommercialQuote } from '@/commercial/types';
 
 export const STEPS = ['NAMED INSURED', 'PRODUCTS', 'HOUSEHOLD MEMBERS', 'ADDITIONAL DETAILS', 'COVERAGES/BILL PLANS', 'PORTFOLIO', 'POINT OF SALE', 'FINAL SALE'] as const;
 export const LAST_STEP = STEPS.length - 1;
-export const QUOTE_STATE = 'North Carolina';
+export const QUOTE_STATE = DEFAULT_STATE;
+
+/** State-required and default coverages for a new quote. */
+export function coveragesFor(state: string): Coverages {
+  const rules = rulesFor(state);
+  return { ...COVERAGE_DEFAULTS, umpd: rules.umpd ? '50' : 'None', medicalPayments: rules.medPay[0], pip: rules.pip?.default ?? '' };
+}
 /** Default logged-in agent until the user sets their own name (Dashboard header). */
 export const DEFAULT_AGENT: AgentProfile = { name: 'Training Agent', agencyName: 'Training Agency Ins', agencyCode: 'TRN01' };
 
@@ -22,6 +29,8 @@ export function agentCodeFor(agent: AgentProfile): string {
 }
 
 export type PolicyTab = 'summary' | 'billing' | 'documents' | 'history';
+/** Opens Policy View straight into Change Policy (optionally a specific change). */
+export type PolicyIntent = '' | 'change' | 'address' | 'addVehicle' | 'removeVehicle';
 export type PendingTab = 'nonpayment' | 'underwriting' | 'renewals';
 export type ProofPage = 'hub' | 'idcards' | 'verification';
 export type PortalView = 'pending' | 'customer' | 'proof';
@@ -49,7 +58,9 @@ export interface UiState {
   customerKey: string;
   proofPage: ProofPage;
   /** Opens Policy View straight into a workflow (e.g. Change Policy). */
-  policyIntent: '' | 'change';
+  policyIntent: PolicyIntent;
+  /** State chosen on the dashboard for the next new quote. */
+  quoteState: StateName;
   /** Product tab shown on Products and Coverages/Bill Plans. */
   activeProduct: ProductKey;
   policyId: string;
@@ -109,21 +120,21 @@ export function createIncident(): Incident {
   return { id: newId('inc'), code: '', date: '' };
 }
 
-function createInsured(): NamedInsured {
+function createInsured(state: string = QUOTE_STATE): NamedInsured {
   return {
     firstName: '', middleInitial: '', lastName: '', suffix: '', dob: '', gender: '', email: '', phones: [{ type: 'Cell', number: '' }],
-    address: { line1: '', line2: '', city: '', state: QUOTE_STATE, zip: '', poBox: false }, movedRecently: '', disclosureAcknowledged: '',
+    address: { line1: '', line2: '', city: '', state, zip: '', poBox: false }, movedRecently: '', disclosureAcknowledged: '',
   };
 }
 
-export function createQuoteData(agent: AgentProfile = DEFAULT_AGENT): QuoteData {
+export function createQuoteData(agent: AgentProfile = DEFAULT_AGENT, state: string = QUOTE_STATE): QuoteData {
   return {
-    policy: { agentCode: agentCodeFor(agent), quoteState: QUOTE_STATE, quoteNumber: '', effectiveDate: '', namedOperator: 'No', policyNumber: '', boundAt: '', comment: '' },
-    insured: createInsured(),
+    policy: { agentCode: agentCodeFor(agent), quoteState: state, quoteNumber: '', effectiveDate: '', namedOperator: 'No', policyNumber: '', boundAt: '', comment: '' },
+    insured: createInsured(state),
     vehicles: [createVehicle()],
-    drivers: [createDriver({ relationship: 'Insured', operatorType: 'Principal' })],
+    drivers: [createDriver({ relationship: 'Insured', operatorType: 'Principal', licenseState: state })],
     additional: { continuousInsurance: '', allDriversListed: '', priorCancellation: '', jointOwnership: '', paperless: '', primaryResidence: '', crossSell: [], noAdditionalRisks: false },
-    coverages: { ...COVERAGE_DEFAULTS },
+    coverages: coveragesFor(state),
     reports: emptyReports(),
     pointOfSale: { billPlan: 'PIF', paymentMethod: '', paymentAuthorized: '', documentDelivery: '', reviewedCoverages: false, confirmedHousehold: false, agreedToTerms: false },
     ratedSignature: '',
@@ -136,21 +147,22 @@ export function createQuoteData(agent: AgentProfile = DEFAULT_AGENT): QuoteData 
 export function createInitialState(agent: AgentProfile = DEFAULT_AGENT, policies: PolicyRecord[] = [], simDate = formatDate(today()), trainerMode = false): QuoteState {
   return {
     ...createQuoteData(agent), agent, policies, simDate, commercial: null, trainerMode,
-    ui: { view: 'dashboard', step: 0, maxStep: 0, hintMode: false, keyboardHelp: true, activeProduct: 'auto', policyId: '', policyTab: 'summary', policyQuery: EMPTY_POLICY_QUERY, pendingTab: 'nonpayment', customerKey: '', proofPage: 'hub', policyIntent: '', portalPage: 'billing', pickerOpen: false },
+    ui: { view: 'dashboard', step: 0, maxStep: 0, hintMode: false, keyboardHelp: true, activeProduct: 'auto', policyId: '', policyTab: 'summary', policyQuery: EMPTY_POLICY_QUERY, pendingTab: 'nonpayment', customerKey: '', proofPage: 'hub', policyIntent: '', portalPage: 'billing', pickerOpen: false, quoteState: QUOTE_STATE },
   };
 }
 
 /** Fictitious practice customer (no real person's details) for demos and trainer walkthroughs. */
-export function createSampleQuote(agent: AgentProfile = DEFAULT_AGENT): QuoteData {
-  const base = createQuoteData(agent);
+export function createSampleQuote(agent: AgentProfile = DEFAULT_AGENT, state: string = QUOTE_STATE): QuoteData {
+  const base = createQuoteData(agent, state);
+  const rules = rulesFor(state);
   const vehicle: Vehicle = {
-    ...createVehicle('27604'), year: '2019', make: 'Toyota', model: 'Camry', bodyStyle: 'Sedan 4D', ...lookupVehicleDetails('2019', 'Toyota', 'Camry', 'Sedan 4D'),
+    ...createVehicle(rules.sample.zip), year: '2019', make: 'Toyota', model: 'Camry', bodyStyle: 'Sedan 4D', ...lookupVehicleDetails('2019', 'Toyota', 'Camry', 'Sedan 4D'),
     ownershipLength: 'At least 1 year but less than 3 years', primaryUse: '1A - Pleasure', rideshare: 'No', delivery: 'No', annualMiles: '10,000 - 11,999',
   };
   const insured: NamedInsured = {
     firstName: 'Alex', middleInitial: '', lastName: 'Sample', suffix: '', dob: '06/12/1984', gender: 'Not Specified', email: 'alex.sample@example.com',
     phones: [{ type: 'Cell', number: '919-555-0142' }],
-    address: { line1: '100 Training Way', line2: '', city: 'Raleigh', state: QUOTE_STATE, zip: '27604', poBox: false }, movedRecently: 'No', disclosureAcknowledged: 'Yes',
+    address: { line1: rules.sample.street, line2: '', city: rules.sample.city, state, zip: rules.sample.zip, poBox: false }, movedRecently: 'No', disclosureAcknowledged: 'Yes',
   };
   return {
     ...base,
@@ -160,7 +172,7 @@ export function createSampleQuote(agent: AgentProfile = DEFAULT_AGENT): QuoteDat
     drivers: [createDriver({
       relationship: 'Insured', operatorType: 'Principal', firstName: insured.firstName, lastName: insured.lastName, dob: insured.dob, gender: insured.gender, maritalStatus: 'Single',
       education: "Bachelor's degree", employment: 'Business/Sales/Office', occupation: 'Accountant/Auditor', licenseType: 'Personal Auto',
-      licenseStatus: 'Valid', licenseState: QUOTE_STATE, licenseNumber: '000000001', ageFirstLicensed: '16', internationalYears: 'None', primaryVehicleId: vehicle.id,
+      licenseStatus: 'Valid', licenseState: state, licenseNumber: '000000001', ageFirstLicensed: '16', internationalYears: 'None', primaryVehicleId: vehicle.id,
     })],
     additional: { continuousInsurance: 'No', allDriversListed: 'Yes', priorCancellation: 'No', jointOwnership: 'No', paperless: 'Yes', primaryResidence: 'Single Family Home', crossSell: [], noAdditionalRisks: true },
   };
@@ -204,12 +216,13 @@ export type QuoteAction =
   | { type: 'advanceClock'; to: string }
   | { type: 'clearPolicies' }
   | { type: 'openPolicies'; query?: Partial<PolicyQuery> }
-  | { type: 'openPolicy'; id: string; tab?: PolicyTab; intent?: '' | 'change' }
+  | { type: 'openPolicy'; id: string; tab?: PolicyTab; intent?: PolicyIntent }
   | { type: 'openPortal'; view: PortalView; tab?: PendingTab; customerKey?: string; policyId?: string; page?: ProofPage }
   | { type: 'policiesSeeded'; records: PolicyRecord[] }
   | { type: 'openPage'; page: PortalPage }
   | { type: 'setPicker'; open: boolean }
   | { type: 'setTrainerMode'; on: boolean }
+  | { type: 'setQuoteState'; state: StateName }
   | { type: 'setPolicyTab'; tab: PolicyTab }
   | { type: 'bindPolicy'; policyNumber: string; boundAt: string }
   | { type: 'navigate'; step: number }
@@ -335,7 +348,7 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
     case 'showDocuments':
       return { ...state, ui: { ...state.ui, view: 'documents' } };
     case 'startQuote':
-      return { ...createQuoteData(state.agent), products: action.products, productQuotes: action.productQuotes, agent: state.agent, policies: state.policies, simDate: state.simDate, commercial: state.commercial, trainerMode: state.trainerMode, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, view: 'wizard', step: 0, maxStep: 0, activeProduct: action.products[0], pickerOpen: false } };
+      return { ...createQuoteData(state.agent, state.ui.quoteState), products: action.products, productQuotes: action.productQuotes, agent: state.agent, policies: state.policies, simDate: state.simDate, commercial: state.commercial, trainerMode: state.trainerMode, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, view: 'wizard', step: 0, maxStep: 0, activeProduct: action.products[0], pickerOpen: false } };
     case 'addProducts': {
       const products = [...state.products, ...action.products.filter((key) => !state.products.includes(key))];
       // Auto is always listed first, as on the carrier's product tabs.
@@ -380,6 +393,8 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
       return { ...state, ui: { ...state.ui, view: 'portal', portalPage: action.page, pickerOpen: false } };
     case 'setPicker':
       return { ...state, ui: { ...state.ui, pickerOpen: action.open, view: action.open ? 'dashboard' : state.ui.view } };
+    case 'setQuoteState':
+      return { ...state, ui: { ...state.ui, quoteState: action.state } };
     case 'setTrainerMode':
       return { ...state, trainerMode: action.on, ui: { ...state.ui, hintMode: action.on && state.ui.hintMode } };
     case 'setPolicyTab':
@@ -400,7 +415,7 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
       // The practice customer fills the shared and Auto pages; products already chosen stay on the quote.
       return { ...action.data, products: state.products, productQuotes: followZip(state.productQuotes, state.insured.address.zip, action.data.insured.address.zip), agent: state.agent, policies: state.policies, simDate: state.simDate, commercial: state.commercial, trainerMode: state.trainerMode, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, maxStep: Math.max(state.ui.maxStep, action.maxStep), activeProduct: state.products[0] } };
     case 'reset':
-      return { ...createQuoteData(state.agent), agent: state.agent, policies: state.policies, simDate: state.simDate, commercial: state.commercial, trainerMode: state.trainerMode, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, step: 0, maxStep: 0, activeProduct: 'auto' } };
+      return { ...createQuoteData(state.agent, state.policy.quoteState), agent: state.agent, policies: state.policies, simDate: state.simDate, commercial: state.commercial, trainerMode: state.trainerMode, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, step: 0, maxStep: 0, activeProduct: 'auto' } };
     case 'setCommercial':
       return { ...state, commercial: action.quote, ui: action.show ? { ...state.ui, view: 'commercial' } : state.ui };
     case 'commercialIssued':

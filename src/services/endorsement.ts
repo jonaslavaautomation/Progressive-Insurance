@@ -4,6 +4,7 @@ import type { PolicyRecord, PolicySource } from '@/types/policy';
 import { rateSource } from '@/services/policyBuilder';
 import { dayDiff, shiftDate } from '@/services/policyEngine';
 import { parseDate } from '@/utils/dates';
+import { rulesFor } from '@/data/states';
 
 export const MAX_BACKDATE_DAYS = 30;
 export const MAX_FUTURE_DAYS = 30;
@@ -81,7 +82,7 @@ export function applyChange(policy: PolicyRecord, request: ChangeRequest, day: s
   const drivers = source.kind === 'personal' ? source.quote.drivers.filter((driver) => driver.driverStatus === 'Rated').map((driver) => [driver.firstName, driver.lastName].filter(Boolean).join(' ')) : source.quote.drivers.map((driver) => [driver.firstName, driver.lastName].filter(Boolean).join(' '));
   const documents = [...policy.documents, { id: id('doc'), type: 'Amended Declarations' as const, date: day, term: policy.termNumber, data: { changeEffective: request.effectiveDate, changes: request.changes.join('; '), prorated } }];
   if (request.vehiclesChanged && !['renters', 'boat', 'bop', 'mgmt'].includes(policy.product)) documents.push({ id: id('doc'), type: 'ID Cards', date: day, term: policy.termNumber, data: {} });
-  if (request.vehiclesChanged && policy.product === 'auto') documents.push({ id: id('doc'), type: 'FS-1 Certificate of Insurance', date: day, term: policy.termNumber, data: { reason: 'Policy change' } });
+  if (request.vehiclesChanged && policy.product === 'auto' && rulesFor(policy.state).reporting?.system.includes('FS-1')) documents.push({ id: id('doc'), type: 'FS-1 Certificate of Insurance', date: day, term: policy.termNumber, data: { reason: 'Policy change' } });
   for (const holder of request.newLienholders) documents.push({ id: id('doc'), type: 'Evidence of Insurance', date: day, term: policy.termNumber, data: { name: holder.name, address: holder.address, loanNumber: holder.loanNumber, unit: holder.unit, kind: holder.kind } });
   return {
     ...policy,
