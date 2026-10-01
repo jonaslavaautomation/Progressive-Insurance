@@ -13,6 +13,7 @@ import { Modal } from '@/components/wizard/Modal';
 import { modalButton } from '@/components/wizard/modalStyles';
 import { PortalLayout } from '@/servicing/portal/PortalLayout';
 import { rulesFor } from '@/data/states';
+import { notify } from '@/services/activity';
 
 const TABS: [PendingTab, string][] = [['nonpayment', 'Pending Cancellation Due to Non-Payment'], ['underwriting', 'Pending Cancellation Due to Underwriting Reasons'], ['renewals', 'Pending Renewals']];
 
@@ -115,6 +116,7 @@ export function PendingList() {
   const counts = Object.fromEntries(TABS.map(([key]) => [key, rowsFor(key, state.policies, state.simDate, engine.minimumDue).length]));
 
   const exportCsv = () => {
+    notify({ kind: 'document', title: 'Pending cancellations list exported', detail: `${rows.length} rows (${TABS.find(([key]) => key === tab)?.[1]}).`, target: { view: 'page', page: 'billing' } });
     const blob = new Blob([toCsv(columns, rows)], { type: 'text/csv' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);

@@ -1,5 +1,6 @@
 // Portal session: last login stamp, sign out / sign in and the idle timeout state.
 // A tiny external store so any screen (profile menu, session guard) can read and change it.
+import { notify } from '@/services/activity';
 
 const LAST_LOGIN_KEY = 'fao-last-login';
 /** Idle time before the timeout warning, and the countdown shown in the warning. */
@@ -28,13 +29,25 @@ export const sessionStore = {
 };
 
 export function signOut(reason: 'manual' | 'timeout' = 'manual') {
+  notify({ kind: 'account', title: reason === 'timeout' ? 'Signed out (session timed out)' : 'Signed out', detail: reason === 'timeout' ? 'Session ended after 15 minutes of inactivity.' : 'User signed out of ForAgentsOnly.' });
   session = { ...session, signedOut: true, reason };
   emit();
 }
 
 export function signIn() {
   session = { signedOut: false, reason: '', lastLogin: readPreviousLogin() };
+  notify({ kind: 'account', title: 'Signed in', detail: `New sign-in on this browser (${navigator.userAgent.includes('Windows') ? 'Windows' : navigator.userAgent.includes('Mac') ? 'Mac' : 'device'}). Previous sign-in: ${formatLogin(session.lastLogin)}.` });
   emit();
+}
+
+let sessionNoted = false;
+/** Records the start of this browser session once, as the signed-in agent. */
+export function noteSessionStart(name: string) {
+  if (sessionNoted) return;
+  sessionNoted = true;
+  // A reload in the same tab is the same session.
+  try { if (sessionStorage.getItem('fao-session-noted')) return; sessionStorage.setItem('fao-session-noted', '1'); } catch { /* storage unavailable */ }
+  notify({ kind: 'account', title: 'Signed in', detail: `Session started on this browser. Previous sign-in: ${formatLogin(session.lastLogin)}.`, by: name });
 }
 
 /** "09/29/2026 4:12 PM" from the stored ISO time (real clock, not the training clock). */

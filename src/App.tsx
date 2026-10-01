@@ -20,9 +20,10 @@ import { ProofCenter } from '@/servicing/portal/ProofCenter';
 import { BillingPage, ClaimsPage, CrossSellPage, EsignPage, ProspectsPage } from '@/servicing/portal/ServicePages';
 import { AgencyPage, CommissionsPage, NewsPage, ProductGuidesPage, ProductionPage, SupportPage } from '@/servicing/portal/AgencyPages';
 import { SessionGuard } from '@/components/SessionGuard';
+import { ActivityPage } from '@/servicing/portal/ActivityPage';
 import type { PortalPage } from '@/context/quoteStore';
 
-const portalPages: Record<PortalPage, () => JSX.Element> = { billing: BillingPage, esign: EsignPage, claims: ClaimsPage, prospects: ProspectsPage, crossSell: CrossSellPage, productGuides: ProductGuidesPage, agency: AgencyPage, production: ProductionPage, commissions: CommissionsPage, news: NewsPage, support: SupportPage };
+const portalPages: Record<PortalPage, () => JSX.Element> = { activity: ActivityPage, billing: BillingPage, esign: EsignPage, claims: ClaimsPage, prospects: ProspectsPage, crossSell: CrossSellPage, productGuides: ProductGuidesPage, agency: AgencyPage, production: ProductionPage, commissions: CommissionsPage, news: NewsPage, support: SupportPage };
 
 // Index matches STEPS in quoteStore.
 const stepScreens = [NamedInsuredStep, ProductsStep, HouseholdStep, AdditionalDetailsStep, CoveragesStep, PortfolioStep, PointOfSaleStep, FinalSaleStep];

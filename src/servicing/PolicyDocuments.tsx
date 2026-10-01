@@ -8,6 +8,7 @@ import { formatCurrency } from '@/utils/masks';
 import { DOCUMENT_TITLES } from '@/servicing/documentTitles';
 import { CLAIMS_LINE } from '@/servicing/portal/portalUtils';
 import { rulesFor } from '@/data/states';
+import { notify } from '@/services/activity';
 import { LATE_FEE } from '@/services/policyEngine';
 
 const money = (value: unknown) => formatCurrency(Number(value) || 0);
@@ -159,7 +160,7 @@ const PDF_TYPES: PolicyDocument['type'][] = ['Declarations', 'Renewal Declaratio
 
 export function DocumentPreview({ policy, document, onClose }: { policy: PolicyRecord; document: PolicyDocument; onClose: () => void }) {
   return createPortal(<div className="print-portal fixed inset-0 z-[90] overflow-y-auto bg-[#1b2a36]/70 px-4 pb-10 pt-[20px]">
-    <div className="no-print sticky top-0 z-10 mx-auto mb-[14px] flex max-w-[800px] items-center justify-between rounded-[3px] bg-[#003865] px-[16px] py-[10px] text-white shadow-lg"><span className="text-[14px] font-bold">{DOCUMENT_TITLES[document.type]} · {document.date}</span><span className="flex items-center gap-[10px]">{PDF_TYPES.includes(document.type) && <button type="button" onClick={() => (document.type === 'Policy Packet' ? downloadPolicyPacket(policy, String(document.data.copy) as PacketCopy) : downloadDeclarationsPdf(policy, DOCUMENT_TITLES[document.type]))} className="flex h-[34px] items-center gap-2 rounded-[3px] bg-[#e87722] px-[14px] text-[12px] font-bold uppercase text-white hover:bg-[#cf6512]"><Download size={15} />Download PDF</button>}<button type="button" onClick={() => window.print()} className="flex h-[34px] items-center gap-2 rounded-[3px] bg-white px-[14px] text-[12px] font-bold uppercase text-[#003865]"><Printer size={15} />Print / Save as PDF</button><button type="button" aria-label="Close preview" onClick={onClose} className="rounded p-1"><X size={20} /></button></span></div>
+    <div className="no-print sticky top-0 z-10 mx-auto mb-[14px] flex max-w-[800px] items-center justify-between rounded-[3px] bg-[#003865] px-[16px] py-[10px] text-white shadow-lg"><span className="text-[14px] font-bold">{DOCUMENT_TITLES[document.type]} · {document.date}</span><span className="flex items-center gap-[10px]">{PDF_TYPES.includes(document.type) && <button type="button" onClick={() => (document.type === 'Policy Packet' ? downloadPolicyPacket(policy, String(document.data.copy) as PacketCopy) : downloadDeclarationsPdf(policy, DOCUMENT_TITLES[document.type]))} className="flex h-[34px] items-center gap-2 rounded-[3px] bg-[#e87722] px-[14px] text-[12px] font-bold uppercase text-white hover:bg-[#cf6512]"><Download size={15} />Download PDF</button>}<button type="button" onClick={() => { notify({ kind: 'document', title: `${DOCUMENT_TITLES[document.type]} printed`, detail: `${policy.productName} #${policy.policyNumber} · ${policy.insured.name}.`, target: { view: 'policy', policyId: policy.id } }); window.print(); }} className="flex h-[34px] items-center gap-2 rounded-[3px] bg-white px-[14px] text-[12px] font-bold uppercase text-[#003865]"><Printer size={15} />Print / Save as PDF</button><button type="button" aria-label="Close preview" onClick={onClose} className="rounded p-1"><X size={20} /></button></span></div>
     <PolicyDocumentSheet policy={policy} document={document} />
   </div>, window.document.body);
 }

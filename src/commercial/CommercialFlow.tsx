@@ -6,6 +6,8 @@ import type { CommercialKey, ProductUnit } from '@/products/types';
 import type { CommercialDriver, CommercialQuote } from '@/commercial/types';
 import { useQuote } from '@/context/useQuote';
 import { runWithSpinner } from '@/services/processing';
+import { notify } from '@/services/activity';
+import { NotificationBell } from '@/components/NotificationBell';
 import { PacketButtons } from '@/servicing/PacketButtons';
 import { BUSINESS_FIELDS, COMMERCIAL_CONFIGS, DRIVER_ACCIDENTS, DRIVER_EXPERIENCE, DRIVER_LICENSE_TYPES, DRIVER_VIOLATIONS, SHARED_QUESTIONS } from '@/commercial/configs';
 import { COMMERCIAL_STEPS, addCommercialProducts, commercialContext, commercialTotals, createCommercialDriver, isCommercialRated, rateCommercial, recalculateCommercial } from '@/commercial/engine';
@@ -50,6 +52,7 @@ function CommercialHeader({ quote }: { quote: CommercialQuote }) {
     <button type="button" onClick={showDashboard} title="Return to dashboard" className={`w-[195px] shrink-0 text-left ${focusable}`}><Logo /></button>
     {b.name ? <>{item('Business', b.dba ? `${b.name} DBA ${b.dba}` : b.name)}{item('Contact', b.contact ?? '')}{item('Phone', b.phone ?? '')}</> : item('Commercial Lines Quote', quote.products.map((key) => COMMERCIAL_CONFIGS[key].name).join(', '))}
     <div className="ml-auto flex shrink-0 items-center gap-[14px]">
+      <NotificationBell />
       <span className="text-[12.5px] font-medium">Hello, {state.agent.name}</span>
       {state.trainerMode && !quote.boundPolicyIds.length && <button type="button" onClick={() => updateCommercial(sampleBusiness)} className={button} title="Fill the business page with a fictitious practice business">Load Sample Business</button>}
       {state.trainerMode && <button type="button" onClick={toggleHints} className={`${button} flex items-center gap-1 ${state.ui.hintMode ? 'bg-[#e87722] border-[#e87722]' : ''}`}><Lightbulb size={13} />Hints</button>}
@@ -195,6 +198,7 @@ function PremiumTotal({ quote }: { quote: CommercialQuote }) {
     const blocking = Object.keys(validateCommercialStep(4, quote)).filter((key) => key !== 'crate');
     if (blocking.length) { reveal(); return; }
     updateCommercial(recalculateCommercial);
+    notify({ kind: 'quote', title: 'Commercial quote rated', detail: `${quote.business.name || 'Business'}: ${quote.products.map((key) => COMMERCIAL_CONFIGS[key].name).join(', ')}.`, target: { view: 'commercial' } });
   };
   return <div className="flex items-center gap-[14px]">
     <div className={`flex h-[40px] items-center gap-[14px] rounded-[3px] px-[12px] ${flash ? 'shadow-[inset_0_0_0_2px_#c2185b]' : ''}`}><span className="text-[14px] text-[#5c6670]">Total {COMMERCIAL_CONFIGS[active.key].name} Premium:</span><span className="text-[18px] font-bold text-[#2e3a43]" aria-live="polite">{rated ? formatCurrency(active.plan.total) : '$ --.--'}</span></div>

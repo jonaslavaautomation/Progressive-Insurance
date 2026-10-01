@@ -6,6 +6,7 @@ import { GState, jsPDF } from 'jspdf';
 import type { PolicyRecord } from '@/types/policy';
 import { CLAIMS_LINE } from '@/servicing/portal/portalUtils';
 import { rulesFor } from '@/data/states';
+import { notify } from '@/services/activity';
 
 export type PacketCopy = 'Insured Copy' | 'Agent Copy' | 'Lienholder Copy';
 
@@ -294,10 +295,12 @@ export function declarationsPdf(policy: PolicyRecord, heading = 'Declarations Pa
 
 /** Downloads the Declarations Page as a PDF. */
 export function downloadDeclarationsPdf(policy: PolicyRecord, heading = 'Declarations Page') {
+  notify({ kind: 'document', title: `${heading} downloaded (PDF)`, detail: `${policy.productName} #${policy.policyNumber} · ${policy.insured.name}.`, target: { view: 'policy', policyId: policy.id } });
   declarationsPdf(policy, heading).save(`${slug(heading)}-${policy.policyNumber}-TRAINING.pdf`);
 }
 
 export function downloadPolicyPacket(policy: PolicyRecord, copy: PacketCopy) {
+  notify({ kind: 'document', title: `Policy packet downloaded: ${copy}`, detail: `${policy.productName} #${policy.policyNumber} · ${policy.insured.name} (PDF).`, target: { view: 'policy', policyId: policy.id } });
   policyPacketPdf(policy, copy).save(`Policy-Packet-${slug(copy)}-${policy.policyNumber}-TRAINING.pdf`);
 }
 
