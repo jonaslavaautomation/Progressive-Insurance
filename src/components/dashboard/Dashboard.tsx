@@ -8,6 +8,8 @@ import { SUPPORTED_STATES, type StateName } from '@/data/states';
 import { dayDiff } from '@/services/policyEngine';
 import { formatLogin, sessionStore, signOut, signOutAndClear } from '@/services/session';
 import { runWithSpinner } from '@/services/processing';
+import { loadWithCar } from '@/services/carLoader';
+import { SEARCH_ACTIONS, resolveSearch, type SearchAction } from '@/servicing/account/accountModel';
 import { LegalLink } from '@/components/LegalLink';
 import { NotificationBell } from '@/components/NotificationBell';
 import { parseDate } from '@/utils/dates';
@@ -118,20 +120,27 @@ const PRODUCT_SEARCH: Record<string, string> = { All: 'All', Auto: 'auto', 'Moto
 const STATUS_SEARCH: Record<string, string> = { 'Active Policies': 'Active', 'All Policies': 'All', Pending: 'Pending Cancel', Cancelled: 'Cancelled' };
 
 export function SearchBar() {
-  const { state, openPolicies } = useQuote();
+  const { state, openPolicies, openAccount, openPolicy, openProof } = useQuote();
   const agentCode = state.agent.agencyCode;
-  const [mode, setMode] = useState<'Customer' | 'Policy'>('Customer');
-  const [values, setValues] = useState({ last: '', first: '', product: 'All', status: 'Active Policies', agent: 'All' });
+  const [mode, setMode] = useState<'Customer' | 'Policy'>('Policy');
+  const empty = { last: '', first: '', product: 'All', status: 'Active Policies', agent: 'All', action: 'Policy Summary' as SearchAction };
+  const [values, setValues] = useState(empty);
   const setValue = (field: keyof typeof values, value: string) => setValues((current) => ({ ...current, [field]: value }));
-  const reset = () => setValues({ last: '', first: '', product: 'All', status: 'Active Policies', agent: 'All' });
+  const reset = () => setValues(empty);
   const search = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    runWithSpinner('Searching policies...', () => openPolicies({ mode, lastName: mode === 'Customer' ? values.last : '', firstName: mode === 'Customer' ? values.first : '', policyNumber: mode === 'Policy' ? values.last : '', product: PRODUCT_SEARCH[values.product] ?? 'All', status: STATUS_SEARCH[values.status] ?? 'All' }), 600);
+    // A policy number has its own status; the status filter only narrows customer searches.
+    const query = { mode, lastName: mode === 'Customer' ? values.last : '', firstName: mode === 'Customer' ? values.first : '', policyNumber: mode === 'Policy' ? values.last.replace(/\D/g, '') : '', product: mode === 'Customer' ? PRODUCT_SEARCH[values.product] ?? 'All' : 'All', status: mode === 'Customer' ? STATUS_SEARCH[values.status] ?? 'All' : 'All' };
+    const outcome = resolveSearch(state.policies, query, state.simDate);
+    if (outcome.kind !== 'account') { runWithSpinner('Searching policies...', () => openPolicies(query), 600); return; }
+    const id = outcome.policyId;
+    const open: Record<SearchAction, () => void> = { 'Policy Summary': () => openAccount(id), 'Billing and Payments': () => openPolicy(id, 'billing'), Documents: () => openPolicy(id, 'documents'), 'Policy Activity': () => openPolicy(id, 'history'), 'ID Cards and Proof': () => openProof(id) };
+    loadWithCar(open[values.action]);
   };
-  return <div className="border-b border-[#a8b0b8] bg-[#f3f4f6] px-4 py-2"><form onSubmit={search} className="mx-auto flex max-w-[1440px] flex-wrap items-end gap-x-2 gap-y-1 text-[10px] text-[#003865]"><div className="flex flex-col gap-1 pr-1 font-semibold"><label className="flex items-center gap-1"><input type="radio" name="search" checked={mode === 'Customer'} onChange={() => setMode('Customer')} className="accent-[#0073cf]" /> Customer</label><label className="flex items-center gap-1"><input type="radio" name="search" checked={mode === 'Policy'} onChange={() => setMode('Policy')} className="accent-[#0073cf]" /> Policy</label></div><SearchField label={mode === 'Customer' ? 'Last Name' : 'Policy Number'} value={values.last} onChange={(value) => setValue('last', value)} />{mode === 'Customer' && <SearchField label="First Name" value={values.first} onChange={(value) => setValue('first', value)} />}<SelectField label="Products" value={values.product} options={Object.keys(PRODUCT_SEARCH)} onChange={(value) => setValue('product', value)} /><SelectField label="Policy Status" value={values.status} options={Object.keys(STATUS_SEARCH)} onChange={(value) => setValue('status', value)} /><SelectField label="Agent Codes" value={values.agent} options={['All', agentCode]} onChange={(value) => setValue('agent', value)} /><div className="flex items-end gap-1 pb-0.5"><button type="submit" className="flex h-[18px] min-w-[105px] items-center justify-center gap-1 bg-[#0073cf] px-3 text-[10px] font-bold text-white hover:bg-[#005da8]"><Search size={11} /> Search</button><button type="button" onClick={reset} className="flex h-[18px] min-w-[68px] items-center justify-center gap-1 bg-[#003865] px-3 text-[10px] font-bold text-white hover:bg-[#002746]"><RotateCcw size={10} /> Reset</button></div></form></div>;
+  return <div className="border-b border-[#a8b0b8] bg-[#f3f4f6] px-4 py-2"><form onSubmit={search} className="mx-auto flex max-w-[1440px] flex-wrap items-end gap-x-2 gap-y-1 text-[10px] text-[#003865]"><div className="flex flex-col gap-1 pr-1 font-semibold"><label className="flex items-center gap-1"><input type="radio" name="search" checked={mode === 'Customer'} onChange={() => setMode('Customer')} className="accent-[#0073cf]" /> Customer</label><label className="flex items-center gap-1"><input type="radio" name="search" checked={mode === 'Policy'} onChange={() => setMode('Policy')} className="accent-[#0073cf]" /> Policy</label></div><SearchField label={mode === 'Customer' ? 'Last Name' : 'Policy Number'} value={values.last} onChange={(value) => setValue('last', value)} />{mode === 'Customer' && <><SearchField label="First Name" value={values.first} onChange={(value) => setValue('first', value)} /><SelectField label="Products" value={values.product} options={Object.keys(PRODUCT_SEARCH)} onChange={(value) => setValue('product', value)} /><SelectField label="Policy Status" value={values.status} options={Object.keys(STATUS_SEARCH)} onChange={(value) => setValue('status', value)} /><SelectField label="Agent Codes" value={values.agent} options={['All', agentCode]} onChange={(value) => setValue('agent', value)} /></>}<SelectField label="Action" value={values.action} options={[...SEARCH_ACTIONS]} onChange={(value) => setValue('action', value)} wide /><div className="flex items-end gap-1 pb-0.5"><button type="submit" className="flex h-[18px] min-w-[105px] items-center justify-center gap-1 bg-[#0073cf] px-3 text-[10px] font-bold text-white hover:bg-[#005da8]"><Search size={11} /> Search</button><button type="button" onClick={reset} className="flex h-[18px] min-w-[68px] items-center justify-center gap-1 bg-[#003865] px-3 text-[10px] font-bold text-white hover:bg-[#002746]"><RotateCcw size={10} /> Reset</button></div></form></div>;
 }
 function SearchField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="flex flex-col gap-1 font-bold"><span>{label}</span><input value={value} onChange={(event) => onChange(event.target.value)} className="h-[18px] w-[160px] rounded-[2px] border border-[#8194a5] bg-white px-2 text-[10px] font-normal outline-none focus:border-[#0073cf]" /></label>; }
-function SelectField({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) { return <label className="flex flex-col gap-1 font-bold"><span>{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-[18px] w-[115px] rounded-[2px] border border-[#8194a5] bg-white px-1 text-[10px] font-normal outline-none focus:border-[#0073cf]">{options.map((option) => <option key={option}>{option}</option>)}</select></label>; }
+function SelectField({ label, value, options, onChange, wide = false }: { label: string; value: string; options: string[]; onChange: (value: string) => void; wide?: boolean }) { return <label className="flex flex-col gap-1 font-bold"><span>{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className={`h-[18px] ${wide ? 'w-[130px]' : 'w-[115px]'} rounded-[2px] border border-[#8194a5] bg-white px-1 text-[10px] font-normal outline-none focus:border-[#0073cf]`}>{options.map((option) => <option key={option}>{option}</option>)}</select></label>; }
 
 type QuoteActions = { onSelect: () => void; onOpenExisting: () => void; existingQuote: string };
 function QuoteCard({ onSelect, onOpenExisting, existingQuote }: QuoteActions) {

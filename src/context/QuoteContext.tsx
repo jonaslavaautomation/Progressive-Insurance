@@ -6,7 +6,7 @@ import { PRODUCT_CONFIGS } from '@/products/configs';
 import { createProductQuote, createUnit } from '@/products/engine';
 import { buildCommercialPolicies, buildPolicies, generatePolicyNumber } from '@/services/policyBuilder';
 import { createCommercialQuote } from '@/commercial/engine';
-import { buildPracticeBook, hasPracticeBook } from '@/services/practiceBook';
+import { buildPracticeBook, hasPracticeBook, isPracticePolicy } from '@/services/practiceBook';
 import { preferencesStore } from '@/services/quotePreferences';
 import { rulesFor } from '@/data/states';
 import { lookupVehicleDetails } from '@/data/vehicleCatalog';
@@ -93,7 +93,8 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     setClock(parseDate(saved.simDate));
     const agent = loadAgent();
     // The agency's reference accounts are always part of the book of business.
-    const policies = hasPracticeBook(saved.policies) ? saved.policies : [...buildPracticeBook(agent, agentCodeFor(agent), saved.simDate), ...saved.policies];
+    // An older version of the reference accounts is rebuilt; the agent's own policies are kept.
+    const policies = hasPracticeBook(saved.policies) ? saved.policies : [...buildPracticeBook(agent, agentCodeFor(agent), saved.simDate), ...saved.policies.filter((policy) => !isPracticePolicy(policy))];
     return createInitialState(agent, policies, saved.simDate, loadTrainerMode());
   });
   // Keep "today" everywhere in the app on the training clock.
@@ -231,6 +232,7 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     },
     openPolicies: (query) => dispatch({ type: 'openPolicies', query }),
     openPolicy: (id, tab, intent) => dispatch({ type: 'openPolicy', id, tab, intent }),
+    openAccount: (id) => dispatch({ type: 'openAccount', id }),
     openPending: (tab) => dispatch({ type: 'openPortal', view: 'pending', tab }),
     openCustomer: (customerKey) => dispatch({ type: 'openPortal', view: 'customer', customerKey }),
     openProof: (policyId, page) => dispatch({ type: 'openPortal', view: 'proof', policyId, page }),
@@ -275,7 +277,8 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     loadPracticeBook: () => {
       const current = stateRef.current;
       if (hasPracticeBook(current.policies)) return;
-      dispatch({ type: 'policiesSeeded', records: buildPracticeBook(current.agent, agentCodeFor(current.agent), current.simDate) });
+      // Any older copy of the reference accounts is replaced.
+      dispatch({ type: 'policiesSeeded', records: buildPracticeBook(current.agent, agentCodeFor(current.agent), current.simDate), replace: current.policies.filter(isPracticePolicy).map((policy) => policy.id) });
     },
     setPolicyTab: (tab) => dispatch({ type: 'setPolicyTab', tab }),
     servicePolicy: (id, operation) => {

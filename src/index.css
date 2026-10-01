@@ -38,3 +38,20 @@ button, a { transition: color 160ms ease, background-color 160ms ease, border-co
   .print-portal { position: static !important; overflow: visible !important; background: none !important; padding: 0 !important; }
   .print-portal .no-print { display: none !important; }
 }
+
+/* Account loading car: gentle bounce, turning wheels and a moving road (still for reduced motion). */
+@keyframes car-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.5px); } }
+@keyframes car-wheel-spin { to { transform: rotate(360deg); } }
+@keyframes car-road-move { to { stroke-dashoffset: -48; } }
+.car-body { animation: car-bounce 420ms ease-in-out infinite; }
+.car-wheel { animation: car-wheel-spin 600ms linear infinite; }
+.car-road { animation: car-road-move 700ms linear infinite; }
+@media (prefers-reduced-motion: reduce) { .car-body, .car-wheel, .car-road { animation: none; } }
+.reduce-motion .car-body, .reduce-motion .car-wheel, .reduce-motion .car-road { animation: none; }
+
+/* Policy and Coverages: print the account page without the drawer. */
+@media print {
+  .account-drawer { display: none !important; }
+  .account-page { height: auto !important; overflow: visible !important; }
+  .account-main { overflow: visible !important; }
+}

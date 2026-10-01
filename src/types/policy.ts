@@ -141,4 +141,10 @@ export interface PolicyRecord {
   lienholders: { id: string; unit: string; name: string; address: string; loanNumber: string; kind: 'Lienholder' | 'Lessor' }[];
   /** Claims reported on this policy (First Notice of Loss and history). */
   claims?: ClaimRecord[];
+  /** Version of the reference account this record was built from (practice book only). */
+  practiceVersion?: number;
+  /** Document delivery preference set from the account page (absent: what was chosen at issue). */
+  paperless?: { enrolled: boolean; changedOn: string; reason: string };
+  /** Deductible Savings Bank enrollment (auto). */
+  deductibleSavings?: { enrolledOn: string };
 }

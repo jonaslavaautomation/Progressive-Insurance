@@ -9,12 +9,21 @@ import { PRODUCT_FILTERS, STATUS_FILTERS, filterPolicies } from '@/servicing/pol
 import { productTab } from '@/products/configs';
 import { SelectControl, TextControl } from '@/components/wizard/primitives';
 import { ServiceLayout, StatusBadge, TrainingClock, outlineButton, solidButton } from '@/servicing/ServiceChrome';
+import { loadWithCar } from '@/services/carLoader';
+import { resolveSearch } from '@/servicing/account/accountModel';
 
 export function PolicySearch() {
-  const { state, openPolicies, openPolicy, showDashboard } = useQuote();
+  const { state, openPolicies, openAccount, showDashboard } = useQuote();
   const [query, setQuery] = useState<PolicyQuery>(state.ui.policyQuery);
   const results = filterPolicies(state.policies, state.ui.policyQuery, state.simDate);
-  const submit = (event: FormEvent) => { event.preventDefault(); openPolicies(query); };
+  // Same flow as the dashboard: one customer opens their account, several show the list.
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    const outcome = resolveSearch(state.policies, query, state.simDate);
+    if (outcome.kind === 'account') loadWithCar(() => openAccount(outcome.policyId));
+    else openPolicies(query);
+  };
+  const open = (id: string) => loadWithCar(() => openAccount(id));
   const cell = 'border-b border-[#edf1f3] px-[14px] py-[11px] text-left';
   const set = (patch: Partial<PolicyQuery>) => setQuery({ ...query, ...patch });
   return <ServiceLayout>
@@ -36,7 +45,7 @@ export function PolicySearch() {
     <section className="w-[1100px] rounded-[3px] border border-[#cfdbe3] bg-white">
       <h2 className="flex min-h-[45px] items-center justify-between border-b border-[#cfdbe3] bg-[#e4ecf1] px-[21px] font-slab text-[17px] font-bold">Results<span className="font-roboto text-[13px] font-medium">{results.length} of {state.policies.length} polic{state.policies.length === 1 ? 'y' : 'ies'}</span></h2>
       {results.length ? <table className="w-full border-collapse text-[14px]"><thead><tr className="text-[12px] uppercase tracking-[.3px] text-[#5c6670]"><th className={cell}>Policy #</th><th className={cell}>Named Insured</th><th className={cell}>Product</th><th className={cell}>Status</th><th className={cell}>Policy Period</th><th className={`${cell} text-right`}>Term Premium</th><th className={`${cell} text-right`}>Balance</th></tr></thead><tbody>
-        {results.map((policy) => <tr key={policy.id} className="hover:bg-[#f6f9fb]"><td className={cell}><button type="button" onClick={() => openPolicy(policy.id)} className="font-bold text-[#0073cf] underline underline-offset-2">{policy.policyNumber}</button></td><td className={cell}>{policy.insured.name}</td><td className={cell}>{productTab(policy.product)}</td><td className={cell}><StatusBadge status={policy.status} />{policy.renewal?.status === 'Offered' && <span className="ml-1 text-[11px] font-bold text-[#0073cf]">RENEWAL OFFERED</span>}</td><td className={cell}>{policy.effectiveDate} – {policy.expirationDate}</td><td className={`${cell} text-right tabular-nums`}>{formatCurrency(policy.termPremium)}</td><td className={`${cell} text-right tabular-nums`}>{formatCurrency(balance(policy))}</td></tr>)}
+        {results.map((policy) => <tr key={policy.id} className="hover:bg-[#f6f9fb]"><td className={cell}><button type="button" onClick={() => open(policy.id)} className="font-bold text-[#0073cf] underline underline-offset-2">{policy.policyNumber}</button></td><td className={cell}><button type="button" onClick={() => open(policy.id)} className="text-left hover:text-[#0073cf] hover:underline">{policy.insured.name}</button></td><td className={cell}>{productTab(policy.product)}</td><td className={cell}><StatusBadge status={policy.status} />{policy.renewal?.status === 'Offered' && <span className="ml-1 text-[11px] font-bold text-[#0073cf]">RENEWAL OFFERED</span>}</td><td className={cell}>{policy.effectiveDate} – {policy.expirationDate}</td><td className={`${cell} text-right tabular-nums`}>{formatCurrency(policy.termPremium)}</td><td className={`${cell} text-right tabular-nums`}>{formatCurrency(balance(policy))}</td></tr>)}
       </tbody></table> : <div className="px-[21px] py-[24px] text-[14px] text-[#5c6670]">{state.policies.length ? 'No policies match this search.' : <>No policies yet. Complete a quote through <b>FINAL SALE</b> and click <b>Bind Policy</b> to issue one. <button type="button" onClick={showDashboard} className="font-bold text-[#0073cf] underline">Start a quote</button></>}</div>}
     </section>
   </ServiceLayout>;
