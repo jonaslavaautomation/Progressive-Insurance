@@ -13,6 +13,7 @@ import { PHONE } from '@/utils/validation';
 import { POLICY_ICONS, customerSince, formatLongDate, hasIdCards, latestDocument, shortDate } from '@/servicing/portal/portalUtils';
 import { downloadIdCards } from '@/servicing/portal/idCardImage';
 import { LegalLink } from '@/components/LegalLink';
+import { notify } from '@/services/activity';
 import { rulesFor } from '@/data/states';
 
 const newId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -139,7 +140,7 @@ function IdCardsPage({ policy, onPreview, onNotice }: { policy: PolicyRecord; on
     <div><div className="text-[20px] font-medium text-[#0073cf]">{title}</div><div className="text-[14px] text-[#3d4b55]">{formatLongDate(from)} - {formatLongDate(to)}</div></div>
     <div className="flex gap-[8px]">
       {action('Save', <Download size={26} strokeWidth={1.6} />, () => { downloadIdCards(policy, state.agent.agencyName); onNotice(`ID cards for policy #${policy.policyNumber} saved as a PNG image.`); })}
-      {action('Print', <Printer size={26} strokeWidth={1.6} />, () => cards && onPreview(cards))}
+      {action('Print', <Printer size={26} strokeWidth={1.6} />, () => { if (!cards) return; notify({ kind: 'document', title: 'Auto ID cards generated', detail: `${policy.productName} #${policy.policyNumber} · ${policy.insured.name}: ${policy.units.map((unit) => unit.label).join(', ')}.`, target: { view: 'proof', policyId: policy.id } }); onPreview(cards); })}
       {action('Mail', <Mailbox size={26} strokeWidth={1.6} />, () => setSend('mail'))}
       {action('Fax', <FaxIcon />, () => setSend('fax'))}
     </div>

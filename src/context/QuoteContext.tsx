@@ -7,6 +7,9 @@ import { createProductQuote, createUnit } from '@/products/engine';
 import { buildCommercialPolicies, buildPolicies, generatePolicyNumber } from '@/services/policyBuilder';
 import { createCommercialQuote } from '@/commercial/engine';
 import { buildPracticeBook, hasPracticeBook } from '@/services/practiceBook';
+import { kindForEvent, notify, setActivityContext } from '@/services/activity';
+import { noteSessionStart } from '@/services/session';
+import { productLabel } from '@/products/configs';
 import * as engine from '@/services/policyEngine';
 import { setClock } from '@/utils/clock';
 import { QuoteContext, type QuoteContextValue } from '@/context/useQuote';
@@ -70,6 +73,8 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
   });
   // Keep "today" everywhere in the app on the training clock.
   setClock(parseDate(state.simDate));
+  setActivityContext(state.agent.name, state.simDate);
+  noteSessionStart(state.agent.name);
   useEffect(() => {
     try { localStorage.setItem(POLICIES_KEY, JSON.stringify({ policies: state.policies, simDate: state.simDate })); } catch { /* storage unavailable */ }
   }, [state.policies, state.simDate]);
@@ -77,6 +82,19 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state);
   stateRef.current = state;
   const confirmationRef = useRef('');
+  const clockSnapshot = useRef<Map<string, number> | null>(null);
+  // Automatic events from the training clock (bills, late fees, notices, cancellations, renewals).
+  useEffect(() => {
+    const snapshot = clockSnapshot.current;
+    if (!snapshot) return;
+    clockSnapshot.current = null;
+    const important = /notice|cancel|late fee|renew|expired|returned|bill issued|reinstat/i;
+    for (const policy of state.policies) {
+      for (const entry of policy.history.slice(snapshot.get(policy.id) ?? policy.history.length)) {
+        if (important.test(entry.event)) notify({ kind: kindForEvent(entry.event), title: entry.event, detail: `${policy.productName} #${policy.policyNumber} · ${policy.insured.name}: ${entry.detail}`, by: 'System', day: entry.date, target: { view: 'policy', policyId: policy.id } });
+      }
+    }
+  }, [state.policies]);
 
   const rating = useMemo(() => rateQuote(state), [state]);
   const rated = useMemo(() => isRated(state), [state]);
@@ -98,6 +116,8 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
   const orderPointOfSale = useCallback(async () => {
     const requestId = stateRef.current.reports.requestId + 1;
     dispatch({ type: 'posOrderStarted', requestId });
+    const ordered = stateRef.current;
+    notify({ kind: 'quote', title: 'Point of Sale reports ordered', detail: `CLUE and MVR ordered for Quote #${ordered.policy.quoteNumber} (${[ordered.insured.firstName, ordered.insured.lastName].filter(Boolean).join(' ') || 'new customer'}).`, target: { view: 'wizard' } });
     const result = await simulatePosOrder(stateRef.current, requestId);
     return stateRef.current.reports.requestId === requestId ? result : null;
   }, []);
@@ -130,7 +150,12 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     updateAdditional: (patch) => dispatch({ type: 'updateAdditional', patch }),
     updateCoverages: (patch) => dispatch({ type: 'updateCoverages', patch }),
     updatePointOfSale: (patch) => dispatch({ type: 'updatePointOfSale', patch }),
-    recalculate: () => dispatch({ type: 'recalculate' }),
+    recalculate: () => {
+      const current = stateRef.current;
+      dispatch({ type: 'recalculate' });
+      const total = selectedPlan(rateQuote(current), current.pointOfSale.billPlan).total;
+      notify({ kind: 'quote', title: 'Quote rated', detail: `Quote #${current.policy.quoteNumber || '(pending)'} for ${[current.insured.firstName, current.insured.lastName].filter(Boolean).join(' ') || 'new customer'} (${current.policy.quoteState}): ${current.products.map(productLabel).join(', ')}. Auto premium ${total.toFixed(2)}.`, target: { view: 'wizard' } });
+    },
     updateReports: (patch) => dispatch({ type: 'updateReports', patch }),
     orderPointOfSale,
     applyPosOrder: (result, priorSource) => dispatch({ type: 'posOrderApplied', result, priorSource }),
@@ -143,10 +168,12 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
       for (const key of current.products) if (key !== 'auto') numbers[key] = generatePolicyNumber();
       const records = buildPolicies(current, rateQuote(current), isRated(current), current.agent.name, current.simDate, numbers);
       dispatch({ type: 'policiesIssued', records, boundAt: `${current.simDate} ${new Date().toLocaleTimeString('en-US')}` });
+      for (const record of records) notify({ kind: 'bind', title: 'Policy issued', detail: `${record.productName} Policy #${record.policyNumber} bound for ${record.insured.name} (${record.state}), ${record.billPlanName}, ${record.termPremium.toFixed(2)}. Policy packet issued: Insured and Agent copies.`, target: { view: 'policy', policyId: record.id } });
     },
     startQuote: (products) => {
       const zip = '';
       dispatch({ type: 'startQuote', products, productQuotes: buildProductQuotes(products, zip) });
+      notify({ kind: 'quote', title: 'New quote started', detail: `${products.map(productLabel).join(', ')} quote started in ${stateRef.current.ui.quoteState}.`, target: { view: 'wizard' } });
     },
     addProducts: (products) => {
       const current = stateRef.current;
@@ -166,11 +193,15 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     updateUnitValues: (key, unitId, values) => dispatch({ type: 'updateUnit', key, unitId, values }),
     updateUnitCoverages: (key, unitId, coverages) => dispatch({ type: 'updateUnit', key, unitId, coverages }),
     updateProduct: (key, patch) => dispatch({ type: 'updateProduct', key, patch }),
-    advanceClock: (days) => dispatch({ type: 'advanceClock', to: formatDate(addDays(parseDate(stateRef.current.simDate) ?? today(), days)) }),
+    advanceClock: (days) => {
+      clockSnapshot.current = new Map(stateRef.current.policies.map((policy) => [policy.id, policy.history.length]));
+      dispatch({ type: 'advanceClock', to: formatDate(addDays(parseDate(stateRef.current.simDate) ?? today(), days)) });
+    },
     clearPolicies: () => {
       // Resets the book of business to the reference accounts.
       const current = stateRef.current;
       dispatch({ type: 'clearPolicies' });
+      notify({ kind: 'system', title: 'Book of business reset', detail: 'Issued policies were removed and the reference accounts rebuilt.' });
       dispatch({ type: 'policiesSeeded', records: buildPracticeBook(current.agent, agentCodeFor(current.agent), current.simDate) });
     },
     openPolicies: (query) => dispatch({ type: 'openPolicies', query }),
@@ -186,12 +217,14 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
       const source = JSON.parse(JSON.stringify(policy.source.quote)) as typeof policy.source.quote;
       const fresh = createQuoteData(current.agent);
       dispatch({ type: 'startQuote', products, productQuotes: buildProductQuotes(products, source.insured.address.zip) });
+      notify({ kind: 'quote', title: 'Quote started for existing customer', detail: `${products.map(productLabel).join(', ')} quote for ${policy.insured.name}, pre-filled from policy #${policy.policyNumber}.`, target: { view: 'wizard' } });
       dispatch({ type: 'load', maxStep: 0, data: { ...source, policy: { ...fresh.policy, quoteNumber: generateQuoteNumber() }, pointOfSale: fresh.pointOfSale, ratedSignature: '', premiumChange: null, products, productQuotes: {} } });
     },
     openProductPicker: () => dispatch({ type: 'setPicker', open: true }),
     closeProductPicker: () => dispatch({ type: 'setPicker', open: false }),
     setTrainerMode: (on) => {
       try { localStorage.setItem(TRAINER_KEY, on ? 'on' : 'off'); } catch { /* storage unavailable */ }
+      notify({ kind: 'account', title: `Trainer Mode turned ${on ? 'on' : 'off'}`, detail: on ? 'Training clock, hints, sample data and trainer tools are visible.' : 'Training tools are hidden.' });
       dispatch({ type: 'setTrainerMode', on });
     },
     lastConfirmation: () => confirmationRef.current,
@@ -213,14 +246,17 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
       confirmationRef.current = confirmation;
       const known = new Set(record.history.map((entry) => entry.id));
       dispatch({ type: 'updatePolicyRecord', record: { ...result, history: result.history.map((entry) => (known.has(entry.id) ? entry : { ...entry, detail: `${entry.detail} Confirmation #${confirmation}.` })) } });
+      // Every servicing transaction is a notification on the account.
+      for (const entry of result.history.filter((item) => !known.has(item.id))) notify({ kind: kindForEvent(entry.event), title: entry.event, detail: `${result.productName} #${result.policyNumber} · ${result.insured.name}: ${entry.detail.replace(/\.?$/, '.')} Confirmation #${confirmation}.`, target: { view: 'policy', policyId: result.id } });
       return '';
     },
     duplicateQuote: () => {
       const quoteNumber = generateQuoteNumber();
       dispatch({ type: 'duplicateQuote', quoteNumber });
+      notify({ kind: 'quote', title: 'Quote duplicated', detail: `Quote #${stateRef.current.policy.quoteNumber} copied to new Quote #${quoteNumber}.`, target: { view: 'wizard' } });
       return quoteNumber;
     },
-    updateAgent: (agent) => { saveAgent(agent); dispatch({ type: 'updateAgent', agent }); },
+    updateAgent: (agent) => { saveAgent(agent); dispatch({ type: 'updateAgent', agent }); notify({ kind: 'account', title: 'Agent profile updated', detail: `Signed-in user ${agent.name}, ${agent.agencyName} (${agent.agencyCode}).`, by: agent.name, target: { view: 'page', page: 'agency' } }); },
     goToStep: (step) => {
       // The carrier assigns a quote number once the named insured is saved.
       if (step > 0 && !stateRef.current.policy.quoteNumber) dispatch({ type: 'updatePolicy', patch: { quoteNumber: generateQuoteNumber() } });
@@ -235,6 +271,7 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     startCommercialQuote: (products) => {
       const quote = createCommercialQuote(products);
       dispatch({ type: 'setCommercial', quote: { ...quote, business: { ...quote.business, state: stateRef.current.ui.quoteState } }, show: true });
+      notify({ kind: 'quote', title: 'Commercial quote started', detail: `${products.map(productLabel).join(', ')} quote started in ${stateRef.current.ui.quoteState}.`, target: { view: 'commercial' } });
     },
     updateCommercial: (update) => {
       const quote = stateRef.current.commercial;
@@ -245,6 +282,7 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
       const current = stateRef.current;
       if (!current.commercial || current.commercial.boundPolicyIds.length) return current.commercial?.boundPolicyIds ?? [];
       const records = buildCommercialPolicies(current.commercial, agentCodeFor(current.agent), current.agent.name, current.simDate);
+      for (const record of records) notify({ kind: 'bind', title: 'Commercial policy issued', detail: `${record.productName} Policy #${record.policyNumber} bound for ${record.insured.name}, ${record.termPremium.toFixed(2)}.`, target: { view: 'policy', policyId: record.id } });
       dispatch({ type: 'commercialIssued', records, quote: { ...current.commercial, boundPolicyIds: records.map((record) => record.id) } });
       return records.map((record) => record.id);
     },

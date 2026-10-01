@@ -10,6 +10,7 @@ import { StepValidationContext } from '@/components/wizard/stepValidation';
 import { DoneCheck } from '@/components/wizard/primitives';
 import { OptionsMenu } from '@/components/wizard/OptionsMenu';
 import { LegalLink } from '@/components/LegalLink';
+import { NotificationBell } from '@/components/NotificationBell';
 import { ProductModal } from '@/components/ProductModal';
 import { currentProduct } from '@/products/active';
 import { productLabel, productTab } from '@/products/configs';
@@ -39,7 +40,7 @@ export function FormHeader({ keyboardToggle = false }: { keyboardToggle?: boolea
   return <header className="flex h-[60px] shrink-0 items-center bg-[#003865] pl-[24px] pr-[26px] text-white print:hidden">
     <button type="button" onClick={showDashboard} title="Return to dashboard" className={`w-[195px] shrink-0 text-left ${focusable}`}><Logo /></button>
     {name ? <><HeaderItem label="Customer" value={name} /><HeaderItem label="Phone" value={phone} /><HeaderItem label="Email" value={insured.email} /></> : <HeaderItem label="Product(s) Selected:" value={`${activeProducts(state).map(productLabel).join(', ')} · ${state.policy.quoteState}`} />}
-    <div className="ml-auto flex shrink-0 items-center gap-[26px]"><span className="text-[12.5px] font-medium">Hello, {state.agent.name}</span>{keyboardToggle && <KeyboardToggle />}{state.ui.hintMode && <span className="flex items-center gap-1 rounded-full bg-[#e87722] px-2 py-[2px] text-[11px] font-bold"><Lightbulb size={12} /> TRAINING HINTS</span>}<OptionsMenu /></div>
+    <div className="ml-auto flex shrink-0 items-center gap-[26px]"><NotificationBell /><span className="text-[12.5px] font-medium">Hello, {state.agent.name}</span>{keyboardToggle && <KeyboardToggle />}{state.ui.hintMode && <span className="flex items-center gap-1 rounded-full bg-[#e87722] px-2 py-[2px] text-[11px] font-bold"><Lightbulb size={12} /> TRAINING HINTS</span>}<OptionsMenu /></div>
   </header>;
 }
 

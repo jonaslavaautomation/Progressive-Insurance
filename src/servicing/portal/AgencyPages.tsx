@@ -14,6 +14,7 @@ import { guideRequest } from '@/servicing/portal/portalUtils';
 import { inForce, monthKey } from '@/servicing/portal/bookStats';
 import { formatCurrency } from '@/utils/masks';
 import { SUPPORTED_STATES, rulesFor, type StateRules } from '@/data/states';
+import { notify } from '@/services/activity';
 import { parseDate } from '@/utils/dates';
 
 // ------------------------------------------------------------------ Product guides
@@ -112,6 +113,7 @@ function useMonths(day: string) {
 }
 
 function exportCsv(name: string, rows: (string | number)[][]) {
+  notify({ kind: 'document', title: `Report exported: ${name}`, detail: `${rows.length - 1} rows.` });
   const text = rows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\r\n');
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));

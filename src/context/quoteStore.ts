@@ -35,7 +35,7 @@ export type PendingTab = 'nonpayment' | 'underwriting' | 'renewals';
 export type ProofPage = 'hub' | 'idcards' | 'verification';
 export type PortalView = 'pending' | 'customer' | 'proof';
 /** Pages reached from the global navigation menus. */
-export type PortalPage = 'billing' | 'esign' | 'claims' | 'prospects' | 'crossSell' | 'productGuides' | 'agency' | 'production' | 'commissions' | 'news' | 'support';
+export type PortalPage = 'activity' | 'billing' | 'esign' | 'claims' | 'prospects' | 'crossSell' | 'productGuides' | 'agency' | 'production' | 'commissions' | 'news' | 'support';
 
 export interface PolicyQuery {
   mode: 'Customer' | 'Policy';

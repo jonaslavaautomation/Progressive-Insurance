@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowLeft, CalendarClock, Clock3, Trash2 } from 'lucide-react';
 import { useQuote } from '@/context/useQuote';
+import { NotificationBell } from '@/components/NotificationBell';
 import { Logo, PageLinks } from '@/components/wizard/WizardLayout';
 
 const focusable = 'outline-none focus-visible:shadow-[0_0_0_2px_#fff,0_0_0_4px_#e87722]';
@@ -19,6 +20,7 @@ export function ServiceHeader({ customer }: { customer?: { name: string; phone: 
     <button type="button" onClick={showDashboard} title="Return to dashboard" className={`w-[195px] shrink-0 text-left ${focusable}`}><Logo /></button>
     {customer ? <><HeaderItem label="Customer" value={customer.name} /><HeaderItem label="Phone" value={customer.phone} /><HeaderItem label="Email" value={customer.email} /></> : <HeaderItem label="Manage Policies" value="Policy Search" />}
     <div className="ml-auto flex shrink-0 items-center gap-[26px] text-[13px]">
+      <NotificationBell />
       <span className="font-medium">Hello, {state.agent.name}</span>
       <button type="button" onClick={() => openPolicies(state.ui.policyQuery)} className={`font-bold underline underline-offset-2 ${focusable}`}>POLICY SEARCH</button>
       <button type="button" onClick={showDashboard} className={`font-bold underline underline-offset-2 ${focusable}`}>DASHBOARD</button>

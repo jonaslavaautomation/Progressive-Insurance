@@ -3,6 +3,7 @@
 import type { PolicyRecord } from '@/types/policy';
 import { CLAIMS_LINE } from '@/servicing/portal/portalUtils';
 import { rulesFor } from '@/data/states';
+import { notify } from '@/services/activity';
 
 const W = 1050;
 const H = 640;
@@ -50,6 +51,7 @@ function drawCard(ctx: CanvasRenderingContext2D, policy: PolicyRecord, unit: Pol
 }
 
 export function downloadIdCards(policy: PolicyRecord, agency: string) {
+  notify({ kind: 'document', title: 'Auto ID cards generated (saved as image)', detail: `${policy.productName} #${policy.policyNumber} · ${policy.insured.name}: ${policy.units.map((unit) => unit.label).join(', ')}.`, target: { view: 'proof', policyId: policy.id } });
   const units = policy.units.length ? policy.units : [{ label: policy.productName, details: [], idNumber: '', coverages: [], premium: 0 }];
   const canvas = document.createElement('canvas');
   canvas.width = W;

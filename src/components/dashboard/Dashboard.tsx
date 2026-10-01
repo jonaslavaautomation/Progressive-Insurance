@@ -9,8 +9,9 @@ import { dayDiff } from '@/services/policyEngine';
 import { formatLogin, sessionStore, signOut } from '@/services/session';
 import { runWithSpinner } from '@/services/processing';
 import { LegalLink } from '@/components/LegalLink';
+import { NotificationBell } from '@/components/NotificationBell';
 import { parseDate } from '@/utils/dates';
-import { Bell, Bookmark, ChevronDown, CircleHelp, FileText, LogOut, Menu, Plus, RotateCcw, Search, UserRound, X } from 'lucide-react';
+import { Bookmark, ChevronDown, CircleHelp, FileText, LogOut, Menu, Plus, RotateCcw, Search, UserRound, X } from 'lucide-react';
 
 type AlertItem = { text: string; onClick?: () => void };
 type AlertSection = { title: string; items: AlertItem[] };
@@ -47,7 +48,7 @@ function NavMenus({ mobileOpen }: { mobileOpen: boolean }) {
       { label: 'Claims Center', onClick: page('claims') },
     ]],
     ['Products', [{ label: 'Product Guides & Underwriting', onClick: page('productGuides') }]],
-    ['Agency Admin', [{ label: 'Agency Profile', onClick: page('agency') }, { label: 'Production Report', onClick: page('production') }, { label: 'Commission Statement', onClick: page('commissions') }]],
+    ['Agency Admin', [{ label: 'Activity Log', onClick: page('activity') }, { label: 'Agency Profile', onClick: page('agency') }, { label: 'Production Report', onClick: page('production') }, { label: 'Commission Statement', onClick: page('commissions') }]],
     ['News', [{ label: 'Agency News', onClick: page('news') }, { label: 'Dashboard', onClick: showDashboard }]],
     ['Support', [{ label: 'Help & Contact', onClick: page('support') }]],
   ];
@@ -59,36 +60,25 @@ function NavMenus({ mobileOpen }: { mobileOpen: boolean }) {
   </nav>;
 }
 
-/** Bookmark (quick links) and bell (notifications from the book of business) in the global header. */
+/** Bookmark (quick links) and the notification bell in the global header. */
 function HeaderShortcuts() {
-  const { state, openPolicies, openPending, openPage, openProductPicker } = useQuote();
-  const [open, setOpen] = useState<'' | 'links' | 'alerts'>('');
+  const { openPolicies, openPending, openPage, openProductPicker } = useQuote();
+  const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
-    const close = (event: MouseEvent | KeyboardEvent) => { if (event instanceof KeyboardEvent ? event.key === 'Escape' : !box.current?.contains(event.target as Node)) setOpen(''); };
+    const close = (event: MouseEvent | KeyboardEvent) => { if (event instanceof KeyboardEvent ? event.key === 'Escape' : !box.current?.contains(event.target as Node)) setOpen(false); };
     document.addEventListener('mousedown', close);
     document.addEventListener('keydown', close);
     return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', close); };
   }, [open]);
-  const day = state.simDate;
-  const count = (status: string) => state.policies.filter((policy) => matchesStatus(policy, status, day)).length;
-  const openClaims = claimsOf(state.policies).filter(({ claim }) => claim.status.startsWith('Open')).length;
-  const alerts: { text: string; onClick: () => void }[] = [
-    { text: `${count('Pending Cancel')} polic${count('Pending Cancel') === 1 ? 'y' : 'ies'} pending cancellation`, onClick: () => openPending() },
-    { text: `${count('Renewal Offered')} renewal offer${count('Renewal Offered') === 1 ? '' : 's'} waiting for payment`, onClick: () => openPending('renewals') },
-    { text: `${count('Past Due')} past-due bill${count('Past Due') === 1 ? '' : 's'}`, onClick: () => openPage('billing') },
-    { text: `${openClaims} open claim${openClaims === 1 ? '' : 's'}`, onClick: () => openPage('claims') },
-    { text: `${count('e-Sign Pending')} application${count('e-Sign Pending') === 1 ? '' : 's'} waiting for e-Signature`, onClick: () => openPage('esign') },
-  ].filter((alert) => !alert.text.startsWith('0 '));
-  const links: [string, () => void][] = [['Start a New Quote', openProductPicker], ['Policy Search', () => openPolicies()], ['Pending Cancel & Renewals', () => openPending()], ['Billing Center', () => openPage('billing')], ['Claims Center', () => openPage('claims')], ['Product Guides', () => openPage('productGuides')]];
-  const panel = 'absolute right-0 top-[30px] z-50 w-[260px] rounded-[3px] border border-[#a6adb3] bg-white py-1 text-left text-[#003865] shadow-lg';
-  const item = 'block w-full px-3 py-[7px] text-left text-[11.5px] font-semibold hover:bg-[#e8f4fa] hover:text-[#0073cf]';
-  return <div ref={box} className="relative hidden items-center gap-3 sm:flex">
-    <button type="button" aria-label="Quick links" aria-expanded={open === 'links'} onClick={() => setOpen(open === 'links' ? '' : 'links')} className="hover:text-[#f5a45d]"><Bookmark size={18} fill="currentColor" /></button>
-    <button type="button" aria-label={`Notifications (${alerts.length})`} aria-expanded={open === 'alerts'} onClick={() => setOpen(open === 'alerts' ? '' : 'alerts')} className="relative hover:text-[#f5a45d]"><Bell size={18} />{alerts.length > 0 && <i className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-[#f5a45d]" />}</button>
-    {open === 'links' && <div className={panel}><div className="border-b border-[#e4ecf1] px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-[.4px] text-[#5c6670]">Quick links</div>{links.map(([label, action]) => <button key={label} type="button" onClick={() => { setOpen(''); action(); }} className={item}>{label}</button>)}</div>}
-    {open === 'alerts' && <div className={panel}><div className="border-b border-[#e4ecf1] px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-[.4px] text-[#5c6670]">Notifications</div>{alerts.length ? alerts.map((alert) => <button key={alert.text} type="button" onClick={() => { setOpen(''); alert.onClick(); }} className={item}>{alert.text}</button>) : <p className="px-3 py-2 text-[11.5px] text-[#5c6670]">You're all caught up.</p>}</div>}
+  const links: [string, () => void][] = [['Start a New Quote', openProductPicker], ['Policy Search', () => openPolicies()], ['Pending Cancel & Renewals', () => openPending()], ['Billing Center', () => openPage('billing')], ['Claims Center', () => openPage('claims')], ['Activity Log', () => openPage('activity')], ['Product Guides', () => openPage('productGuides')]];
+  return <div className="relative hidden items-center gap-4 sm:flex">
+    <div ref={box} className="relative">
+      <button type="button" aria-label="Quick links" aria-expanded={open} onClick={() => setOpen(!open)} className="flex items-center hover:text-[#f5a45d]"><Bookmark size={18} fill="currentColor" /></button>
+      {open && <div className="absolute right-0 top-[30px] z-50 w-[240px] rounded-[3px] border border-[#a6adb3] bg-white py-1 text-left text-[#003865] shadow-lg"><div className="border-b border-[#e4ecf1] px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-[.4px] text-[#5c6670]">Quick links</div>{links.map(([label, action]) => <button key={label} type="button" onClick={() => { setOpen(false); action(); }} className="block w-full px-3 py-[7px] text-left text-[11.5px] font-semibold hover:bg-[#e8f4fa] hover:text-[#0073cf]">{label}</button>)}</div>}
+    </div>
+    <NotificationBell />
   </div>;
 }
 
