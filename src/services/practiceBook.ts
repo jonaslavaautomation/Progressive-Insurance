@@ -119,8 +119,8 @@ function quoteFor(customer: PracticeCustomer, agent: AgentProfile, effectiveDate
   };
   if (customer.renters) {
     const renters = createProductQuote('renters', generateQuoteNumber(), customer.zip);
-    renters.units[0].values = { ...renters.units[0].values, sameAsMailing: 'Yes', garagingZip: customer.zip, dwelling: 'Apartment', units: '11 or more', yearBuilt: '2008', construction: 'Masonry', smoke: 'Yes', deadbolts: 'Yes', alarm: 'Local Alarm', sprinklers: 'Yes', hydrant: 'Yes' };
-    renters.answers = { dogs: 'No', business: 'No', vacant: 'No', losses: '0' };
+    renters.units[0].values = { ...renters.units[0].values, sameAsMailing: 'Yes', garagingZip: customer.zip, dwelling: 'Apartment', dogBreed: 'No', verifiedNone: 'Yes', personalProperty: '20000' };
+    renters.answers = { priorInsurer: 'State Farm', priorLiability: '$300,000', claims: '0 Claims', esign: 'Yes', packagePolicy: 'Progressive Auto 100/300', securedSubdivision: 'No', paperless: 'Yes' };
     renters.billPlan = customer.renters;
     quote.productQuotes = { renters };
   }

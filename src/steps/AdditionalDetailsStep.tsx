@@ -8,6 +8,7 @@ import { WizardLayout } from '@/components/wizard/WizardLayout';
 import { HelpDot, HintBubble, InlineError, MoneyTag, SelectControl } from '@/components/wizard/primitives';
 import { useFieldError } from '@/components/wizard/stepValidation';
 import { ProductQuestionsCard } from '@/components/products/ProductForms';
+import { RentersDetailsCards, RentersOtherQuestions } from '@/steps/renters/RentersScreens';
 import { productLabel } from '@/products/configs';
 import type { OtherProductKey } from '@/products/types';
 import { activeProducts, hasAuto } from '@/utils/ratingEngine';
@@ -48,6 +49,7 @@ function AdditionalDetailsContent() {
 
   const products = activeProducts(state);
   const others = products.filter((key): key is OtherProductKey => key !== 'auto');
+  const rentersOnly = !hasAuto(state) && others.every((key) => key === 'renters');
   return <div className="grid grid-cols-[560px_560px] items-start gap-[21px]">
       <div className="space-y-[21px]">{hasAuto(state) && <Card title="Auto Details" icon={<Car size={30} strokeWidth={1.3} className="text-[#2e3a43]" />} action={<HelpDot label="Auto Details" text="These underwriting questions determine eligibility and rating. Ask each question exactly as written." />}>
         <div className="space-y-[34px]">
@@ -57,9 +59,9 @@ function AdditionalDetailsContent() {
           <QuestionRow id="additional.jointOwnership" label="Are any vehicles owned by a corporation or a partnership; OR jointly owned by 2 or more individuals who do not reside in the same household? *" help={fieldHints.jointOwnership} options={YES_NO} value={additional.jointOwnership} onChange={setYesNo('jointOwnership')} />
         </div>
       </Card>}
-      {others.map((key) => <ProductQuestionsCard key={key} product={key} />)}
+      {others.map((key) => (key === 'renters' ? <RentersDetailsCards key={key} /> : <ProductQuestionsCard key={key} product={key} />))}
       </div>
-      <Card title="Other Questions">
+      {rentersOnly ? <RentersOtherQuestions /> : <Card title="Other Questions">
         <div className="space-y-[24px]">
           <QuestionRow id="additional.paperless" label="Apply Paperless and accept documents and bills delivered through email? *" tag hint={fieldHints.paperless} options={YES_NO} value={additional.paperless} onChange={setYesNo('paperless')} />
           <QuestionRow id="additional.primaryResidence" label="Primary Residence:*" tag hint={fieldHints.primaryResidence} options={PRIMARY_RESIDENCES} value={additional.primaryResidence} onChange={(primaryResidence) => updateAdditional({ primaryResidence })} />
@@ -73,7 +75,7 @@ function AdditionalDetailsContent() {
           <ProductCheckbox label="No additional risks apply" checked={additional.noAdditionalRisks} onChange={setNoRisks} />
         </fieldset>
         <InlineError message={crossSellError} />
-      </Card>
+      </Card>}
   </div>;
 }
 

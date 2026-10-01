@@ -3,7 +3,7 @@ import type { PolicyQuery } from '@/context/quoteStore';
 import { minimumDue } from '@/services/policyEngine';
 
 export const STATUS_FILTERS = ['All', 'Active', 'Pending Cancel', 'Cancelled', 'Expired', 'Non-Renewed', 'Renewal Offered', 'Past Due', 'e-Sign Pending'];
-export const PRODUCT_FILTERS = [{ value: 'All', label: 'All' }, { value: 'auto', label: 'Auto' }, { value: 'motorcycle', label: 'Motorcycle/ATV' }, { value: 'boat', label: 'Boat/PWC' }, { value: 'motorhome', label: 'Motor Home' }, { value: 'trailer', label: 'Travel Trailer' }, { value: 'renters', label: 'Renters (HO4)' }];
+export const PRODUCT_FILTERS = [{ value: 'All', label: 'All' }, { value: 'auto', label: 'Auto' }, { value: 'motorcycle', label: 'Motorcycle/ATV' }, { value: 'boat', label: 'Boat/PWC' }, { value: 'motorhome', label: 'Motor Home' }, { value: 'trailer', label: 'Travel Trailer' }, { value: 'snowmobile', label: 'Snowmobile' }, { value: 'renters', label: 'Renters (HO4)' }];
 
 /** Groups a customer's policies (same named insured at the same mailing address). */
 export function customerKey(policy: PolicyRecord): string {

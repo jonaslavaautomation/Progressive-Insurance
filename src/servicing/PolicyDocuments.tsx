@@ -9,6 +9,7 @@ import { DOCUMENT_TITLES } from '@/servicing/documentTitles';
 import { CLAIMS_LINE } from '@/servicing/portal/portalUtils';
 import { rulesFor } from '@/data/states';
 import { notify } from '@/services/activity';
+import { LOGO_URL } from '@/services/pdf/logo';
 import { LATE_FEE } from '@/services/policyEngine';
 
 const money = (value: unknown) => formatCurrency(Number(value) || 0);
@@ -36,7 +37,7 @@ function IdCards({ policy }: { policy: PolicyRecord }) {
   return <div className="grid grid-cols-2 gap-3">{policy.units.flatMap((unit, index) => [0, 1].map((copy) => <div key={`${index}-${copy}`} className="break-inside-avoid rounded-[4px] border-2 border-[#003865] p-3 text-[10.5px] leading-[15px]">
     <div className="mb-1 flex justify-between text-[9px] font-bold uppercase text-[#003865]"><span>{auto ? rulesFor(policy.state).idCardTitle : 'Insurance Identification Card'}</span><span>{copy === 0 ? 'Keep in vehicle' : 'Customer copy'}</span></div>
     <div className="mb-1 rounded-[2px] bg-[#fde8ea] px-1 text-center text-[8.5px] font-bold text-[#c8102e]">TRAINING SIMULATION ONLY. NOT PROOF OF INSURANCE.</div>
-    <div className="font-bold">Training Insurance Company (simulation)</div>
+    <div className="flex items-start justify-between gap-2"><div className="font-bold">Training Insurance Company (simulation)</div><img src={LOGO_URL} alt="LAVA" className="h-[16px] w-auto shrink-0" /></div>
     <div>Policy #: <b>{policy.policyNumber}</b></div>
     <div>Effective {policy.effectiveDate} · Expires {policy.expirationDate}</div>
     <div>Named insured: <b>{policy.insured.name}</b></div>
@@ -147,7 +148,7 @@ export function PolicyDocumentSheet({ policy, document }: { policy: PolicyRecord
   return <article className="print-area relative mx-auto max-w-[800px] overflow-hidden rounded border border-[#c6d6e1] bg-white px-8 py-6 text-[#28343c] shadow-sm print:max-w-none print:border-0 print:p-0 print:shadow-none">
     <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center"><span className="-rotate-[24deg] whitespace-nowrap text-[54px] font-black uppercase tracking-widest text-[#003865]/[.05]">Training Simulation</span></div>
     <header className="flex items-start justify-between border-b-4 border-[#003865] pb-3">
-      <div><div className="text-[18px] font-light tracking-[-.5px] text-[#003865]">FOR<b>AGENTS</b>ONLY</div><div className="mt-1 text-[10px] text-[#52616c]">{policy.insured.name} · {policy.insured.street}, {policy.insured.cityStateZip}</div></div>
+      <div><div className="flex items-center gap-3"><img src={LOGO_URL} alt="LAVA" className="h-[30px] w-auto" /><span className="h-[26px] w-px bg-[#c6d6e1]" aria-hidden /><span className="text-[18px] font-light tracking-[-.5px] text-[#003865]">FOR<b>AGENTS</b>ONLY</span></div><div className="mt-1 text-[10px] text-[#52616c]">{policy.insured.name} · {policy.insured.street}, {policy.insured.cityStateZip}</div></div>
       <div className="text-right"><h2 className="text-[17px] font-bold text-[#003865]">{DOCUMENT_TITLES[document.type]}</h2><div className="text-[10px] text-[#52616c]">{policy.productName} Policy #{policy.policyNumber} · Term {document.term}</div><div className="text-[10px] text-[#52616c]">Date: {document.date}</div></div>
     </header>
     <p className="mt-2 rounded bg-[#fdf0f1] px-2 py-1 text-center text-[9px] font-bold uppercase tracking-wide text-[#c8102e]">Training simulation only. Not a valid insurance document or proof of coverage.</p>

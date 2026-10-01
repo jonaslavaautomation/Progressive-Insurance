@@ -171,6 +171,7 @@ function validateHousehold(quote: QuoteData, errors: FieldErrors) {
 function validateAdditional(quote: QuoteData, errors: FieldErrors) {
   const { additional, insured } = quote;
   otherProducts(quote).forEach((key) => validateQuestions(quote, key, errors));
+  if (!hasAuto(quote) && otherProducts(quote).every((key) => key === 'renters')) return;
   if (!hasAuto(quote)) {
     required(errors, 'additional.paperless', additional.paperless, 'Answer the Paperless question.');
     if (additional.paperless === 'Yes' && !insured.email) errors['additional.paperless'] = 'Paperless requires a Customer Email. Add one on the Named Insured page.';
@@ -308,9 +309,12 @@ function validateUnits(quote: QuoteData, key: OtherProductKey, errors: FieldErro
 function validateQuestions(quote: QuoteData, key: OtherProductKey, errors: FieldErrors) {
   const config = PRODUCT_CONFIGS[key];
   const answers = quote.productQuotes[key]?.answers ?? {};
+  const ctx = fieldContext(quote, answers);
   for (const question of config.questions) {
     const fieldId = `answer.${key}.${question.key}`;
-    if (!answers[question.key]) errors[fieldId] = `${config.name}: answer "${question.label.replace(/\*$/, '')}"`;
+    // Optional questions (no asterisk) and questions hidden by an earlier answer are skipped.
+    if (question.required === false || (question.required === undefined && !question.label.includes('*')) || (question.showIf && !question.showIf(ctx))) continue;
+    if (!answers[question.key]) errors[fieldId] = `${config.name}: answer "${question.label.replace(/[:*]+$/, '').replace(/[:*]+$/, '')}"`;
     else if (question.ineligibleIf && answers[question.key] === question.ineligibleIf) errors[fieldId] = `${config.name}: ${question.ineligibleMessage}`;
   }
 }

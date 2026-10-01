@@ -1,10 +1,10 @@
 // Shared helpers for the Customer Summary and ID Cards / Proof of Insurance pages.
-import { Bike, Building2, BriefcaseBusiness, Bus, Car, Caravan, Sailboat, Store, Truck, type LucideIcon } from 'lucide-react';
+import { Snowflake, Bike, Building2, BriefcaseBusiness, Bus, Car, Caravan, Sailboat, Store, Truck, type LucideIcon } from 'lucide-react';
 import type { PolicyDocument, PolicyRecord } from '@/types/policy';
 import type { AnyProductKey } from '@/products/types';
 import { parseDate } from '@/utils/dates';
 
-export const POLICY_ICONS: Record<AnyProductKey, LucideIcon> = { auto: Car, motorcycle: Bike, boat: Sailboat, motorhome: Bus, trailer: Caravan, renters: Building2, commercialAuto: Truck, bop: Store, mgmt: BriefcaseBusiness };
+export const POLICY_ICONS: Record<AnyProductKey, LucideIcon> = { snowmobile: Snowflake, auto: Car, motorcycle: Bike, boat: Sailboat, motorhome: Bus, trailer: Caravan, renters: Building2, commercialAuto: Truck, bop: Store, mgmt: BriefcaseBusiness };
 
 /** Products that carry vehicle ID cards. */
 export const hasIdCards = (policy: PolicyRecord) => !['renters', 'boat', 'bop', 'mgmt'].includes(policy.product);

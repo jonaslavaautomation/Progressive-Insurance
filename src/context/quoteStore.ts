@@ -35,7 +35,7 @@ export type PendingTab = 'nonpayment' | 'underwriting' | 'renewals';
 export type ProofPage = 'hub' | 'idcards' | 'verification';
 export type PortalView = 'pending' | 'customer' | 'proof';
 /** Pages reached from the global navigation menus. */
-export type PortalPage = 'activity' | 'billing' | 'esign' | 'claims' | 'prospects' | 'crossSell' | 'productGuides' | 'agency' | 'production' | 'commissions' | 'news' | 'support';
+export type PortalPage = 'newQuote' | 'existingQuotes' | 'bookBuilder' | 'activity' | 'billing' | 'esign' | 'claims' | 'prospects' | 'crossSell' | 'productGuides' | 'agency' | 'production' | 'commissions' | 'news' | 'support';
 
 export interface PolicyQuery {
   mode: 'Customer' | 'Policy';
@@ -203,7 +203,7 @@ export type QuoteAction =
   | { type: 'updateAgent'; agent: AgentProfile }
   | { type: 'duplicateQuote'; quoteNumber: string }
   | { type: 'showDocuments' }
-  | { type: 'startQuote'; products: ProductKey[]; productQuotes: Partial<Record<OtherProductKey, ProductQuote>> }
+  | { type: 'startQuote'; products: ProductKey[]; productQuotes: Partial<Record<OtherProductKey, ProductQuote>>; coverages?: Partial<Coverages>; vehicleDefaults?: Partial<Vehicle> }
   | { type: 'addProducts'; products: ProductKey[]; productQuotes: Partial<Record<OtherProductKey, ProductQuote>> }
   | { type: 'suspendProduct'; key: ProductKey }
   | { type: 'setActiveProduct'; key: ProductKey }
@@ -348,7 +348,7 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
     case 'showDocuments':
       return { ...state, ui: { ...state.ui, view: 'documents' } };
     case 'startQuote':
-      return { ...createQuoteData(state.agent, state.ui.quoteState), products: action.products, productQuotes: action.productQuotes, agent: state.agent, policies: state.policies, simDate: state.simDate, commercial: state.commercial, trainerMode: state.trainerMode, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, view: 'wizard', step: 0, maxStep: 0, activeProduct: action.products[0], pickerOpen: false } };
+      return { ...withDefaults(createQuoteData(state.agent, state.ui.quoteState), action.coverages, action.vehicleDefaults), products: action.products, productQuotes: action.productQuotes, agent: state.agent, policies: state.policies, simDate: state.simDate, commercial: state.commercial, trainerMode: state.trainerMode, reports: emptyReports(state.reports.requestId + 1), ui: { ...state.ui, view: 'wizard', step: 0, maxStep: 0, activeProduct: action.products[0], pickerOpen: false } };
     case 'addProducts': {
       const products = [...state.products, ...action.products.filter((key) => !state.products.includes(key))];
       // Auto is always listed first, as on the carrier's product tabs.
@@ -392,7 +392,7 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
     case 'openPage':
       return { ...state, ui: { ...state.ui, view: 'portal', portalPage: action.page, pickerOpen: false } };
     case 'setPicker':
-      return { ...state, ui: { ...state.ui, pickerOpen: action.open, view: action.open ? 'dashboard' : state.ui.view } };
+      return { ...state, ui: { ...state.ui, pickerOpen: action.open } };
     case 'setQuoteState':
       return { ...state, ui: { ...state.ui, quoteState: action.state } };
     case 'setTrainerMode':
@@ -421,6 +421,11 @@ function baseReducer(state: QuoteState, action: QuoteAction): QuoteState {
     case 'commercialIssued':
       return { ...state, commercial: action.quote, policies: [...action.records, ...state.policies] };
   }
+}
+
+/** Agent default coverages (Quote Preferences) applied to a brand-new quote. */
+function withDefaults(data: QuoteData, coverages?: Partial<Coverages>, vehicleDefaults?: Partial<Vehicle>): QuoteData {
+  return { ...data, coverages: { ...data.coverages, ...coverages }, vehicles: data.vehicles.map((vehicle) => ({ ...vehicle, ...vehicleDefaults })) };
 }
 
 /** Units still garaged at the old mailing ZIP (or none yet) follow the new mailing ZIP. */

@@ -7,6 +7,7 @@ import type { PolicyRecord } from '@/types/policy';
 import { CLAIMS_LINE } from '@/servicing/portal/portalUtils';
 import { rulesFor } from '@/data/states';
 import { notify } from '@/services/activity';
+import { LOGO_RATIO, loadLogoDataUrl } from '@/services/pdf/logo';
 
 export type PacketCopy = 'Insured Copy' | 'Agent Copy' | 'Lienholder Copy';
 
@@ -19,7 +20,7 @@ const GREY: [number, number, number] = [82, 97, 108];
 const LINE: [number, number, number] = [198, 214, 225];
 const money = (value: number) => `$${(Number(value) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-interface Ctx { doc: jsPDF; y: number; policy: PolicyRecord; title: string; copy?: PacketCopy }
+interface Ctx { doc: jsPDF; y: number; policy: PolicyRecord; title: string; copy?: PacketCopy; logo?: string | null }
 
 function watermark(doc: jsPDF) {
   doc.saveGraphicsState();
@@ -40,13 +41,23 @@ function pageHeader(ctx: Ctx) {
   watermark(doc);
   doc.setFillColor(...NAVY);
   doc.rect(0, 0, PAGE_W, 54, 'F');
+  // LAVA logo on a white badge (its lettering is dark), then the portal wordmark.
+  let wordmarkX = MARGIN;
+  if (ctx.logo) {
+    const logoH = 22;
+    const logoW = logoH * LOGO_RATIO;
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(MARGIN - 6, 13, logoW + 12, logoH + 6, 3, 3, 'F');
+    doc.addImage(ctx.logo, 'PNG', MARGIN, 16, logoW, logoH, 'lava-logo', 'FAST');
+    wordmarkX = MARGIN + logoW + 18;
+  }
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(15);
-  doc.text('FOR', MARGIN, 33);
+  doc.text('FOR', wordmarkX, 33);
   doc.setFont('helvetica', 'bold');
-  doc.text('AGENTS', MARGIN + doc.getTextWidth('FOR') + 1, 33);
+  doc.text('AGENTS', wordmarkX + doc.getTextWidth('FOR') + 1, 33);
   doc.setFont('helvetica', 'normal');
-  doc.text('ONLY', MARGIN + doc.getTextWidth('FORAGENTS') + 4, 33);
+  doc.text('ONLY', wordmarkX + doc.getTextWidth('FORAGENTS') + 4, 33);
   doc.setFontSize(11); doc.setFont('helvetica', 'bold');
   doc.text(ctx.title, PAGE_W - MARGIN, 26, { align: 'right' });
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
@@ -229,6 +240,7 @@ function idCardsPage(ctx: Ctx) {
     doc.text(rulesFor(policy.state).idCardTitle.toUpperCase(), x + 6, top + 11);
     doc.setTextColor(200, 16, 46); doc.setFontSize(6.5);
     doc.text('TRAINING SIMULATION - NOT PROOF OF INSURANCE', x + 6, top + 27);
+    if (ctx.logo) doc.addImage(ctx.logo, 'PNG', x + cardW - 6 - 13 * LOGO_RATIO, top + 19, 13 * LOGO_RATIO, 13, 'lava-logo', 'FAST');
     const line = (label: string, value: string, y: number) => { doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...GREY); doc.text(label, x + 6, top + y); doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 52, 60); doc.text((doc.splitTextToSize(value, cardW - 84) as string[]).slice(0, 2), x + 78, top + y); };
     line('Company', 'Training Insurance Company (simulation)', 42);
     line('Policy number', policy.policyNumber, 55);
@@ -262,20 +274,20 @@ function coverLetter(ctx: Ctx) {
     ? `Agency file copy for ${policy.insured.name}. Retain this copy with the signed application for your records. The insured received an identical Insured Copy with their ID cards.`
     : copy === 'Lienholder Copy'
       ? `Lienholder / additional interest copy for policy #${policy.policyNumber}. You are named on this policy as shown on the declarations page and will receive notice before any cancellation.`
-      : `Dear ${policy.insured.firstName || policy.insured.name}, thank you for choosing us. Your ${policy.productName} policy is in force as of ${policy.effectiveDate}. This packet contains your declarations page and${['auto', 'motorcycle', 'motorhome', 'trailer', 'commercialAuto'].includes(policy.product) ? ' your ID cards and' : ''} a summary of your application. Your agent is ${policy.agentName}, producer code ${policy.agentCode.split(' ')[0]}.`;
+      : `Dear ${policy.insured.firstName || policy.insured.name}, thank you for choosing us. Your ${policy.productName} policy is in force as of ${policy.effectiveDate}. This packet contains your declarations page and${['auto', 'motorcycle', 'motorhome', 'trailer', 'snowmobile', 'commercialAuto'].includes(policy.product) ? ' your ID cards and' : ''} a summary of your application. Your agent is ${policy.agentName}, producer code ${policy.agentCode.split(' ')[0]}.`;
   paragraph(ctx, intro, 10);
   section(ctx, 'Contents');
   const contents = ['Declarations Page'];
-  if (copy !== 'Lienholder Copy' && ['auto', 'motorcycle', 'motorhome', 'trailer', 'commercialAuto'].includes(policy.product)) contents.push('Insurance Identification Cards');
+  if (copy !== 'Lienholder Copy' && ['auto', 'motorcycle', 'motorhome', 'trailer', 'snowmobile', 'commercialAuto'].includes(policy.product)) contents.push('Insurance Identification Cards');
   if (copy !== 'Lienholder Copy') contents.push('Application for Insurance (summary)');
   table(ctx, ['#', 'Document'], contents.map((name, index) => [String(index + 1), name]), [0.1, 0.9]);
   return contents;
 }
 
-function create(policy: PolicyRecord, title: string, copy?: PacketCopy): Ctx {
+function create(policy: PolicyRecord, title: string, copy?: PacketCopy, logo?: string | null): Ctx {
   const doc = new jsPDF({ unit: 'pt', format: 'letter' });
   doc.setProperties({ title: `${title} - Policy ${policy.policyNumber}`, subject: 'Training simulation - not a valid insurance document', creator: 'ForAgentsOnly training portal' });
-  const ctx: Ctx = { doc, y: 0, policy, title, copy };
+  const ctx: Ctx = { doc, y: 0, policy, title, copy, logo };
   pageHeader(ctx);
   return ctx;
 }
@@ -287,8 +299,8 @@ function finish(ctx: Ctx): jsPDF {
 
 const slug = (text: string) => text.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-export function declarationsPdf(policy: PolicyRecord, heading = 'Declarations Page'): jsPDF {
-  const ctx = create(policy, heading);
+export function declarationsPdf(policy: PolicyRecord, heading = 'Declarations Page', logo?: string | null): jsPDF {
+  const ctx = create(policy, heading, undefined, logo);
   declarations(ctx, heading);
   return finish(ctx);
 }
@@ -296,17 +308,17 @@ export function declarationsPdf(policy: PolicyRecord, heading = 'Declarations Pa
 /** Downloads the Declarations Page as a PDF. */
 export function downloadDeclarationsPdf(policy: PolicyRecord, heading = 'Declarations Page') {
   notify({ kind: 'document', title: `${heading} downloaded (PDF)`, detail: `${policy.productName} #${policy.policyNumber} · ${policy.insured.name}.`, target: { view: 'policy', policyId: policy.id } });
-  declarationsPdf(policy, heading).save(`${slug(heading)}-${policy.policyNumber}-TRAINING.pdf`);
+  void loadLogoDataUrl().then((logo) => declarationsPdf(policy, heading, logo).save(`${slug(heading)}-${policy.policyNumber}-TRAINING.pdf`));
 }
 
 export function downloadPolicyPacket(policy: PolicyRecord, copy: PacketCopy) {
   notify({ kind: 'document', title: `Policy packet downloaded: ${copy}`, detail: `${policy.productName} #${policy.policyNumber} · ${policy.insured.name} (PDF).`, target: { view: 'policy', policyId: policy.id } });
-  policyPacketPdf(policy, copy).save(`Policy-Packet-${slug(copy)}-${policy.policyNumber}-TRAINING.pdf`);
+  void loadLogoDataUrl().then((logo) => policyPacketPdf(policy, copy, logo).save(`Policy-Packet-${slug(copy)}-${policy.policyNumber}-TRAINING.pdf`));
 }
 
 /** The policy packet: cover letter, declarations and (per copy) ID cards and application. */
-export function policyPacketPdf(policy: PolicyRecord, copy: PacketCopy): jsPDF {
-  const ctx = create(policy, `Policy Packet - ${copy}`, copy);
+export function policyPacketPdf(policy: PolicyRecord, copy: PacketCopy, logo?: string | null): jsPDF {
+  const ctx = create(policy, `Policy Packet - ${copy}`, copy, logo);
   const contents = coverLetter(ctx);
   newPage(ctx);
   declarations(ctx);

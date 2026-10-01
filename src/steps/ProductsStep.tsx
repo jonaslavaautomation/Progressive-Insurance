@@ -11,6 +11,7 @@ import { WizardLayout } from '@/components/wizard/WizardLayout';
 import { AddButton, HelpDot, HintBubble, InlineError, MoneyTag, RadioPair, WizardCard, WizardField, WizardRowShell, WizardSelect, errorRing, focusRing } from '@/components/wizard/primitives';
 import { useFieldError } from '@/components/wizard/stepValidation';
 import { ProductUnitsContent } from '@/components/products/ProductForms';
+import { RentersProductsContent } from '@/steps/renters/RentersScreens';
 import { currentProduct } from '@/products/active';
 
 type Identity = Pick<Vehicle, 'year' | 'make' | 'model' | 'bodyStyle'>;
@@ -122,5 +123,5 @@ export function ProductsStep() {
   const { state } = useQuote();
   const product = currentProduct(state);
   if (product === 'auto') return <AutoProductsStep key="auto" />;
-  return <WizardLayout stepHeader contentClassName="pt-0"><PolicyStrip auto={false} /><ProductUnitsContent key={product} product={product} /></WizardLayout>;
+  return <WizardLayout stepHeader contentClassName="pt-0"><PolicyStrip auto={false} />{product === 'renters' ? <RentersProductsContent /> : <ProductUnitsContent key={product} product={product} />}</WizardLayout>;
 }

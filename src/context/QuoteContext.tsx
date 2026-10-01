@@ -7,6 +7,10 @@ import { createProductQuote, createUnit } from '@/products/engine';
 import { buildCommercialPolicies, buildPolicies, generatePolicyNumber } from '@/services/policyBuilder';
 import { createCommercialQuote } from '@/commercial/engine';
 import { buildPracticeBook, hasPracticeBook } from '@/services/practiceBook';
+import { preferencesStore } from '@/services/quotePreferences';
+import { rulesFor } from '@/data/states';
+import { lookupVehicleDetails } from '@/data/vehicleCatalog';
+import type { Coverages, Vehicle } from '@/types/quote';
 import { kindForEvent, notify, setActivityContext } from '@/services/activity';
 import { noteSessionStart } from '@/services/session';
 import { productLabel } from '@/products/configs';
@@ -59,7 +63,28 @@ function loadPolicies(): { policies: PolicyRecord[]; simDate: string } {
 }
 
 function buildProductQuotes(keys: ProductKey[], zip: string): Partial<Record<OtherProductKey, ProductQuote>> {
-  return Object.fromEntries(keys.filter((key): key is OtherProductKey => key !== 'auto').map((key) => [key, createProductQuote(key, generateQuoteNumber(), zip)]));
+  const defaults = preferencesStore.get().defaults;
+  return Object.fromEntries(keys.filter((key): key is OtherProductKey => key !== 'auto').map((key) => {
+    const product = createProductQuote(key, generateQuoteNumber(), zip);
+    // Agent default coverages for Renters.
+    if (key === 'renters' && defaults) {
+      const { personalProperty, ...coverages } = defaults.renters;
+      return [key, { ...product, coverages: { ...product.coverages, ...coverages }, units: product.units.map((unit) => ({ ...unit, values: { ...unit.values, personalProperty } })) }];
+    }
+    return [key, product];
+  }));
+}
+
+/** Agent default auto coverages that are valid in the quote state. */
+function autoDefaults(state: string): { coverages?: Partial<Coverages>; vehicleDefaults?: Partial<Vehicle> } {
+  const defaults = preferencesStore.get().defaults?.auto;
+  if (!defaults) return {};
+  const rules = rulesFor(state);
+  const coverages: Partial<Coverages> = {};
+  if (rules.liability.includes(defaults.bodilyInjuryPd)) coverages.bodilyInjuryPd = defaults.bodilyInjuryPd;
+  if (rules.um.choices.includes(defaults.uninsuredMotorist)) coverages.uninsuredMotorist = defaults.uninsuredMotorist;
+  if (rules.medPay.includes(defaults.medicalPayments)) coverages.medicalPayments = defaults.medicalPayments;
+  return { coverages, vehicleDefaults: { compDeductible: defaults.compDeductible, collDeductible: defaults.collDeductible, rental: defaults.rental, roadside: defaults.roadside } };
 }
 
 export function QuoteProvider({ children }: { children: ReactNode }) {
@@ -127,7 +152,7 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     updateInsured: (patch) => dispatch({ type: 'updateInsured', patch }),
     updateAddress: (patch) => dispatch({ type: 'updateAddress', patch }),
     addVehicle: () => {
-      const vehicle = createVehicle(stateRef.current.insured.address.zip);
+      const vehicle = { ...createVehicle(stateRef.current.insured.address.zip), ...(autoDefaults(stateRef.current.policy.quoteState).vehicleDefaults ?? {}) };
       dispatch({ type: 'addVehicle', vehicle });
       return vehicle.id;
     },
@@ -172,7 +197,7 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     },
     startQuote: (products) => {
       const zip = '';
-      dispatch({ type: 'startQuote', products, productQuotes: buildProductQuotes(products, zip) });
+      dispatch({ type: 'startQuote', products, productQuotes: buildProductQuotes(products, zip), ...autoDefaults(stateRef.current.ui.quoteState) });
       notify({ kind: 'quote', title: 'New quote started', detail: `${products.map(productLabel).join(', ')} quote started in ${stateRef.current.ui.quoteState}.`, target: { view: 'wizard' } });
     },
     addProducts: (products) => {
@@ -229,6 +254,24 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     },
     lastConfirmation: () => confirmationRef.current,
     setQuoteState: (quoteState) => dispatch({ type: 'setQuoteState', state: quoteState }),
+    rateQuietly: () => dispatch({ type: 'recalculate' }),
+    addHouseholdVehicles: (found) => {
+      const current = stateRef.current;
+      if (!found.length) return;
+      if (!current.products.includes('auto')) {
+        if (!current.policy.quoteNumber) dispatch({ type: 'updatePolicy', patch: { quoteNumber: generateQuoteNumber() } });
+        dispatch({ type: 'addProducts', products: ['auto'], productQuotes: {} });
+      }
+      const zip = current.insured.address.zip;
+      const defaults = autoDefaults(current.policy.quoteState).vehicleDefaults ?? {};
+      const details = (entry: (typeof found)[number]) => ({ year: entry.year, make: entry.make, model: entry.model, bodyStyle: entry.body, ...lookupVehicleDetails(entry.year, entry.make, entry.model, entry.body), garagingZip: zip, ...defaults });
+      // Fill the blank starter vehicle first, then add the rest.
+      const blank = current.vehicles.find((vehicle) => !vehicle.year && !vehicle.make);
+      const [first, ...rest] = found;
+      if (blank) dispatch({ type: 'updateVehicle', id: blank.id, patch: details(first) });
+      for (const entry of blank ? rest : found) dispatch({ type: 'addVehicle', vehicle: { ...createVehicle(zip), ...details(entry) } });
+      notify({ kind: 'quote', title: 'Bundle & Save: Auto added to quote', detail: `${found.map((entry) => `${entry.year} ${entry.make} ${entry.model}`).join(', ')} added from household vehicles found.`, target: { view: 'wizard' } });
+    },
     loadPracticeBook: () => {
       const current = stateRef.current;
       if (hasPracticeBook(current.policies)) return;
@@ -277,6 +320,7 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
       const quote = stateRef.current.commercial;
       if (quote) dispatch({ type: 'setCommercial', quote: update(quote) });
     },
+    discardCommercial: () => dispatch({ type: 'setCommercial', quote: null }),
     openCommercial: () => { if (stateRef.current.commercial) dispatch({ type: 'setCommercial', quote: stateRef.current.commercial, show: true }); },
     bindCommercial: () => {
       const current = stateRef.current;
