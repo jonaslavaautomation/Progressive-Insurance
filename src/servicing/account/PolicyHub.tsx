@@ -5,10 +5,10 @@ import { Banknote, ChevronRight, CircleCheck, ClipboardList, IdCard, KeyRound, N
 import type { PolicyRecord } from '@/types/policy';
 import { useQuote } from '@/context/useQuote';
 import { nextInstallment } from '@/services/policyEngine';
-import { paymentAccountOf, paymentMethodName } from '@/services/autopay';
+import { AUTOPAY_LABELS, autopayMode, paymentAccountOf, paymentMethodName, type AutopayMode } from '@/services/autopay';
 import { productLabel } from '@/products/configs';
 import { formatCurrency } from '@/utils/masks';
-import { shortDate } from '@/servicing/portal/portalUtils';
+import { formatLongDate, shortDate } from '@/servicing/portal/portalUtils';
 import { billingStatus, driversOf, lastPayment, longDate, stateCode, statusText } from '@/servicing/account/accountModel';
 import type { ChangeType } from '@/servicing/changeTypes';
 import { customerKey } from '@/servicing/policyFilters';
@@ -27,7 +27,10 @@ export interface HubActions {
   delivery: () => void;
   loyalty: () => void;
   newQuotes: () => void;
-  updateCard: () => void;
+  /** Opens Manage Automatic Payments for the policy's payment method. */
+  autopay: (mode: AutopayMode) => void;
+  returnedCheck: () => void;
+  receipt: () => void;
   unenroll: () => void;
   scrollTo: (id: string) => void;
 }
@@ -85,11 +88,13 @@ export function PolicyHub({ policy, level, panel, onPanel, onClose, actions }: {
   const next = nextInstallment(policy);
   const paid = lastPayment(policy);
   const renewal = policy.renewal;
+  const mode = autopayMode(policy);
+  const star: Record<string, string> = { Bronze: 'fill-[#c9874b] text-[#8a5626]', Silver: 'fill-none text-[#5c6670]', Gold: 'fill-[#f2c94c] text-[#b8860b]', Platinum: 'fill-[#dfe7ee] text-[#6f8696]' };
 
   const billingRows: [string, string][] = [
     ['Payment method', paymentMethodName(policy)],
     ['Last payment', paid ? `${formatCurrency(paid.amount)} on ${longDate(paid.date)}` : 'No payments yet'],
-    ['Billing status', next && policy.status !== 'Cancelled' ? (policy.autopay && account ? `Payment scheduled ${formatCurrency(next.amount - next.paid)} on ${longDate(next.due)} from account ending in ${account.last4}` : `Payment of ${formatCurrency(next.amount - next.paid)} due ${longDate(next.due)}`) : billingStatus(policy, state.simDate)],
+    ['Billing status', next && policy.status !== 'Cancelled' ? (policy.autopay && account ? `Payment scheduled ${formatCurrency(next.amount - next.paid)} on ${formatLongDate(next.due)} from account ending in ${account.last4}` : `Payment of ${formatCurrency(next.amount - next.paid)} due ${longDate(next.due)}`) : policy.billPlanId === 'PIF' && policy.paymentAccount ? `Paid in full. The renewal will be paid from account ending in ${policy.paymentAccount.last4}` : billingStatus(policy, state.simDate)],
   ];
   const panels: Record<HubPanel, { title: string; rows?: [string, string][]; items: Item[] }> = {
     actions: { title: 'Agency Actions', items: [
@@ -108,10 +113,11 @@ export function PolicyHub({ policy, level, panel, onPanel, onClose, actions }: {
       { label: 'Manage Scheduled Payments', onClick: go(() => openPolicy(policy.id, 'billing')) },
       { label: 'Paperless Preferences', onClick: go(actions.delivery) },
       { label: 'Payment Schedule', onClick: go(() => openPolicy(policy.id, 'billing')) },
-      { label: 'Process Returned Check', onClick: go(() => openPolicy(policy.id, 'billing')), note: state.trainerMode ? 'Trainer tool on the Billing page' : undefined, hidden: !state.trainerMode },
+      { label: 'Process Returned Check', onClick: go(actions.returnedCheck) },
       { label: 'Unenroll From Automatic Payments', onClick: go(actions.unenroll), hidden: !policy.autopay || !active },
-      { label: policy.autopay || policy.billPlanId === 'PIF' ? 'Update Credit Card' : 'Enroll in Automatic Card Payments', onClick: go(actions.updateCard), hidden: !(active || policy.status === 'Pending Cancel') },
-      { label: 'View Print Receipt', onClick: go(() => openPolicy(policy.id, 'documents')) },
+      // The automatic-payment action follows the payment method on the policy.
+      { label: mode ? AUTOPAY_LABELS[mode] : '', onClick: go(() => { if (mode) actions.autopay(mode); }), hidden: !mode },
+      { label: 'View Print Receipt', onClick: go(actions.receipt) },
     ] },
     customer: { title: 'Customer Information', rows: [['Named insured', policy.insured.name], ['Mailing address', `${policy.insured.street}, ${policy.insured.cityStateZip}`], ['Phone', policy.insured.phone || '—'], ['Email', policy.insured.email || '—']], items: [
       { label: 'Update Email or Phone Number', onClick: go(() => actions.change('contact')), hidden: !actions.can('contact') },
@@ -144,14 +150,14 @@ export function PolicyHub({ policy, level, panel, onPanel, onClose, actions }: {
     <nav aria-label="Policy menu" className="account-drawer flex w-[260px] shrink-0 flex-col overflow-y-auto border-r border-[#d0d7de] bg-white print:hidden">
       <div className="px-[14px] pb-[12px] pt-[14px]">
         <div className="flex items-start justify-between"><div className="text-[13px] font-bold text-[#1f2a33]">{productLabel(policy.product)} <span className="underline">{policy.policyNumber}</span></div><button type="button" onClick={onClose} aria-label="Close policy menu" className={`rounded p-[2px] text-[#1f2a33] hover:bg-[#f2f5f8] ${focus}`}><X size={20} /></button></div>
-        <label className="sr-only" htmlFor="hub-term">Policy term</label>
+        {!renewal ? <div className="mt-[8px] text-[13px] text-[#1f2a33]">{shortDate(policy.effectiveDate)} - {shortDate(policy.expirationDate)}</div> : <><label className="sr-only" htmlFor="hub-term">Policy term</label>
         <select id="hub-term" value={term} onChange={(event) => setTerm(event.target.value)} className="mt-[8px] h-[32px] w-full rounded-[3px] border border-[#8b98a3] bg-white px-[8px] text-[12px] outline-none focus:border-[#0073cf]">
           <option value="current">{shortDate(policy.effectiveDate)} - {shortDate(policy.expirationDate)} ({policy.status === 'Active' ? 'active' : policy.status.toLowerCase()})</option>
           {renewal && <option value="renewal">{shortDate(renewal.effectiveDate)} - {shortDate(renewal.expirationDate)} (renewal)</option>}
-        </select>
+        </select></>}
         {term === 'renewal' && renewal && <p className="mt-[6px] rounded-[3px] bg-[#eef5fb] px-[8px] py-[6px] text-[11.5px] text-[#2f4a66]">Renewal term {renewal.status.toLowerCase()}: {formatCurrency(renewal.premium)} ({renewal.billPlanName}).</p>}
         <div className="mt-[8px] text-[12px] text-[#1f2a33]">{stateCode(policy)} | {statusText(policy)}</div>
-        <button type="button" onClick={actions.loyalty} className={`mt-[6px] flex items-center gap-[8px] text-[12px] text-[#0073cf] underline hover:text-[#0056b3] ${focus}`}><Star size={15} className="fill-[#f2c94c] text-[#b8860b]" />{level} Rewards</button>
+        <button type="button" onClick={actions.loyalty} className={`mt-[6px] flex items-center gap-[8px] text-[12px] text-[#0073cf] underline hover:text-[#0056b3] ${focus}`}><Star size={15} className={star[level] ?? star.Gold} />{level} Rewards</button>
       </div>
       <ul className="border-t border-[#e5e9ec]">
         <Row icon={<Settings size={18} />} label="Agency Actions" more active={panel === 'actions'} onClick={() => toggle('actions')} />
