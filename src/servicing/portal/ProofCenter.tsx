@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, CircleHelp, Download, Mailbox, Printer, Sear
 import type { PolicyDocument, PolicyRecord } from '@/types/policy';
 import { useQuote } from '@/context/useQuote';
 import { useOpenAccount } from '@/servicing/account/useOpenAccount';
+import { loadWithCar, loaderIconFor } from '@/services/carLoader';
 import { queryFromText, resolveSearch } from '@/servicing/account/accountModel';
 import { customerKey } from '@/servicing/policyFilters';
 import { DocumentPreview } from '@/servicing/PolicyDocuments';
@@ -41,7 +42,7 @@ function Sidebar({ policy, collapsed, onToggle, largeText, onLargeText }: { poli
     const outcome = resolveSearch(state.policies, search, state.simDate);
     if (outcome.kind === 'none') { setError('No policies found.'); return; }
     setError('');
-    if (outcome.kind === 'account') openProof(outcome.policyId);
+    if (outcome.kind === 'account') loadWithCar(() => openProof(outcome.policyId), loaderIconFor(state.policies.find((entry) => entry.id === outcome.policyId)?.product));
     else openPolicies(search);
   };
   return <aside className={`relative flex shrink-0 flex-col border-r border-[#d5d9dd] bg-white transition-[width] print:hidden ${collapsed ? 'w-0' : 'w-[256px]'}`}>
@@ -208,7 +209,7 @@ export function ProofCenter() {
   const [notice, setNotice] = useState('');
   if (!policy) return <div className="p-6 text-[14px]">Policy not found.</div>;
   const page = state.ui.proofPage;
-  const back = page === 'hub' ? { label: 'Back to Policy and Coverages', onClick: () => openAccountNow(policy.id) } : { label: 'Back to ID Cards and Documents', onClick: () => openProof(policy.id) };
+  const back = page === 'hub' ? { label: 'Back to Policy and Coverages', onClick: () => openAccountNow(policy.id, { instant: true }) } : { label: 'Back to ID Cards and Documents', onClick: () => openProof(policy.id) };
   return <div className="flex min-h-screen bg-white text-[#1b2a36]">
     <Sidebar policy={policy} collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} largeText={largeText} onLargeText={setLargeText} />
     <div className="flex min-w-0 flex-1 flex-col">

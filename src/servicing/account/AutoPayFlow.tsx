@@ -6,7 +6,7 @@ import { CheckCircle2, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import type { PolicyRecord } from '@/types/policy';
 import { useQuote } from '@/context/useQuote';
 import { runWithSpinner } from '@/services/processing';
-import { paymentAccountOf, updateAutopayBank, updateAutopayCard, type AutopayMode, type Verification } from '@/services/autopay';
+import { SAVED_TEXT, paymentAccountOf, savedFor, updateAutopayBank, updateAutopayCard, type AutopayMode, type Verification } from '@/services/autopay';
 import { productLabel } from '@/products/configs';
 import { EMAIL } from '@/utils/validation';
 import { bankProblem, cardBrand, cardProblem, formatCardNumber, formatExpiry, maskCard, type CardBrand } from '@/utils/cards';
@@ -86,7 +86,7 @@ export function AutoPayFlow({ policy, mode, onCancel, onDone }: { policy: Policy
       const failure = servicePolicy(policy.id, (record, day) => (kind === 'card' ? updateAutopayCard(record, { ...card, ...verify }, day) : updateAutopayBank(record, { ...bank, ...verify }, day)));
       if (failure) { setError(failure); return; }
       const what = kind === 'card' ? `${cardBrand(card.number)} ending in ${card.number.replace(/\D/g, '').slice(-4)} (exp ${card.expiry})` : `${bank.type} account ending in ${bank.account.replace(/\D/g, '').slice(-4)}`;
-      setResult(`${what} will be used for ${policy.billPlanId === 'PIF' ? 'renewal' : 'automatic'} payments. Confirmation #${lastConfirmation()}.`);
+      setResult(`${what} ${SAVED_TEXT[savedFor(policy)]}. Confirmation #${lastConfirmation()}.`);
       setCard({ name: '', number: '', expiry: '' });
       setBank({ type: '', name: '', routing: '', account: '', confirm: '' });
       setStep('done');
@@ -128,7 +128,7 @@ export function AutoPayFlow({ policy, mode, onCancel, onDone }: { policy: Policy
         {mode !== 'enroll' && <>
           <h2 className={`${sectionTitle} mt-[20px]`}>Current card information</h2>
           <div className="mt-[10px] text-[12.5px] font-bold text-[#1f2a33]">Card number</div>
-          <div className="text-[12.5px] text-[#3d4b55]">{current?.kind === 'card' ? maskCard(current.last4) : '—'}</div>
+          <div className="text-[12.5px] text-[#3d4b55]">{current?.kind === 'card' ? maskCard(current.last4) : 'No card on file'}</div>
           <div className="mt-[10px] text-[12.5px] font-bold text-[#1f2a33]">Expiration date</div>
           <div className="min-h-[18px] text-[12.5px] text-[#3d4b55]">{current?.kind === 'card' ? current.expiry ?? '' : ''}</div>
         </>}
