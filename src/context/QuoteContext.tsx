@@ -17,7 +17,6 @@ import { productLabel } from '@/products/configs';
 import * as engine from '@/services/policyEngine';
 import { setClock } from '@/utils/clock';
 import { loadWithCar, loaderIconFor } from '@/services/carLoader';
-import { customerKey } from '@/servicing/policyFilters';
 import { QuoteContext, type QuoteContextValue } from '@/context/useQuote';
 import { DEFAULT_AGENT, agentCodeFor, createDriver, createQuoteData, createIncident, createInitialState, createSampleQuote, createVehicle, generateQuoteNumber, policyNumberFor, quoteReducer } from '@/context/quoteStore';
 import { TERM_MONTHS, isRated, rateQuote, selectedPlan } from '@/utils/ratingEngine';
@@ -233,14 +232,15 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
       notify({ kind: 'system', title: 'Book of business reset', detail: 'Issued policies were removed and the reference accounts rebuilt.' });
       dispatch({ type: 'policiesSeeded', records: buildPracticeBook(current.agent, agentCodeFor(current.agent), current.simDate) });
     },
-    // Page changes show the carrier's loading page first: a house for home policies, a car otherwise.
-    openPolicies: (query) => loadWithCar(() => dispatch({ type: 'openPolicies', query })),
-    openPolicy: (id, tab, intent) => loadWithCar(() => dispatch({ type: 'openPolicy', id, tab, intent }), iconOf(id)),
-    openAccount: (id) => loadWithCar(() => dispatch({ type: 'openAccount', id }), iconOf(id)),
-    openPending: (tab) => loadWithCar(() => dispatch({ type: 'openPortal', view: 'pending', tab })),
-    openCustomer: (key) => loadWithCar(() => dispatch({ type: 'openPortal', view: 'customer', customerKey: key }), stateRef.current.policies.filter((policy) => customerKey(policy) === key).every((policy) => policy.product === 'renters') ? 'home' : 'auto'),
-    openProof: (policyId, page) => loadWithCar(() => dispatch({ type: 'openPortal', view: 'proof', policyId, page }), iconOf(policyId)),
-    openPage: (page) => loadWithCar(() => dispatch({ type: 'openPage', page })),
+    openPolicies: (query) => dispatch({ type: 'openPolicies', query }),
+    openPolicy: (id, tab, intent) => dispatch({ type: 'openPolicy', id, tab, intent }),
+    // Pulling up a customer's account shows the carrier's loading page (a house for home policies);
+    // returning to the account from inside it (back buttons) is instant.
+    openAccount: (id, options) => { if (options?.instant) dispatch({ type: 'openAccount', id }); else loadWithCar(() => dispatch({ type: 'openAccount', id }), iconOf(id)); },
+    openPending: (tab) => dispatch({ type: 'openPortal', view: 'pending', tab }),
+    openCustomer: (customerKey) => dispatch({ type: 'openPortal', view: 'customer', customerKey }),
+    openProof: (policyId, page) => dispatch({ type: 'openPortal', view: 'proof', policyId, page }),
+    openPage: (page) => dispatch({ type: 'openPage', page }),
     startQuoteFor: (policyId, products) => {
       const current = stateRef.current;
       const policy = current.policies.find((entry) => entry.id === policyId);

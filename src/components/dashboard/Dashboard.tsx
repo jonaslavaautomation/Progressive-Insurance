@@ -8,6 +8,7 @@ import { SUPPORTED_STATES, type StateName } from '@/data/states';
 import { dayDiff } from '@/services/policyEngine';
 import { formatLogin, sessionStore, signOut, signOutAndClear } from '@/services/session';
 import { SEARCH_ACTIONS, resolveSearch, type SearchAction } from '@/servicing/account/accountModel';
+import { loadWithCar, loaderIconFor } from '@/services/carLoader';
 import { LegalLink } from '@/components/LegalLink';
 import { NotificationBell } from '@/components/NotificationBell';
 import { parseDate } from '@/utils/dates';
@@ -133,7 +134,8 @@ export function SearchBar() {
     if (outcome.kind !== 'account') { openPolicies(query); return; }
     const id = outcome.policyId;
     const open: Record<SearchAction, () => void> = { 'Policy Summary': () => openAccount(id), 'Billing and Payments': () => openPolicy(id, 'billing'), Documents: () => openPolicy(id, 'documents'), 'Policy Activity': () => openPolicy(id, 'history'), 'ID Cards and Proof': () => openProof(id) };
-    open[values.action]();
+    if (values.action === 'Policy Summary') openAccount(id);
+    else loadWithCar(open[values.action], loaderIconFor(state.policies.find((policy) => policy.id === id)?.product));
   };
   return <div className="border-b border-[#a8b0b8] bg-[#f3f4f6] px-4 py-2"><form onSubmit={search} className="mx-auto flex max-w-[1440px] flex-wrap items-end gap-x-2 gap-y-1 text-[10px] text-[#003865]"><div className="flex flex-col gap-1 pr-1 font-semibold"><label className="flex items-center gap-1"><input type="radio" name="search" checked={mode === 'Customer'} onChange={() => setMode('Customer')} className="accent-[#0073cf]" /> Customer</label><label className="flex items-center gap-1"><input type="radio" name="search" checked={mode === 'Policy'} onChange={() => setMode('Policy')} className="accent-[#0073cf]" /> Policy</label></div><SearchField label={mode === 'Customer' ? 'Last Name' : 'Policy Number'} value={values.last} onChange={(value) => setValue('last', value)} />{mode === 'Customer' && <><SearchField label="First Name" value={values.first} onChange={(value) => setValue('first', value)} /><SelectField label="Products" value={values.product} options={Object.keys(PRODUCT_SEARCH)} onChange={(value) => setValue('product', value)} /><SelectField label="Policy Status" value={values.status} options={Object.keys(STATUS_SEARCH)} onChange={(value) => setValue('status', value)} /><SelectField label="Agent Codes" value={values.agent} options={['All', agentCode]} onChange={(value) => setValue('agent', value)} /></>}<SelectField label="Action" value={values.action} options={[...SEARCH_ACTIONS]} onChange={(value) => setValue('action', value)} wide /><div className="flex items-end gap-1 pb-0.5"><button type="submit" className="flex h-[18px] min-w-[105px] items-center justify-center gap-1 bg-[#0073cf] px-3 text-[10px] font-bold text-white hover:bg-[#005da8]"><Search size={11} /> Search</button><button type="button" onClick={reset} className="flex h-[18px] min-w-[68px] items-center justify-center gap-1 bg-[#003865] px-3 text-[10px] font-bold text-white hover:bg-[#002746]"><RotateCcw size={10} /> Reset</button></div></form></div>;
 }

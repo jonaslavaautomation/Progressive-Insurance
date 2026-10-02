@@ -19,7 +19,6 @@ import { AccountDrawer } from '@/servicing/account/AccountDrawer';
 import { PolicyHub, type HubActions, type HubPanel } from '@/servicing/account/PolicyHub';
 import { AutoPayFlow } from '@/servicing/account/AutoPayFlow';
 import { runWithSpinner } from '@/services/processing';
-import { loadWithCar, loaderIconFor } from '@/services/carLoader';
 import { paymentAccountOf, unenrollAutopay, type AutopayMode } from '@/services/autopay';
 import { DocumentPreview } from '@/servicing/PolicyDocuments';
 import { RETURNED_PAYMENT_FEE } from '@/services/policyEngine';
@@ -164,7 +163,7 @@ export function PolicyAccount() {
   const hubActions: HubActions = {
     change: (type) => setDialog({ kind: 'change', type }), can,
     pay: () => setDialog({ kind: 'pay' }), delivery: () => setDialog({ kind: 'delivery' }), loyalty: () => setDialog({ kind: 'loyalty' }), newQuotes: () => setDialog({ kind: 'quotes' }),
-    autopay: (mode) => loadWithCar(() => { setHubOpen(false); setPage(mode); }, loaderIconFor(policy.product)), unenroll: () => setDialog({ kind: 'unenroll' }), scrollTo,
+    autopay: (mode) => { setHubOpen(false); setPage(mode); }, unenroll: () => setDialog({ kind: 'unenroll' }), scrollTo,
     returnedCheck: () => setDialog({ kind: 'returned' }), receipt: () => setDialog({ kind: 'receipt' }),
   };
   const lastPaid = [...policy.ledger].reverse().find((entry) => entry.type === 'Payment' || entry.type === 'Automatic Payment');
@@ -184,7 +183,7 @@ export function PolicyAccount() {
     <AccountDrawer policy={policy} open={drawerOpen} onToggle={() => setDrawerOpen(!drawerOpen)} onNewQuotes={() => setDialog({ kind: 'quotes' })} onPreferences={() => setDialog({ kind: 'prefs' })} hubOpen={hubOpen} onToggleHub={() => (hubOpen ? setHubOpen(false) : openHub())} />
     {hubOpen && <PolicyHub policy={policy} level={loyalty.name} panel={hubPanel} onPanel={setHubPanel} onClose={() => setHubOpen(false)} actions={hubActions} />}
     <main className="account-main min-w-0 flex-1 overflow-auto">
-      {page !== 'overview' ? <div style={{ zoom: TEXT_ZOOM[prefs.textSize] }}><AutoPayFlow policy={policy} mode={page} onCancel={() => loadWithCar(() => setPage('overview'), loaderIconFor(policy.product))} onDone={(text) => { setPage('overview'); setMessage(text); }} /></div> : <div className="mx-auto w-full max-w-[900px] px-[32px] pb-[40px] pt-[22px]" style={{ zoom: TEXT_ZOOM[prefs.textSize] }}>
+      {page !== 'overview' ? <div style={{ zoom: TEXT_ZOOM[prefs.textSize] }}><AutoPayFlow policy={policy} mode={page} onCancel={() => setPage('overview')} onDone={(text) => { setPage('overview'); setMessage(text); }} /></div> : <div className="mx-auto w-full max-w-[900px] px-[32px] pb-[40px] pt-[22px]" style={{ zoom: TEXT_ZOOM[prefs.textSize] }}>
         <TrainingClock />
         <header className="text-center">
           <h1 className="text-[30px] font-bold tracking-[-.4px] text-[#2f4a66]">Policy and Coverages</h1>

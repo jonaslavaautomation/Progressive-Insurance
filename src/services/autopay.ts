@@ -33,32 +33,50 @@ export function paymentMethodName(policy: PolicyRecord): string {
   return 'Pay by Mail';
 }
 
-/** Which automatic-payment workflow Billing and Payments offers: it follows the payment method. */
+/**
+ * Automatic-payment workflows Billing and Payments offers, in menu order. Every in-force policy can
+ * update the credit card; EFT policies can also update the bank account, and active policies not on
+ * automatic payments can enroll (card or bank).
+ */
 export type AutopayMode = 'card' | 'bank' | 'enroll';
-export function autopayMode(policy: PolicyRecord): AutopayMode | null {
-  if (policy.status !== 'Active' && policy.status !== 'Pending Cancel') return null;
-  // Paid in full with an account saved for the renewal: update that account.
-  if (policy.billPlanId === 'PIF' && policy.paymentAccount) return policy.paymentAccount.kind;
-  // Enrolling changes the bill plan, which the carrier allows on active policies only.
-  if (!policy.autopay) return policy.status === 'Active' ? 'enroll' : null;
-  return paymentAccountOf(policy)?.kind === 'card' ? 'card' : 'bank';
+export function autopayActions(policy: PolicyRecord): AutopayMode[] {
+  if (policy.status !== 'Active' && policy.status !== 'Pending Cancel') return [];
+  const account = paymentAccountOf(policy);
+  const renewalAccount = policy.billPlanId === 'PIF' && policy.paymentAccount;
+  const actions: AutopayMode[] = [];
+  if (account?.kind === 'bank' && (policy.autopay || renewalAccount)) actions.push('bank');
+  if (!policy.autopay && !renewalAccount && policy.status === 'Active') actions.push('enroll');
+  actions.push('card');
+  return actions;
 }
+
+/** What saving a card or account does on this policy (shown in the confirmation). */
+export function savedFor(policy: PolicyRecord): 'automatic' | 'renewal' | 'file' {
+  if (policy.billPlanId === 'PIF') return 'renewal';
+  // The bill plan can only move to automatic payments on an active policy.
+  return policy.autopay || policy.status === 'Active' ? 'automatic' : 'file';
+}
+export const SAVED_TEXT = { automatic: 'will be used for automatic payments', renewal: 'will be used for the renewal payment', file: 'is saved on file for payments' } as const;
 export const AUTOPAY_LABELS: Record<AutopayMode, string> = { card: 'Update Credit Card', bank: 'Update Bank Account', enroll: 'Enroll in Automatic Payments' };
 
 export interface Verification { agentName: string; requester: string; email: string; agentEmail: string }
 export interface CardUpdate extends Verification { name: string; number: string; expiry: string }
 export interface BankUpdate extends Verification { type: string; name: string; routing: string; account: string }
 
-/** Moves an installment policy onto the matching automatic plan; paid-in-full policies keep their plan. */
+/**
+ * Moves an installment policy onto the matching automatic plan. Paid-in-full policies keep their
+ * plan, and so do policies pending cancellation (the bill plan can't change until they are current).
+ */
 function onPlan(policy: PolicyRecord, planId: 'CARD' | 'EFT', day: string): PolicyRecord | string {
-  if (policy.billPlanId === planId || policy.billPlanId === 'PIF' || !nextInstallment(policy)) return policy;
+  if (policy.billPlanId === planId || policy.billPlanId === 'PIF' || policy.status !== 'Active' || !nextInstallment(policy)) return policy;
   return changeBillPlan(policy, planId, day);
 }
 
 function finish(policy: PolicyRecord, account: PaymentAccount, input: Verification, what: string, day: string): PolicyRecord {
   const emailChanged = input.email.trim() !== policy.insured.email;
+  const automatic = policy.billPlanId === 'CARD' || policy.billPlanId === 'EFT';
   const detail = [
-    `${what} now used for ${policy.billPlanId === 'PIF' ? 'renewal' : 'automatic'} payments.`,
+    `${what} ${automatic ? 'now used for automatic payments' : policy.billPlanId === 'PIF' ? 'saved for the renewal payment' : 'saved on file for payments'}.`,
     `Requested by ${input.requester}; processed by ${input.agentName.trim()}.`,
     emailChanged ? `Policyholder email ${input.email.trim() ? `changed to ${input.email.trim()}` : 'removed'}.` : '',
     input.agentEmail.trim() ? `Confirmation copy sent to ${input.agentEmail.trim()}.` : '',
@@ -66,7 +84,7 @@ function finish(policy: PolicyRecord, account: PaymentAccount, input: Verificati
   return {
     ...policy,
     paymentAccount: account,
-    autopay: policy.billPlanId === 'PIF' ? policy.autopay : true,
+    autopay: automatic ? true : policy.autopay,
     insured: emailChanged ? { ...policy.insured, email: input.email.trim() } : policy.insured,
     history: [...policy.history, { id: hid(), date: day, event: 'Automatic payment method updated', detail }],
   };
@@ -85,7 +103,7 @@ export function updateAutopayCard(policy: PolicyRecord, input: CardUpdate, day: 
   if (!brand) return 'We accept Visa, Mastercard and Discover.';
   const moved = onPlan(policy, 'CARD', day);
   if (typeof moved === 'string') return moved;
-  const next = { ...moved, paymentMethod: moved.billPlanId === 'PIF' ? moved.paymentMethod : 'Recurring credit card' };
+  const next = { ...moved, paymentMethod: moved.billPlanId === 'CARD' ? 'Recurring credit card' : moved.paymentMethod };
   return finish(next, { kind: 'card', brand, last4: digits.slice(-4), expiry: input.expiry, name: input.name.trim(), updatedOn: day }, input, `${brand} ending in ${digits.slice(-4)} (exp ${input.expiry})`, day);
 }
 
@@ -96,7 +114,7 @@ export function updateAutopayBank(policy: PolicyRecord, input: BankUpdate, day: 
   const last4 = input.account.replace(/\D/g, '').slice(-4);
   const moved = onPlan(policy, 'EFT', day);
   if (typeof moved === 'string') return moved;
-  const next = { ...moved, paymentMethod: moved.billPlanId === 'PIF' ? moved.paymentMethod : 'Bank account (EFT)' };
+  const next = { ...moved, paymentMethod: moved.billPlanId === 'EFT' ? 'Bank account (EFT)' : moved.paymentMethod };
   return finish(next, { kind: 'bank', brand: input.type, last4, name: input.name.trim(), updatedOn: day }, input, `${input.type} account ending in ${last4}`, day);
 }
 

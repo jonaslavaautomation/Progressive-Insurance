@@ -5,7 +5,7 @@ import { Banknote, ChevronRight, CircleCheck, ClipboardList, IdCard, KeyRound, N
 import type { PolicyRecord } from '@/types/policy';
 import { useQuote } from '@/context/useQuote';
 import { nextInstallment } from '@/services/policyEngine';
-import { AUTOPAY_LABELS, autopayMode, paymentAccountOf, paymentMethodName, type AutopayMode } from '@/services/autopay';
+import { AUTOPAY_LABELS, autopayActions, paymentAccountOf, paymentMethodName, type AutopayMode } from '@/services/autopay';
 import { productLabel } from '@/products/configs';
 import { formatCurrency } from '@/utils/masks';
 import { formatLongDate, shortDate } from '@/servicing/portal/portalUtils';
@@ -88,11 +88,13 @@ export function PolicyHub({ policy, level, panel, onPanel, onClose, actions }: {
   const next = nextInstallment(policy);
   const paid = lastPayment(policy);
   const renewal = policy.renewal;
-  const mode = autopayMode(policy);
+  const autopayItems: Item[] = autopayActions(policy).map((mode: AutopayMode) => ({ label: AUTOPAY_LABELS[mode], onClick: go(() => actions.autopay(mode)) }));
   const star: Record<string, string> = { Bronze: 'fill-[#c9874b] text-[#8a5626]', Silver: 'fill-none text-[#5c6670]', Gold: 'fill-[#f2c94c] text-[#b8860b]', Platinum: 'fill-[#dfe7ee] text-[#6f8696]' };
 
   const billingRows: [string, string][] = [
     ['Payment method', paymentMethodName(policy)],
+    // A card saved on a policy that isn't on automatic payments (for example pending cancellation).
+    ...(!policy.autopay && policy.billPlanId !== 'PIF' && policy.paymentAccount?.kind === 'card' ? [['Card on file', `${policy.paymentAccount.brand} ending in ${policy.paymentAccount.last4}`] as [string, string]] : []),
     ['Last payment', paid ? `${formatCurrency(paid.amount)} on ${longDate(paid.date)}` : 'No payments yet'],
     ['Billing status', next && policy.status !== 'Cancelled' ? (policy.autopay && account ? `Payment scheduled ${formatCurrency(next.amount - next.paid)} on ${formatLongDate(next.due)} from account ending in ${account.last4}` : `Payment of ${formatCurrency(next.amount - next.paid)} due ${longDate(next.due)}`) : policy.billPlanId === 'PIF' && policy.paymentAccount ? `Paid in full. The renewal will be paid from account ending in ${policy.paymentAccount.last4}` : billingStatus(policy, state.simDate)],
   ];
@@ -115,8 +117,8 @@ export function PolicyHub({ policy, level, panel, onPanel, onClose, actions }: {
       { label: 'Payment Schedule', onClick: go(() => openPolicy(policy.id, 'billing')) },
       { label: 'Process Returned Check', onClick: go(actions.returnedCheck) },
       { label: 'Unenroll From Automatic Payments', onClick: go(actions.unenroll), hidden: !policy.autopay || !active },
-      // The automatic-payment action follows the payment method on the policy.
-      { label: mode ? AUTOPAY_LABELS[mode] : '', onClick: go(() => { if (mode) actions.autopay(mode); }), hidden: !mode },
+      // Update Credit Card on every in-force policy, plus the bank / enroll actions that apply.
+      ...autopayItems,
       { label: 'View Print Receipt', onClick: go(actions.receipt) },
     ] },
     customer: { title: 'Customer Information', rows: [['Named insured', policy.insured.name], ['Mailing address', `${policy.insured.street}, ${policy.insured.cityStateZip}`], ['Phone', policy.insured.phone || '—'], ['Email', policy.insured.email || '—']], items: [
