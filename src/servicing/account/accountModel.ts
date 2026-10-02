@@ -5,6 +5,7 @@ import type { Driver } from '@/types/quote';
 import type { PolicyQuery } from '@/context/quoteStore';
 import { REINSTATEMENT_WINDOW_DAYS, balance, dayDiff, minimumDue, nextInstallment, reinstatementCheck, shiftDate } from '@/services/policyEngine';
 import { filterPolicies } from '@/servicing/policyFilters';
+import { paymentAccountOf } from '@/services/autopay';
 import { rulesFor } from '@/data/states';
 import { formatCurrency } from '@/utils/masks';
 import { parseDate } from '@/utils/dates';
@@ -81,7 +82,6 @@ export function statusText(policy: PolicyRecord): string {
   return { Active: 'Active', 'Pending Cancel': 'Pending cancel', Expired: 'Expired', 'Non-Renewed': 'Non-renewed' }[policy.status];
 }
 
-export const zipOf = (policy: PolicyRecord) => policy.insured.cityStateZip.split(' ').pop() ?? '';
 export const stateCode = (policy: PolicyRecord) => rulesFor(policy.state).code;
 
 export function driversOf(policy: PolicyRecord): Driver[] {
@@ -125,8 +125,10 @@ export function importantMessages(policy: PolicyRecord, day: string): string[] {
     messages.push(`A payment of ${formatCurrency(minimumDue(policy, day))} is past due.`);
   }
   if (policy.status === 'Active' && !policy.pendingCancel && !policy.nonRenewal) {
-    const automatic = policy.autopay || policy.billPlanId === 'PIF' && /EFT|bank/i.test(policy.paymentMethod);
-    messages.push(`The current policy term will expire on ${policy.expirationDate}.${automatic ? ' This policy is on an EFT/Direct Payment bill plan and will automatically renew.' : renewal ? '' : ' A renewal offer is sent about 30 days before the term ends.'}`);
+    // Name the actual automatic plan: card plans are not EFT.
+    const account = policy.autopay ? paymentAccountOf(policy) : policy.billPlanId === 'PIF' ? policy.paymentAccount ?? null : null;
+    const plan = account?.kind === 'card' ? 'an Automatic Card' : 'an EFT/Direct Payment';
+    messages.push(`The current policy term will expire on ${policy.expirationDate}.${account ? ` This policy is on ${plan} bill plan and will automatically renew.` : renewal ? '' : ' A renewal offer is sent about 30 days before the term ends.'}`);
   }
   if (policy.nonRenewal) messages.push(`This policy will not renew. Coverage ends on ${policy.expirationDate} (${policy.nonRenewal.reason}).`);
   if (policy.status === 'Cancelled' && policy.cancellation) {

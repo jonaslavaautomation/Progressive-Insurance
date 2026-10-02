@@ -19,7 +19,10 @@ import { AccountDrawer } from '@/servicing/account/AccountDrawer';
 import { PolicyHub, type HubActions, type HubPanel } from '@/servicing/account/PolicyHub';
 import { AutoPayFlow } from '@/servicing/account/AutoPayFlow';
 import { runWithSpinner } from '@/services/processing';
-import { paymentAccountOf, unenrollAutopay } from '@/services/autopay';
+import { loadWithCar, loaderIconFor } from '@/services/carLoader';
+import { paymentAccountOf, unenrollAutopay, type AutopayMode } from '@/services/autopay';
+import { DocumentPreview } from '@/servicing/PolicyDocuments';
+import { RETURNED_PAYMENT_FEE } from '@/services/policyEngine';
 import { Modal } from '@/components/wizard/Modal';
 import { modalButton } from '@/components/wizard/modalStyles';
 import { DeductibleSavingsModal, DeliveryModal, DriveSenseModal, DriverUpdateModal, DrivingRecordModal, LoyaltyModal, NewQuotesModal, VehicleUpdateModal, VisualPreferencesModal } from '@/servicing/account/AccountModals';
@@ -34,12 +37,15 @@ const bigButton = `flex h-[46px] min-w-[208px] items-center justify-center gap-[
 
 type Dialog =
   | { kind: 'change'; type?: ChangeType }
-  | { kind: 'pay' | 'delivery' | 'savings' | 'drivesense' | 'loyalty' | 'quotes' | 'prefs' | 'unenroll' }
+  | { kind: 'pay' | 'delivery' | 'savings' | 'drivesense' | 'loyalty' | 'quotes' | 'prefs' | 'unenroll' | 'returned' | 'receipt' }
   | { kind: 'record' | 'driver'; driver: Driver }
   | { kind: 'vehicle'; index: number };
 
-function ArrowLink({ children, onClick }: { children: ReactNode; onClick: () => void }) {
-  return <button type="button" onClick={onClick} className={`mt-[8px] inline-flex items-center gap-[3px] text-[12.5px] font-medium text-[#0073cf] hover:text-[#0056b3] hover:underline ${focus}`}>{children}<ChevronRight size={14} strokeWidth={2.4} /></button>;
+function ArrowLink({ children, onClick }: { children: string; onClick: () => void }) {
+  // The arrow stays on the line with the last word when the label wraps.
+  const words = children.split(' ');
+  const last = words.pop();
+  return <button type="button" onClick={onClick} className={`mt-[8px] text-left text-[12.5px] font-medium text-[#0073cf] hover:text-[#0056b3] hover:underline ${focus}`}>{words.length ? `${words.join(' ')} ` : ''}<span className="whitespace-nowrap">{last}<ChevronRight size={14} strokeWidth={2.4} className="ml-[3px] inline align-[-2px]" /></span></button>;
 }
 
 function TextLink({ children, onClick, strong = false }: { children: ReactNode; onClick: () => void; strong?: boolean }) {
@@ -116,7 +122,7 @@ function UnitCard({ unit, details, actions, coveragesLabel, onCoverages }: { uni
 }
 
 export function PolicyAccount() {
-  const { state, openPolicy, openProof, lastConfirmation, servicePolicy } = useQuote();
+  const { state, openPolicy, openProof, lastConfirmation, servicePolicy, engine } = useQuote();
   const prefs = useSyncExternalStore(visualPrefsStore.subscribe, visualPrefsStore.get);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -124,7 +130,7 @@ export function PolicyAccount() {
   // Policy hub menu beside the drawer, its open sub-panel, and the Manage Automatic Payments page.
   const [hubOpen, setHubOpen] = useState(false);
   const [hubPanel, setHubPanel] = useState<HubPanel | null>(null);
-  const [page, setPage] = useState<'overview' | 'autopay'>('overview');
+  const [page, setPage] = useState<'overview' | AutopayMode>('overview');
   const policy = state.policies.find((entry) => entry.id === state.ui.policyId);
   if (!policy) return <div className="p-10 text-[14px]">Policy not found.</div>;
 
@@ -158,8 +164,16 @@ export function PolicyAccount() {
   const hubActions: HubActions = {
     change: (type) => setDialog({ kind: 'change', type }), can,
     pay: () => setDialog({ kind: 'pay' }), delivery: () => setDialog({ kind: 'delivery' }), loyalty: () => setDialog({ kind: 'loyalty' }), newQuotes: () => setDialog({ kind: 'quotes' }),
-    updateCard: () => { setHubOpen(false); setPage('autopay'); }, unenroll: () => setDialog({ kind: 'unenroll' }), scrollTo,
+    autopay: (mode) => loadWithCar(() => { setHubOpen(false); setPage(mode); }, loaderIconFor(policy.product)), unenroll: () => setDialog({ kind: 'unenroll' }), scrollTo,
+    returnedCheck: () => setDialog({ kind: 'returned' }), receipt: () => setDialog({ kind: 'receipt' }),
   };
+  const lastPaid = [...policy.ledger].reverse().find((entry) => entry.type === 'Payment' || entry.type === 'Automatic Payment');
+  const receipt = [...policy.documents].reverse().find((entry) => entry.type === 'Payment Receipt');
+  const returnCheck = () => runWithSpinner('Processing returned payment...', () => {
+    const failure = servicePolicy(policy.id, (record, today) => engine.returnedPayment(record, today));
+    setDialog(null);
+    setMessage(failure || `Returned payment processed. A ${formatCurrency(RETURNED_PAYMENT_FEE)} returned payment fee was charged and a notice was sent. Confirmation #${lastConfirmation()}.`);
+  });
   const unenroll = () => runWithSpinner('Updating automatic payments...', () => {
     const failure = servicePolicy(policy.id, (record, today) => unenrollAutopay(record, today));
     setDialog(null);
@@ -170,7 +184,7 @@ export function PolicyAccount() {
     <AccountDrawer policy={policy} open={drawerOpen} onToggle={() => setDrawerOpen(!drawerOpen)} onNewQuotes={() => setDialog({ kind: 'quotes' })} onPreferences={() => setDialog({ kind: 'prefs' })} hubOpen={hubOpen} onToggleHub={() => (hubOpen ? setHubOpen(false) : openHub())} />
     {hubOpen && <PolicyHub policy={policy} level={loyalty.name} panel={hubPanel} onPanel={setHubPanel} onClose={() => setHubOpen(false)} actions={hubActions} />}
     <main className="account-main min-w-0 flex-1 overflow-auto">
-      {page === 'autopay' ? <div style={{ zoom: TEXT_ZOOM[prefs.textSize] }}><AutoPayFlow policy={policy} onCancel={() => setPage('overview')} onDone={(text) => { setPage('overview'); setMessage(text); }} /></div> : <div className="mx-auto w-full max-w-[900px] px-[32px] pb-[40px] pt-[22px]" style={{ zoom: TEXT_ZOOM[prefs.textSize] }}>
+      {page !== 'overview' ? <div style={{ zoom: TEXT_ZOOM[prefs.textSize] }}><AutoPayFlow policy={policy} mode={page} onCancel={() => loadWithCar(() => setPage('overview'), loaderIconFor(policy.product))} onDone={(text) => { setPage('overview'); setMessage(text); }} /></div> : <div className="mx-auto w-full max-w-[900px] px-[32px] pb-[40px] pt-[22px]" style={{ zoom: TEXT_ZOOM[prefs.textSize] }}>
         <TrainingClock />
         <header className="text-center">
           <h1 className="text-[30px] font-bold tracking-[-.4px] text-[#2f4a66]">Policy and Coverages</h1>
@@ -188,7 +202,7 @@ export function PolicyAccount() {
 
         <section aria-label="Policy at a glance" className={`${card} mt-[22px] px-[30px] pb-[30px] pt-[20px]`}>
           <div className="flex justify-end"><LoyaltyBadge level={loyalty.name} onClick={() => setDialog({ kind: 'loyalty' })} /></div>
-          <div className="mt-[4px] grid grid-cols-3 gap-x-[30px]">
+          <div className="mt-[4px] grid grid-cols-3 gap-x-[30px] [&>*]:min-w-0">
             <div className="space-y-[22px]">
               <div><Item title="Policy">{productLabel(policy.product)} {policy.policyNumber}</Item><ArrowLink onClick={() => openPolicy(policy.id, 'history')}>Policy Activity</ArrowLink></div>
               <div><Item title="Policy period">{longDate(policy.effectiveDate)} – {longDate(policy.expirationDate)}</Item><ArrowLink onClick={() => openProof(policy.id)}>{hasIdCards(policy) ? 'ID Cards' : 'Proof of Insurance'}</ArrowLink></div>
@@ -201,7 +215,7 @@ export function PolicyAccount() {
             <div>
               <div className={label}>Contact information</div>
               <div className={`${value} font-medium text-[#1f2a33]`}>{policy.insured.name}</div>
-              <div className={value}>{policy.insured.email || 'No email on file'}</div>
+              <div className={`${value} break-all`}>{policy.insured.email || 'No email on file'}</div>
               {can('contact') && <ArrowLink onClick={() => change('contact')}>Update Email</ArrowLink>}
               <div className={`${value} mt-[16px]`}>(Mobile) {policy.insured.phone || '—'}</div>
               {can('contact') && <ArrowLink onClick={() => change('contact')}>Update Phone Number</ArrowLink>}
@@ -223,7 +237,7 @@ export function PolicyAccount() {
               <dt className="font-bold">Billing status</dt><dd>{billingStatus(policy, day)}</dd>
               <dt className="font-bold">Bill plan</dt><dd><TextLink onClick={() => openPolicy(policy.id, 'billing')}><span className="uppercase underline">{policy.billPlanName}</span></TextLink></dd>
               <dt className="font-bold">Last amount paid{paid && <span className="block">{paid.date}</span>}</dt><dd>{paid ? formatCurrency(paid.amount) : 'No payments yet'}</dd>
-              <dt className="font-bold">Payment method</dt><dd><TextLink onClick={() => openPolicy(policy.id, 'billing')}><span className="underline">{paymentMethodLabel(policy.paymentMethod)}</span></TextLink></dd>
+              <dt className="font-bold">Payment method</dt><dd><TextLink onClick={() => openHub('billing')}><span className="underline">{paymentMethodLabel(policy.paymentMethod)}</span></TextLink></dd>
               <dt className="font-bold">Electronic billing</dt><dd>{paperless.enrolled ? 'Enrolled' : 'Not enrolled'}</dd>
               <dt className="font-bold">CSDD</dt><dd>No</dd>
             </dl>
@@ -310,6 +324,10 @@ export function PolicyAccount() {
     {dialog?.kind === 'vehicle' && vehicles[dialog.index] && <VehicleUpdateModal policy={policy} vehicle={vehicles[dialog.index]} onClose={close} />}
     {dialog?.kind === 'quotes' && <NewQuotesModal policy={policy} owned={owned} onClose={close} />}
     {dialog?.kind === 'prefs' && <VisualPreferencesModal onClose={close} />}
+    {dialog?.kind === 'returned' && <Modal title="Process Returned Check" width={580} onClose={() => setDialog(null)} footer={lastPaid ? <><button type="button" className={modalButton.secondary} onClick={() => setDialog(null)}>Cancel</button><button type="button" className={modalButton.primary} onClick={returnCheck}>Process Returned Payment</button></> : <button type="button" className={modalButton.blue} onClick={() => setDialog(null)}>Close</button>}>
+      {lastPaid ? <p className="text-[14px] leading-[20px]">The bank returned the payment of <b>{formatCurrency(-lastPaid.amount)}</b> made on <b>{lastPaid.date}</b> ({lastPaid.detail}). Processing it reverses the payment, charges a <b>{formatCurrency(RETURNED_PAYMENT_FEE)}</b> returned payment fee and sends the customer a notice.</p> : <p className="text-[14px]">There is no payment on this policy to return.</p>}
+    </Modal>}
+    {dialog?.kind === 'receipt' && (receipt ? <DocumentPreview policy={policy} document={receipt} onClose={() => setDialog(null)} /> : <Modal title="View Print Receipt" width={520} onClose={() => setDialog(null)} footer={<button type="button" className={modalButton.blue} onClick={() => setDialog(null)}>Close</button>}><p className="text-[14px]">No payment receipts on this policy yet. A receipt is issued each time a payment posts.</p></Modal>)}
     {dialog?.kind === 'unenroll' && <Modal title="Unenroll From Automatic Payments" width={560} onClose={() => setDialog(null)} footer={<><button type="button" className={modalButton.secondary} onClick={() => setDialog(null)}>Keep Automatic Payments</button><button type="button" className={modalButton.primary} onClick={unenroll}>Unenroll</button></>}>
       <p className="text-[14px] leading-[20px]">Payments will stop drafting from {paymentAccountOf(policy)?.kind === 'card' ? 'the card' : 'the account'} ending in <b>{paymentAccountOf(policy)?.last4}</b>. Remaining installments move to <b>Pay by Mail</b>, which can carry a higher installment fee. Confirm the customer asked for this change.</p>
     </Modal>}

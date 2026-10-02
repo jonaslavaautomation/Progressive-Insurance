@@ -56,3 +56,21 @@ export function cardProblem(input: { name: string; number: string; expiry: strin
 }
 
 export const maskCard = (last4: string) => `************${last4}`;
+
+/** ABA routing number check digit (9 digits). */
+export function routingValid(routing: string): boolean {
+  const d = routing.replace(/\D/g, '').split('').map(Number);
+  if (d.length !== 9) return false;
+  return (3 * (d[0] + d[3] + d[6]) + 7 * (d[1] + d[4] + d[7]) + (d[2] + d[5] + d[8])) % 10 === 0;
+}
+
+/** Problem with the bank account, or '' when it can be saved. Only the last four digits are kept. */
+export function bankProblem(input: { type: string; name: string; routing: string; account: string; confirm: string }): string {
+  if (!input.type) return 'Select the account type.';
+  if (!input.name.trim()) return 'Enter the name on the account.';
+  if (!routingValid(input.routing)) return 'Enter a valid 9-digit routing number.';
+  const account = input.account.replace(/\D/g, '');
+  if (account.length < 4 || account.length > 17) return 'Enter the account number (4 to 17 digits).';
+  if (account !== input.confirm.replace(/\D/g, '')) return 'The account numbers do not match.';
+  return '';
+}

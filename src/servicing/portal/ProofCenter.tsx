@@ -5,7 +5,6 @@ import { ChevronLeft, ChevronRight, CircleHelp, Download, Mailbox, Printer, Sear
 import type { PolicyDocument, PolicyRecord } from '@/types/policy';
 import { useQuote } from '@/context/useQuote';
 import { useOpenAccount } from '@/servicing/account/useOpenAccount';
-import { loadWithCar } from '@/services/carLoader';
 import { queryFromText, resolveSearch } from '@/servicing/account/accountModel';
 import { customerKey } from '@/servicing/policyFilters';
 import { DocumentPreview } from '@/servicing/PolicyDocuments';
@@ -42,7 +41,7 @@ function Sidebar({ policy, collapsed, onToggle, largeText, onLargeText }: { poli
     const outcome = resolveSearch(state.policies, search, state.simDate);
     if (outcome.kind === 'none') { setError('No policies found.'); return; }
     setError('');
-    if (outcome.kind === 'account') loadWithCar(() => openProof(outcome.policyId));
+    if (outcome.kind === 'account') openProof(outcome.policyId);
     else openPolicies(search);
   };
   return <aside className={`relative flex shrink-0 flex-col border-r border-[#d5d9dd] bg-white transition-[width] print:hidden ${collapsed ? 'w-0' : 'w-[256px]'}`}>

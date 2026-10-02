@@ -19,7 +19,7 @@ import { addMonths, formatDate, parseDate } from '@/utils/dates';
 /** Reference accounts are recognised by this email domain. */
 export const PRACTICE_DOMAIN = '@practice.example.com';
 /** Bumped when the reference accounts change, so saved books rebuild them. */
-export const PRACTICE_VERSION = 2;
+export const PRACTICE_VERSION = 3;
 
 interface AccountEvent {
   /** Days before today (negative numbers are not used). */
@@ -83,7 +83,7 @@ const CUSTOMERS: PracticeCustomer[] = [
   },
   {
     state: 'Florida', first: 'Casey', last: 'Morgan', dob: '11/02/1993', street: '88 Willow Training Ln', city: 'Tampa', zip: '33606', phone: '813-555-0164', vehicle: ['2019', 'Toyota', 'RAV4', 'Utility 4D'], vin: '2T3F1RFV5KW000202',
-    producer: 'Reyes, Dana', currentTermDaysAgo: fixed(44), priorTerms: 14, autoPlan: 'EFT', renters: 'MAIL', scenario: 'nonpayment', unpaid: ['renters'],
+    producer: 'Reyes, Dana', currentTermDaysAgo: fixed(44), priorTerms: 14, autoPlan: 'CARD', renters: 'MAIL', scenario: 'nonpayment', unpaid: ['renters'],
     events: [
       { daysAgo: 1510, product: 'renters', apply: claim({ type: 'Theft - personal property', description: 'Laptop and bicycle stolen from the apartment storage unit. Police report filed.', status: 'Closed - Paid', paid: 1250, adjuster: 'Property Claims Team 4', atFault: 'No', unit: 'Apartment', lossDaysBefore: 2 }) },
       { daysAgo: 400, product: 'auto', apply: note('Policy change processed', 'Email address and paperless document preference updated. No premium change.') },

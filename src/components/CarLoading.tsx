@@ -1,4 +1,5 @@
-// The account loading screen: a light-blue sedan with turning wheels over a moving road.
+// The page loading screen: a light-blue sedan with turning wheels over a moving road, or for home
+// policies a light-blue house with smoke rising from the chimney.
 import { useSyncExternalStore } from 'react';
 import { carLoaderStore } from '@/services/carLoader';
 import { visualPrefsStore } from '@/services/visualPrefs';
@@ -28,12 +29,39 @@ export function CarIllustration() {
   </svg>;
 }
 
+export function HomeIllustration() {
+  return <svg viewBox="0 0 200 124" className="h-auto w-[200px]" aria-hidden>
+    {/* Smoke puffs drifting up from the chimney. */}
+    {[0, 1, 2].map((index) => <circle key={index} cx={135} cy={18} r={4.5 + index * 1.5} fill="#dbe4ea" className="house-smoke" style={{ animationDelay: `${index * 0.55}s` }} />)}
+    <g>
+      {/* Chimney (behind the roof), walls, then the roof over them. */}
+      <rect x={128} y={26} width={15} height={30} fill="#8fd6f2" stroke="#2b2f33" strokeWidth={2.4} strokeLinejoin="round" />
+      <rect x={125} y={22} width={21} height={7} rx={1.5} fill="#fff" stroke="#2b2f33" strokeWidth={2} />
+      <rect x={42} y={60} width={116} height={44} fill="#8fd6f2" stroke="#2b2f33" strokeWidth={2.4} strokeLinejoin="round" />
+      <path d="M26 64L100 16l74 48z" fill="#5fb7de" stroke="#2b2f33" strokeWidth={2.4} strokeLinejoin="round" />
+      <path d="M44 56h112" stroke="#2b2f33" strokeWidth={1.6} strokeLinecap="round" opacity={0.35} />
+      <circle cx={100} cy={44} r={7} fill="#fff" stroke="#2b2f33" strokeWidth={2} />
+      <path d="M100 37v14M93 44h14" stroke="#2b2f33" strokeWidth={1.4} />
+      <rect x={88} y={74} width={24} height={30} rx={2} fill="#fff" stroke="#2b2f33" strokeWidth={2.2} />
+      <circle cx={106} cy={90} r={1.9} fill="#2b2f33" />
+      <g className="house-window">
+        <rect x={54} y={72} width={22} height={19} rx={1.5} fill="#fff" stroke="#2b2f33" strokeWidth={2.2} />
+        <path d="M65 72v19M54 81.5h22" stroke="#2b2f33" strokeWidth={1.6} />
+        <rect x={124} y={72} width={22} height={19} rx={1.5} fill="#fff" stroke="#2b2f33" strokeWidth={2.2} />
+        <path d="M135 72v19M124 81.5h22" stroke="#2b2f33" strokeWidth={1.6} />
+      </g>
+      <path d="M84 104h32" stroke="#2b2f33" strokeWidth={2.4} strokeLinecap="round" />
+    </g>
+    <path d="M10 106h180" stroke="#cfd8de" strokeWidth={2} strokeLinecap="round" strokeDasharray="14 10" />
+  </svg>;
+}
+
 export function CarLoading() {
-  const loading = useSyncExternalStore(carLoaderStore.subscribe, carLoaderStore.get);
+  const icon = useSyncExternalStore(carLoaderStore.subscribe, carLoaderStore.get);
   const { reduceMotion } = useSyncExternalStore(visualPrefsStore.subscribe, visualPrefsStore.get);
-  if (!loading) return null;
-  return <div role="status" aria-live="polite" aria-busy="true" className={`fixed inset-0 z-[210] flex flex-col items-center justify-center bg-white print:hidden ${reduceMotion ? 'reduce-motion' : ''}`}>
-    <CarIllustration />
+  if (!icon) return null;
+  return <div role="status" aria-live="polite" aria-busy="true" aria-label={icon === 'home' ? 'Loading home policy' : 'Loading'} className={`fixed inset-0 z-[210] flex flex-col items-center justify-center bg-white print:hidden ${reduceMotion ? 'reduce-motion' : ''}`}>
+    {icon === 'home' ? <HomeIllustration /> : <CarIllustration />}
     <p className="mt-[70px] text-[19px] font-medium tracking-[-.1px] text-[#0b74b8]">Loading...this should only take a moment.</p>
   </div>;
 }

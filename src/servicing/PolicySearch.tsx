@@ -9,7 +9,6 @@ import { PRODUCT_FILTERS, STATUS_FILTERS, filterPolicies } from '@/servicing/pol
 import { productTab } from '@/products/configs';
 import { SelectControl, TextControl } from '@/components/wizard/primitives';
 import { ServiceLayout, StatusBadge, TrainingClock, outlineButton, solidButton } from '@/servicing/ServiceChrome';
-import { loadWithCar } from '@/services/carLoader';
 import { resolveSearch } from '@/servicing/account/accountModel';
 
 export function PolicySearch() {
@@ -20,10 +19,10 @@ export function PolicySearch() {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const outcome = resolveSearch(state.policies, query, state.simDate);
-    if (outcome.kind === 'account') loadWithCar(() => openAccount(outcome.policyId));
+    if (outcome.kind === 'account') openAccount(outcome.policyId);
     else openPolicies(query);
   };
-  const open = (id: string) => loadWithCar(() => openAccount(id));
+  const open = (id: string) => openAccount(id);
   const cell = 'border-b border-[#edf1f3] px-[14px] py-[11px] text-left';
   const set = (patch: Partial<PolicyQuery>) => setQuery({ ...query, ...patch });
   return <ServiceLayout>
