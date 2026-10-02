@@ -9,44 +9,58 @@ const productGroups: { title: string; products: Product[] }[] = [
   { title: 'Business', products: [{ name: 'COMMERCIAL AUTO', icon: Truck, commercial: 'commercialAuto' }, { name: 'BUSINESSOWNER/ CONTRACTOR GL', icon: Store, commercial: 'bop' }, { name: 'EPLI, NPDO, CYBER AND MORE', icon: BriefcaseBusiness, commercial: 'mgmt' }] },
 ];
 
+type Choice = { kind: 'personal'; key: ProductKey } | { kind: 'business'; key: CommercialKey } | null;
+
 /**
- * Select Product(s). In "add" mode products already on the quote are locked in. Business products
- * start a separate Commercial Lines quote, so they can't be mixed with personal lines.
+ * Select Product. One product is chosen at a time: the chosen card turns navy, and picking another
+ * card moves the selection. In "add" mode products already on the quote are shown locked. Business
+ * products start a separate Commercial Lines quote. Rendered at fixed sizes (outside the dashboard
+ * zoom) so it looks the same on every page.
  */
 export function ProductModal({ onCancel, onContinue, onCommercial, existing = [], title }: { onCancel: () => void; onContinue: (products: ProductKey[]) => void; onCommercial?: (products: CommercialKey[]) => void; existing?: ProductKey[]; title?: string }) {
-  const [selected, setSelected] = useState<ProductKey[]>(existing.length ? existing : ['auto']);
-  const [business, setBusiness] = useState<CommercialKey[]>([]);
+  const [choice, setChoice] = useState<Choice>(null);
   const [handoff, setHandoff] = useState('');
-  const toggle = (key: ProductKey) => {
-    if (existing.includes(key)) return;
-    setBusiness([]);
-    setSelected((current) => (current.includes(key) ? current.filter((entry) => entry !== key) : [...current, key]));
+  const pick = ({ name, key, commercial, partner }: Product) => {
+    if (key) { if (!existing.includes(key)) setChoice({ kind: 'personal', key }); return; }
+    if (partner) { setHandoff(`partner:${partner}`); return; }
+    if (commercial) { if (onCommercial) setChoice({ kind: 'business', key: commercial }); else setHandoff(name); }
   };
-  const toggleBusiness = (key: CommercialKey, name: string) => {
-    if (!onCommercial) { setHandoff(name); return; }
-    setSelected([]);
-    setBusiness((current) => (current.includes(key) ? current.filter((entry) => entry !== key) : [...current, key]));
+  const submit = () => {
+    if (choice?.kind === 'business') onCommercial?.([choice.key]);
+    else if (choice) onContinue([choice.key]);
   };
-  const added = selected.filter((key) => !existing.includes(key));
-  const commercial = business.length > 0;
-  const canContinue = commercial || (existing.length ? added.length > 0 : selected.length > 0);
-  return <div role="dialog" aria-modal aria-label={title ?? 'Select product(s)'} className="fixed inset-0 z-50 overflow-y-auto bg-[#003865]/75 px-3 pb-6 pt-[98px]">
-    <div className="mx-auto max-w-[540px] rounded-[3px] border border-[#9ca6ab] bg-[#f6f5f0] px-[14px] pb-[14px] pt-[16px] shadow-2xl">
-      {title && <h2 className="mb-[10px] text-[12px] font-bold text-[#003865]">{title}</h2>}
-      <div className="grid grid-cols-3 gap-[22px]">{productGroups.map((group) => <div key={group.title}><h2 className="mb-[8px] border-b-2 border-[#9ca6ab] pb-[3px] text-[10px] font-bold text-[#003865]">{group.title}</h2><div className="space-y-[10px]">{group.products.map(({ name, icon: Icon, key, commercial: businessKey, partner }) => {
-        const isSelected = key ? selected.includes(key) : !!businessKey && business.includes(businessKey);
-        const external = (!!businessKey && !onCommercial) || !!partner;
-        const locked = !!key && existing.includes(key);
-        return <button key={name} type="button" aria-pressed={external ? undefined : isSelected} title={locked ? 'Already on this quote' : partner ? 'Quoted through a partner carrier' : external ? 'Quoted separately in Commercial Lines' : businessKey ? 'Starts a Commercial Lines quote' : undefined} onClick={() => (key ? toggle(key) : partner ? setHandoff(`partner:${partner}`) : businessKey && toggleBusiness(businessKey, name))} className={`relative flex min-h-[43px] w-full items-center gap-[12px] rounded-[3px] border-[1.5px] bg-white px-[10px] text-left text-[9.5px] font-bold leading-[12px] text-[#003865] outline-none focus-visible:shadow-[0_0_0_1.5px_#0073cf] ${isSelected ? 'border-[#f26722] shadow-[0_0_0_1.5px_#0073cf]' : 'border-[#9ca6ab] hover:border-[#f26722]'} ${locked ? 'cursor-default opacity-80' : ''}`}><Icon size={27} strokeWidth={1.3} className="shrink-0" /><span className="pr-2">{name}</span>{external && <ExternalLink size={10} strokeWidth={2} className="absolute bottom-[4px] right-[4px]" />}{isSelected && <span className="absolute right-[5px] top-[4px] h-[7px] w-[7px] rounded-full bg-[#f26722]" aria-hidden />}</button>;
-      })}</div></div>)}</div>
-      {commercial && <p className="mt-[14px] text-center text-[10.5px] leading-[14px] text-[#2e3a43]">Business products are quoted in <b>Commercial Lines</b>, separately from personal lines. Select any combination of business products.</p>}
-      <div className="mt-[22px] flex justify-center gap-[6px]"><button type="button" onClick={onCancel} className="rounded-[2px] bg-[#003865] px-[10px] py-[6px] text-[9.5px] font-bold text-white hover:bg-[#002746]">CANCEL</button><button type="button" onClick={() => (commercial ? onCommercial?.(business) : onContinue(existing.length ? added : selected))} disabled={!canContinue} className="rounded-[2px] bg-[#0073cf] px-[10px] py-[6px] text-[9.5px] font-bold text-white hover:bg-[#005da8] disabled:cursor-not-allowed disabled:bg-[#7fb3e3]">{commercial ? 'START COMMERCIAL QUOTE' : 'ADD PRODUCTS TO QUOTE'}</button></div>
+  return <div role="dialog" aria-modal aria-label={title ?? 'Select product'} className="fixed inset-0 z-50 overflow-y-auto bg-[#003865]/75 px-3 pb-6 pt-[86px]">
+    <div className="mx-auto w-full max-w-[798px] rounded-[3px] border border-[#9ca6ab] bg-[#f6f5f0] px-[20px] pb-[16px] pt-[22px] shadow-2xl">
+      {title && <h2 className="mb-[14px] text-[16px] font-bold text-[#003865]">{title}</h2>}
+      <div role="radiogroup" aria-label="Product" className="grid grid-cols-1 gap-x-[36px] gap-y-[20px] sm:grid-cols-3">{productGroups.map((group) => <div key={group.title}>
+        <h3 className="mb-[14px] border-b border-[#003865] pb-[2px] text-[14px] font-bold text-[#003865]">{group.title}</h3>
+        <div className="space-y-[16px]">{group.products.map((product) => {
+          const { name, icon: Icon, key, commercial: businessKey, partner } = product;
+          const selected = !!choice && (choice.key === key || choice.key === businessKey);
+          const locked = !!key && existing.includes(key);
+          const external = !!partner || (!!businessKey && !onCommercial);
+          const tone = selected ? 'border-dashed border-[#0b1f3a] bg-[#0b2c56] text-white shadow-[inset_0_0_0_2px_#0b2c56]' : locked ? 'cursor-default border-[#9ca6ab] bg-[#eef1f3] text-[#003865]' : `border-[#7b8a95] bg-white hover:border-[#0073cf] ${external && businessKey ? 'text-[#6f7d88]' : 'text-[#003865]'}`;
+          return <button key={name} type="button" role={external ? undefined : 'radio'} aria-checked={external ? undefined : selected} aria-disabled={locked || undefined}
+            title={locked ? 'Already on this quote' : partner ? 'Quoted through a partner carrier' : external ? 'Quoted separately in Commercial Lines' : businessKey ? 'Starts a Commercial Lines quote' : undefined}
+            onClick={() => pick(product)}
+            className={`relative flex h-[64px] w-full items-center gap-[16px] rounded-[3px] border-2 px-[14px] text-left text-[13.5px] font-bold leading-[16px] outline-none focus-visible:shadow-[0_0_0_2px_#fff,0_0_0_4px_#0073cf] ${tone}`}>
+            <Icon size={38} strokeWidth={1.2} className="shrink-0" />
+            <span className={`flex-1 ${businessKey || partner ? 'text-center' : ''}`}>{name}{locked && <span className="mt-[2px] block text-[10.5px] font-medium">ON THIS QUOTE</span>}</span>
+            {external && <ExternalLink size={13} strokeWidth={2} className="absolute bottom-[5px] right-[6px]" />}
+          </button>;
+        })}</div>
+      </div>)}</div>
+      {choice?.kind === 'business' && <p className="mt-[16px] text-center text-[13px] leading-[18px] text-[#2e3a43]">Business products are quoted in <b>Commercial Lines</b>, separately from personal lines.</p>}
+      <div className="mt-[46px] flex justify-center gap-[8px]">
+        <button type="button" onClick={onCancel} className="h-[36px] rounded-[2px] bg-[#0b2c56] px-[12px] text-[13.5px] font-bold text-white hover:bg-[#002746]">CANCEL</button>
+        <button type="button" onClick={submit} disabled={!choice} className="h-[36px] rounded-[2px] bg-[#0073cf] px-[12px] text-[13.5px] font-bold text-white hover:bg-[#005da8] disabled:cursor-not-allowed disabled:bg-[#7fb3e3]">{choice?.kind === 'business' ? 'START COMMERCIAL QUOTE' : existing.length ? 'ADD PRODUCT TO QUOTE' : 'ADD PRODUCTS TO QUOTE'}</button>
+      </div>
     </div>
     {handoff && <div role="dialog" aria-modal aria-label="Leaving LAVA Training" className="fixed inset-0 z-[60] flex items-start justify-center bg-[#1b2a36]/55 pt-[140px]">
-      <div className="w-[420px] rounded-[3px] bg-white p-[20px] text-[12px] text-[#2e3a43] shadow-2xl">
-        {handoff.startsWith('partner:') ? <><h3 className="flex items-center gap-2 text-[14px] font-bold text-[#003865]"><ExternalLink size={15} />Quoted through a partner carrier</h3><p className="mt-[10px] leading-[18px]"><b>{handoff.slice(8)}</b> policies are written by a partner carrier and quoted in their system, which opens in a new window. Your quote here stays open; add the partner policy as a Multi Policy product on Additional Details once it is bound.</p><p className="mt-[8px] leading-[18px] text-[#5c6670]">Training simulation: the partner system is not part of this portal.</p></> : <><h3 className="flex items-center gap-2 text-[14px] font-bold text-[#003865]"><ExternalLink size={15} />Quoted separately in Commercial Lines</h3>
-        <p className="mt-[10px] leading-[18px]"><b>{handoff}</b> can&rsquo;t be added to a personal lines quote. Return to the dashboard, choose <b>Select Product(s)</b> and pick the business products to start a Commercial Lines quote. This quote stays as it is.</p></>}
-        <div className="mt-[16px] flex justify-end"><button type="button" autoFocus onClick={() => setHandoff('')} className="rounded-[2px] bg-[#0073cf] px-[12px] py-[7px] text-[10px] font-bold text-white hover:bg-[#005da8]">RETURN TO PRODUCTS</button></div>
+      <div className="w-[520px] rounded-[3px] bg-white p-[24px] text-[14px] text-[#2e3a43] shadow-2xl">
+        {handoff.startsWith('partner:') ? <><h3 className="flex items-center gap-2 text-[17px] font-bold text-[#003865]"><ExternalLink size={17} />Quoted through a partner carrier</h3><p className="mt-[12px] leading-[21px]"><b>{handoff.slice(8)}</b> policies are written by a partner carrier and quoted in their system, which opens in a new window. Your quote here stays open; add the partner policy as a Multi Policy product on Additional Details once it is bound.</p><p className="mt-[10px] leading-[21px] text-[#5c6670]">Training simulation: the partner system is not part of this portal.</p></> : <><h3 className="flex items-center gap-2 text-[17px] font-bold text-[#003865]"><ExternalLink size={17} />Quoted separately in Commercial Lines</h3>
+        <p className="mt-[12px] leading-[21px]"><b>{handoff}</b> can&rsquo;t be added to a personal lines quote. Return to the dashboard, choose <b>Select Product(s)</b> and pick the business product to start a Commercial Lines quote. This quote stays as it is.</p></>}
+        <div className="mt-[18px] flex justify-end"><button type="button" autoFocus onClick={() => setHandoff('')} className="h-[36px] rounded-[2px] bg-[#0073cf] px-[14px] text-[13px] font-bold text-white hover:bg-[#005da8]">RETURN TO PRODUCTS</button></div>
       </div>
     </div>}
   </div>;

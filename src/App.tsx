@@ -66,7 +66,7 @@ function Screen() {
   const picker = modalOpen && ui.view !== 'dashboard' ? <ProductModal onCancel={() => setModalOpen(false)} onContinue={startNewQuote} onCommercial={startCommercial} /> : null;
   if (ui.view === 'portal') { const Page = portalPages[ui.portalPage]; return <><Page key={ui.portalPage} />{picker}</>; }
   if (ui.view !== 'dashboard') return <Step key={ui.step} />;
-  return <div className="app-zoom"><Dashboard onSelectProduct={() => setModalOpen(true)} onOpenExisting={() => goToStep(ui.step)} existingQuote={existingQuote} showBindingBanner={modalOpen} />{modalOpen && <ProductModal onCancel={() => setModalOpen(false)} onContinue={startNewQuote} onCommercial={startCommercial} />}</div>;
+  return <><div className="app-zoom"><Dashboard onSelectProduct={() => setModalOpen(true)} onOpenExisting={() => goToStep(ui.step)} existingQuote={existingQuote} showBindingBanner={modalOpen} /></div>{modalOpen && <ProductModal onCancel={() => setModalOpen(false)} onContinue={startNewQuote} onCommercial={startCommercial} />}</>;
 }
 function App() {
   return <SessionGuard><Screen /><CarLoading /></SessionGuard>;

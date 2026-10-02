@@ -16,7 +16,7 @@ function HeaderItem({ label, value }: { label: string; value: string }) {
 
 export function ServiceHeader({ customer }: { customer?: { name: string; phone: string; email: string } }) {
   const { state, showDashboard, openPolicies } = useQuote();
-  return <header className="flex h-[60px] shrink-0 items-center bg-[#003865] pl-[24px] pr-[26px] text-white print:hidden">
+  return <header className="flex h-[63px] shrink-0 items-center bg-[#003865] pl-[24px] pr-[26px] text-white print:hidden">
     <button type="button" onClick={showDashboard} title="Return to dashboard" className={`w-[195px] shrink-0 text-left ${focusable}`}><Logo /></button>
     {customer ? <><HeaderItem label="Customer" value={customer.name} /><HeaderItem label="Phone" value={customer.phone} /><HeaderItem label="Email" value={customer.email} /></> : <HeaderItem label="Manage Policies" value="Policy Search" />}
     <div className="ml-auto flex shrink-0 items-center gap-[26px] text-[13px]">
@@ -61,7 +61,7 @@ export function ServiceLayout({ customer, nav, children, back }: { customer?: { 
     <ServiceHeader customer={customer} />
     <div className="flex min-h-0 flex-1 print:block">
       {nav}
-      <main className="min-w-0 flex-1 overflow-auto print:overflow-visible"><div className="px-[20px] pt-[20px]">{children}</div><PageLinks /></main>
+      <main className="min-w-0 flex-1 overflow-auto print:overflow-visible"><div className="mx-auto w-fit max-w-full print:w-auto"><div className="px-[20px] pt-[20px]">{children}</div><PageLinks /></div></main>
     </div>
     <div className="flex h-[57px] shrink-0 items-center justify-end gap-[11px] border-t border-[#d7dfe4] bg-white px-[15px] shadow-[0_-2px_5px_rgba(0,0,0,.05)] print:hidden">
       {back && <button type="button" onClick={back.onClick} className={outlineButton}><ArrowLeft size={16} strokeWidth={2.4} />{back.label}</button>}

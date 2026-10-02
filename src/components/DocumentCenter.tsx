@@ -74,7 +74,7 @@ export function DocumentCenter() {
     <div className="flex min-h-0 flex-1">
       <nav aria-label="Document delivery" className="w-[160px] shrink-0 pt-[70px]"><ul className="space-y-[12px]">{(['Print', 'Email', 'Fax'] as Tab[]).map((entry) => <li key={entry}><button type="button" onClick={() => { setTab(entry); setErrors({}); }} className={`relative block py-[2px] pl-[60px] text-[14px] underline-offset-2 ${focusable} ${tab === entry ? 'font-medium before:absolute before:bottom-0 before:left-[48px] before:top-0 before:w-[3px] before:bg-[#003865]' : 'text-[#003865] underline hover:text-[#0073cf]'}`}>{entry}</button></li>)}</ul></nav>
       <main className="min-w-0 flex-1 overflow-auto">
-        <div className="px-[5px] pt-[20px]">
+        <div className="mx-auto w-fit max-w-full px-[5px] pt-[20px]">
           <div className="relative flex h-[60px] w-[176px] flex-col items-center justify-center bg-[#003865] text-white"><div className="text-[15px] font-bold leading-[19px]">AUTO</div><div className="text-[13px] leading-[17px]">Quote #: {policy.quoteNumber || '—'}</div><span className="absolute -bottom-[9px] left-1/2 h-0 w-0 -translate-x-1/2 border-x-[9px] border-t-[9px] border-x-transparent border-t-[#003865]" /></div>
           <section className="mt-[10px] w-[1155px] rounded-[3px] border border-[#cfdbe3] bg-white px-[24px] pb-[34px] pt-[18px]">
             <div className="flex items-start border-b border-[#d7e0e6] pb-[16px]">
