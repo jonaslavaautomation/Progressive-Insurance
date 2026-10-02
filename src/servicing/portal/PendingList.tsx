@@ -5,7 +5,7 @@ import { ChevronDown, ChevronUp, Info } from 'lucide-react';
 import type { PolicyRecord } from '@/types/policy';
 import type { PendingTab } from '@/context/quoteStore';
 import { useQuote } from '@/context/useQuote';
-import { customerKey } from '@/servicing/policyFilters';
+import { useOpenAccount } from '@/servicing/account/useOpenAccount';
 import { hasPracticeBook } from '@/services/practiceBook';
 import { formatCurrency } from '@/utils/masks';
 import { PaymentModal } from '@/servicing/PolicyView';
@@ -82,7 +82,8 @@ function EmailModal({ policy, onClose }: { policy: PolicyRecord; onClose: () => 
 }
 
 export function PendingList() {
-  const { state, openCustomer, loadPracticeBook, openPending, engine, lastConfirmation } = useQuote();
+  const { state, loadPracticeBook, openPending, engine, lastConfirmation } = useQuote();
+  const openAccount = useOpenAccount();
   const tab = state.ui.pendingTab;
   const [agentFilter, setAgentFilter] = useState('All');
   const [appliedAgent, setAppliedAgent] = useState('All');
@@ -163,8 +164,8 @@ export function PendingList() {
         const policy = row.policy;
         const isSelected = selected === policy.id;
         return <tr key={policy.id} onClick={() => setSelected(policy.id)} className={`cursor-pointer border-b border-[#d5d9dd] align-top ${isSelected ? 'bg-[#c6ecfb] shadow-[inset_-4px_0_0_#0073cf]' : 'odd:bg-white even:bg-[#f3f2ed] hover:bg-[#e3f4fb]'}`}>
-          <td className="px-[8px] py-[10px]"><button type="button" onClick={(event) => { event.stopPropagation(); openCustomer(customerKey(policy)); }} className="font-bold text-[#003865] underline underline-offset-2 hover:text-[#0073cf]">{row.insured}</button><div>{policy.insured.street}</div><div>{policy.insured.cityStateZip}</div>{policy.insured.phone && <a href={`tel:${policy.insured.phone}`} onClick={(event) => event.stopPropagation()} className="block font-bold text-[#003865] underline underline-offset-2">M: {phoneLink(policy.insured.phone)}</a>}{policy.insured.email && <button type="button" onClick={(event) => { event.stopPropagation(); setEmailing(policy); }} className="font-bold text-[#003865] underline underline-offset-2 hover:text-[#0073cf]">Email</button>}</td>
-          <td className="px-[8px] py-[10px]">{row.policyNumber}</td>
+          <td className="px-[8px] py-[10px]"><button type="button" onClick={(event) => { event.stopPropagation(); openAccount(policy.id); }} className="font-bold text-[#003865] underline underline-offset-2 hover:text-[#0073cf]">{row.insured}</button><div>{policy.insured.street}</div><div>{policy.insured.cityStateZip}</div>{policy.insured.phone && <a href={`tel:${policy.insured.phone}`} onClick={(event) => event.stopPropagation()} className="block font-bold text-[#003865] underline underline-offset-2">M: {phoneLink(policy.insured.phone)}</a>}{policy.insured.email && <button type="button" onClick={(event) => { event.stopPropagation(); setEmailing(policy); }} className="font-bold text-[#003865] underline underline-offset-2 hover:text-[#0073cf]">Email</button>}</td>
+          <td className="px-[8px] py-[10px]"><button type="button" onClick={(event) => { event.stopPropagation(); openAccount(policy.id); }} className="text-[#003865] underline underline-offset-2 hover:text-[#0073cf]">{row.policyNumber}</button></td>
           <td className="px-[8px] py-[10px]">{row.product}</td>
           <td className="px-[8px] py-[10px]">{row.state}</td>
           <td className="px-[8px] py-[10px]">{row.agentCode}</td>

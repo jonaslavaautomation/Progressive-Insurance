@@ -3,6 +3,7 @@
 import { AlertCircle, ChevronRight, KeyRound } from 'lucide-react';
 import type { PolicyRecord } from '@/types/policy';
 import { useQuote } from '@/context/useQuote';
+import { useOpenAccount } from '@/servicing/account/useOpenAccount';
 import { customerKey } from '@/servicing/policyFilters';
 import { formatCurrency } from '@/utils/masks';
 import { BackLink, PortalLayout } from '@/servicing/portal/PortalLayout';
@@ -30,6 +31,7 @@ function lastPaymentLine(policy: PolicyRecord): string {
 
 function PolicyCard({ policy }: { policy: PolicyRecord }) {
   const { openPolicy, openProof } = useQuote();
+  const openAccount = useOpenAccount();
   const alert = statusLine(policy);
   const tone = policy.status === 'Cancelled' || policy.status === 'Expired' || policy.status === 'Non-Renewed' ? { bar: 'bg-[#6b7780]', border: 'border-[#6b7780]' } : alert ? { bar: 'bg-[#ff8a3d]', border: 'border-[#ff8a3d]' } : { bar: 'bg-[#003865]', border: 'border-[#003865]' };
   const Icon = POLICY_ICONS[policy.product];
@@ -37,7 +39,7 @@ function PolicyCard({ policy }: { policy: PolicyRecord }) {
   const product = policy.productName.replace(' (HO4)', '');
   return <section className={`mb-4 overflow-hidden rounded-[3px] border ${tone.border}`}>
     <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 px-[10px] py-[12px] text-white ${tone.bar}`}>
-      <button type="button" onClick={() => openPolicy(policy.id)} className="text-[14px] font-bold underline underline-offset-2 hover:text-[#fff3e6]">{product} Policy</button>
+      <button type="button" onClick={() => openAccount(policy.id)} className="text-[14px] font-bold underline underline-offset-2 hover:text-[#fff3e6]">{product} Policy</button>
       <span className="text-[14px] font-bold">{policy.policyNumber}, {rulesFor(policy.state).code}</span>
       <span className="text-[11.5px]">Coverage from {policy.effectiveDate} to {policy.expirationDate}</span>
     </div>

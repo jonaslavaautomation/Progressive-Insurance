@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, FileText, Info, RotateCcw } from 'lucide-r
 import type { PolicyDocument, PolicyRecord } from '@/types/policy';
 import type { PolicyTab } from '@/context/quoteStore';
 import { useQuote } from '@/context/useQuote';
+import { useOpenAccount } from '@/servicing/account/useOpenAccount';
 import { runWithSpinner } from '@/services/processing';
 import { rulesFor } from '@/data/states';
 import { formatCurrency } from '@/utils/masks';
@@ -241,6 +242,7 @@ function HistoryTab({ policy }: { policy: PolicyRecord }) {
 
 export function PolicyView() {
   const { state, setPolicyTab, openPolicies, servicePolicy, engine, lastConfirmation } = useQuote();
+  const openAccount = useOpenAccount();
   const policy = state.policies.find((entry) => entry.id === state.ui.policyId);
   const intent = state.ui.policyIntent;
   const [dialog, setDialog] = useState<Dialog>(() => (intent && policy?.status === 'Active' ? 'change' : null));
@@ -253,7 +255,7 @@ export function PolicyView() {
   const reinstatement = engine.reinstatementCheck(policy, state.simDate);
   const nav = <aside className="w-[200px] shrink-0 border-r border-[#d0d8de] bg-white pt-[10px] print:hidden"><ol>{TABS.map(([key, label]) => <li key={key} className={`relative ${tab === key ? 'border-y border-[#d0d8de] before:absolute before:-bottom-px before:-top-px before:left-0 before:w-[4px] before:bg-[#003865]' : ''}`}><button type="button" onClick={() => setPolicyTab(key)} className={`block w-full py-[12px] pl-[25px] pr-[16px] text-left text-[12.5px] font-bold uppercase ${tab === key ? 'text-[#003865]' : 'text-[#003865] underline underline-offset-2 hover:text-[#0073cf]'}`}>{label}</button></li>)}</ol></aside>;
 
-  return <ServiceLayout customer={{ name: policy.insured.name, phone: policy.insured.phone, email: policy.insured.email }} nav={nav} back={{ label: 'Policy Search', onClick: () => openPolicies(state.ui.policyQuery) }}>
+  return <ServiceLayout customer={{ name: policy.insured.name, phone: policy.insured.phone, email: policy.insured.email }} nav={nav} back={{ label: 'Policy and Coverages', onClick: () => openAccount(policy.id) }}>
     <TrainingClock />
     <div className="mb-[18px] flex w-[1100px] items-start justify-between">
       <div className="relative flex h-[60px] min-w-[176px] flex-col items-center justify-center bg-[#003865] px-[14px] text-white"><div className="text-[15px] font-bold leading-[19px]">{productTab(policy.product)}</div><div className="text-[13px] leading-[17px]">Policy #: {policy.policyNumber}</div><span className="absolute -bottom-[9px] left-1/2 h-0 w-0 -translate-x-1/2 border-x-[9px] border-t-[9px] border-x-transparent border-t-[#003865]" /></div>

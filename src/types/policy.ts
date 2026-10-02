@@ -147,4 +147,16 @@ export interface PolicyRecord {
   paperless?: { enrolled: boolean; changedOn: string; reason: string };
   /** Deductible Savings Bank enrollment (auto). */
   deductibleSavings?: { enrolledOn: string };
+  /** Account automatic payments draft from. Only the last four digits are ever stored. */
+  paymentAccount?: PaymentAccount;
+}
+
+export interface PaymentAccount {
+  kind: 'card' | 'bank';
+  brand: string;
+  last4: string;
+  /** Card expiration, mm/yy. */
+  expiry?: string;
+  name?: string;
+  updatedOn: string;
 }

@@ -8,7 +8,8 @@ import { activityStore, markRead, timeAgo } from '@/services/activity';
 import { matchesStatus } from '@/servicing/policyFilters';
 import { claimsOf } from '@/servicing/portal/bookStats';
 
-export function NotificationBell({ tone = 'dark' }: { tone?: 'dark' | 'light' }) {
+/** `align` sets which edge the dropdown lines up with (left when the bell sits near the left edge). */
+export function NotificationBell({ tone = 'dark', align = 'right' }: { tone?: 'dark' | 'light'; align?: 'left' | 'right' }) {
   const { state, openPending, openPage } = useQuote();
   const entries = useSyncExternalStore(activityStore.subscribe, activityStore.get);
   const open = useOpenActivity();
@@ -41,7 +42,7 @@ export function NotificationBell({ tone = 'dark' }: { tone?: 'dark' | 'light' })
       <Bell size={18} />
       {badge > 0 && <span className="absolute -right-[7px] -top-[7px] flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-[#e8242b] px-[3px] text-[9px] font-bold leading-none text-white">{badge > 9 ? '9+' : badge}</span>}
     </button>
-    {show && <div role="dialog" aria-label="Notifications" className="absolute right-0 top-[30px] z-[70] w-[380px] rounded-[3px] border border-[#a6adb3] bg-white text-left text-[#1b2a36] shadow-xl">
+    {show && <div role="dialog" aria-label="Notifications" className={`absolute ${align === 'left' ? 'left-0' : 'right-0'} top-[30px] z-[70] w-[380px] rounded-[3px] border border-[#a6adb3] bg-white text-left text-[#1b2a36] shadow-xl`}>
       <div className="flex items-center justify-between border-b border-[#e4ecf1] px-3 py-2"><span className="text-[13px] font-bold text-[#003865]">Notifications</span>{unread > 0 && <button type="button" onClick={() => markRead()} className="text-[11px] font-bold text-[#0073cf] underline">Mark all as read</button>}</div>
       <div role="tablist" className="flex border-b border-[#e4ecf1] text-[11.5px] font-bold">{([['activity', `Activity${unread ? ` (${unread})` : ''}`], ['action', `Action needed${actions.length ? ` (${actions.length})` : ''}`]] as const).map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={`flex-1 py-2 ${tab === key ? 'border-b-2 border-[#0073cf] text-[#003865]' : 'text-[#5c6670] hover:text-[#003865]'}`}>{label}</button>)}</div>
       <div className="max-h-[380px] overflow-y-auto">

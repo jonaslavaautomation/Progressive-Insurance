@@ -5,6 +5,7 @@ import { CheckCircle2 } from 'lucide-react';
 import type { ClaimRecord, PolicyRecord } from '@/types/policy';
 import type { ProductKey } from '@/products/types';
 import { useQuote } from '@/context/useQuote';
+import { useOpenAccount } from '@/servicing/account/useOpenAccount';
 import { customerKey } from '@/servicing/policyFilters';
 import { PaymentModal } from '@/servicing/PolicyView';
 import { claimsOf, crossSellOpportunities, inForce, prospects } from '@/servicing/portal/bookStats';
@@ -32,13 +33,13 @@ export function Notice({ text, onDismiss }: { text: string; onDismiss: () => voi
 }
 
 function InsuredLink({ policy }: { policy: PolicyRecord }) {
-  const { openCustomer } = useQuote();
-  return <button type="button" onClick={() => openCustomer(customerKey(policy))} className="text-left font-bold text-[#003865] underline underline-offset-2 hover:text-[#0073cf]">{policy.insured.name}</button>;
+  const openAccount = useOpenAccount();
+  return <button type="button" onClick={() => openAccount(policy.id)} className="text-left font-bold text-[#003865] underline underline-offset-2 hover:text-[#0073cf]">{policy.insured.name}</button>;
 }
 
 function PolicyLink({ policy }: { policy: PolicyRecord }) {
-  const { openPolicy } = useQuote();
-  return <button type="button" onClick={() => openPolicy(policy.id)} className="text-left text-[#003865] underline underline-offset-2 hover:text-[#0073cf]">{policy.policyNumber}</button>;
+  const openAccount = useOpenAccount();
+  return <button type="button" onClick={() => openAccount(policy.id)} className="text-left text-[#003865] underline underline-offset-2 hover:text-[#0073cf]">{policy.policyNumber}</button>;
 }
 
 // ------------------------------------------------------------------ Billing Center
