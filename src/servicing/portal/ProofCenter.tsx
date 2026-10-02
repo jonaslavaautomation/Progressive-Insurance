@@ -4,6 +4,9 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, CircleHelp, Download, Mailbox, Printer, Search, Settings, TicketPercent } from 'lucide-react';
 import type { PolicyDocument, PolicyRecord } from '@/types/policy';
 import { useQuote } from '@/context/useQuote';
+import { useOpenAccount } from '@/servicing/account/useOpenAccount';
+import { loadWithCar } from '@/services/carLoader';
+import { queryFromText, resolveSearch } from '@/servicing/account/accountModel';
 import { customerKey } from '@/servicing/policyFilters';
 import { DocumentPreview } from '@/servicing/PolicyDocuments';
 import { Modal } from '@/components/wizard/Modal';
@@ -24,7 +27,8 @@ function FaxIcon() {
 }
 
 function Sidebar({ policy, collapsed, onToggle, largeText, onLargeText }: { policy: PolicyRecord; collapsed: boolean; onToggle: () => void; largeText: boolean; onLargeText: (value: boolean) => void }) {
-  const { state, openProof, openPolicies, showDashboard, openCustomer } = useQuote();
+  const { state, openProof, openPolicies, showDashboard } = useQuote();
+  const openAccount = useOpenAccount();
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   const [prefs, setPrefs] = useState(false);
@@ -34,10 +38,12 @@ function Sidebar({ policy, collapsed, onToggle, largeText, onLargeText }: { poli
     event.preventDefault();
     const text = query.trim().toLowerCase();
     if (!text) { setError('Enter a name or policy number.'); return; }
-    const matches = state.policies.filter((entry) => entry.policyNumber.includes(text) || entry.insured.name.toLowerCase().includes(text));
-    if (matches.length === 1) { setError(''); openProof(matches[0].id); return; }
-    if (!matches.length) { setError('No policies found.'); return; }
-    openPolicies(/^\d+$/.test(text) ? { mode: 'Policy', policyNumber: text } : { mode: 'Customer', lastName: text.split(' ').pop() ?? text });
+    const search = queryFromText(query);
+    const outcome = resolveSearch(state.policies, search, state.simDate);
+    if (outcome.kind === 'none') { setError('No policies found.'); return; }
+    setError('');
+    if (outcome.kind === 'account') loadWithCar(() => openProof(outcome.policyId));
+    else openPolicies(search);
   };
   return <aside className={`relative flex shrink-0 flex-col border-r border-[#d5d9dd] bg-white transition-[width] print:hidden ${collapsed ? 'w-0' : 'w-[256px]'}`}>
     <button type="button" onClick={onToggle} aria-label={collapsed ? 'Show policy panel' : 'Hide policy panel'} className="absolute -right-[38px] top-[32px] z-10 flex h-[54px] w-[36px] items-center justify-center rounded-r-[6px] border border-l-0 border-[#d5d9dd] bg-white text-[#0073cf] hover:bg-[#e8f4fa]">{collapsed ? <ChevronRight size={26} /> : <ChevronLeft size={26} />}</button>
@@ -52,7 +58,7 @@ function Sidebar({ policy, collapsed, onToggle, largeText, onLargeText }: { poli
       <div className="mt-[16px] flex gap-[14px] border-y border-[#d5d9dd] px-[18px] py-[14px]">
         <div className="flex w-[44px] flex-col items-center"><Icon size={32} strokeWidth={1.3} className="text-[#1d4f91]" /><span className="mt-1 text-[12px] text-[#0073cf]">Opened</span></div>
         <div className="min-w-0 text-[12px] leading-[20px]">
-          <button type="button" onClick={() => openCustomer(customerKey(policy))} className="block text-left text-[15px] font-bold leading-[20px] hover:underline">{policy.insured.name}</button>
+          <button type="button" onClick={() => openAccount(policy.id)} className="block text-left text-[15px] font-bold leading-[20px] hover:underline">{policy.insured.name}</button>
           <div className="border-b border-[#1b2a36] pb-[6px] text-[15px] font-bold">{policy.productName.replace(' (HO4)', '')} {policy.policyNumber}</div>
           <div className="mt-[6px]">{shortDate(policy.effectiveDate)} - {shortDate(policy.expirationDate)}</div>
           <div>Primary named insured</div>
@@ -194,7 +200,8 @@ function VerificationPage({ policy, onPreview }: { policy: PolicyRecord; onPrevi
 }
 
 export function ProofCenter() {
-  const { state, openProof, openCustomer } = useQuote();
+  const { state, openProof } = useQuote();
+  const openAccountNow = useOpenAccount();
   const policy = state.policies.find((entry) => entry.id === state.ui.policyId);
   const [collapsed, setCollapsed] = useState(false);
   const [largeText, setLargeText] = useState(false);
@@ -202,7 +209,7 @@ export function ProofCenter() {
   const [notice, setNotice] = useState('');
   if (!policy) return <div className="p-6 text-[14px]">Policy not found.</div>;
   const page = state.ui.proofPage;
-  const back = page === 'hub' ? { label: 'Back to Customer Summary', onClick: () => openCustomer(customerKey(policy)) } : { label: 'Back to ID Cards and Documents', onClick: () => openProof(policy.id) };
+  const back = page === 'hub' ? { label: 'Back to Policy and Coverages', onClick: () => openAccountNow(policy.id) } : { label: 'Back to ID Cards and Documents', onClick: () => openProof(policy.id) };
   return <div className="flex min-h-screen bg-white text-[#1b2a36]">
     <Sidebar policy={policy} collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} largeText={largeText} onLargeText={setLargeText} />
     <div className="flex min-w-0 flex-1 flex-col">

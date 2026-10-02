@@ -117,7 +117,7 @@ function AgentGreeting() {
 }
 
 const PRODUCT_SEARCH: Record<string, string> = { All: 'All', Auto: 'auto', 'Motorcycle/ATV': 'motorcycle', 'Boat/PWC': 'boat', 'Motor Home': 'motorhome', 'Travel Trailer': 'trailer', Snowmobile: 'snowmobile', 'Renters (HO4)': 'renters' };
-const STATUS_SEARCH: Record<string, string> = { 'Active Policies': 'Active', 'All Policies': 'All', Pending: 'Pending Cancel', Cancelled: 'Cancelled' };
+const STATUS_SEARCH: Record<string, string> = { 'Active Policies': 'In Force', 'All Policies': 'All', Pending: 'Pending Cancel', Cancelled: 'Cancelled' };
 
 export function SearchBar() {
   const { state, openPolicies, openAccount, openPolicy, openProof } = useQuote();

@@ -16,6 +16,12 @@ import { availableTypes, type ChangeType } from '@/servicing/changeTypes';
 import { TrainingClock } from '@/servicing/ServiceChrome';
 import { hasIdCards } from '@/servicing/portal/portalUtils';
 import { AccountDrawer } from '@/servicing/account/AccountDrawer';
+import { PolicyHub, type HubActions, type HubPanel } from '@/servicing/account/PolicyHub';
+import { AutoPayFlow } from '@/servicing/account/AutoPayFlow';
+import { runWithSpinner } from '@/services/processing';
+import { paymentAccountOf, unenrollAutopay } from '@/services/autopay';
+import { Modal } from '@/components/wizard/Modal';
+import { modalButton } from '@/components/wizard/modalStyles';
 import { DeductibleSavingsModal, DeliveryModal, DriveSenseModal, DriverUpdateModal, DrivingRecordModal, LoyaltyModal, NewQuotesModal, VehicleUpdateModal, VisualPreferencesModal } from '@/servicing/account/AccountModals';
 import { amountDueText, autoCoverageRows, billingStatus, coverageHelp, customerSinceDate, driveSense, driversOf, household, importantMessages, lastPayment, longDate, loyaltyLevel, paperlessOf, paymentMethodLabel, rowsTotal, unitCoverageRows, type CoverageRow } from '@/servicing/account/accountModel';
 
@@ -27,8 +33,8 @@ const sectionTitle = 'text-[19px] font-medium text-[#5c6670]';
 const bigButton = `flex h-[46px] min-w-[208px] items-center justify-center gap-[8px] rounded-[3px] border border-[#0073cf] bg-white px-[20px] text-[13px] font-bold text-[#0073cf] hover:bg-[#f2f8fd] ${focus}`;
 
 type Dialog =
-  | { kind: 'change'; type: ChangeType }
-  | { kind: 'pay' | 'delivery' | 'savings' | 'drivesense' | 'loyalty' | 'quotes' | 'prefs' }
+  | { kind: 'change'; type?: ChangeType }
+  | { kind: 'pay' | 'delivery' | 'savings' | 'drivesense' | 'loyalty' | 'quotes' | 'prefs' | 'unenroll' }
   | { kind: 'record' | 'driver'; driver: Driver }
   | { kind: 'vehicle'; index: number };
 
@@ -110,11 +116,15 @@ function UnitCard({ unit, details, actions, coveragesLabel, onCoverages }: { uni
 }
 
 export function PolicyAccount() {
-  const { state, openPolicy, openProof, lastConfirmation } = useQuote();
+  const { state, openPolicy, openProof, lastConfirmation, servicePolicy } = useQuote();
   const prefs = useSyncExternalStore(visualPrefsStore.subscribe, visualPrefsStore.get);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [message, setMessage] = useState('');
+  // Policy hub menu beside the drawer, its open sub-panel, and the Manage Automatic Payments page.
+  const [hubOpen, setHubOpen] = useState(false);
+  const [hubPanel, setHubPanel] = useState<HubPanel | null>(null);
+  const [page, setPage] = useState<'overview' | 'autopay'>('overview');
   const policy = state.policies.find((entry) => entry.id === state.ui.policyId);
   if (!policy) return <div className="p-10 text-[14px]">Policy not found.</div>;
 
@@ -143,12 +153,24 @@ export function PolicyAccount() {
   const unitWord = isAuto ? 'Vehicles' : config?.unitPlural ?? 'Units';
   const coveragesTitle = isAuto ? 'Vehicle Coverages' : `${config?.unitLabel ?? 'Unit'} Coverages`;
   const unitSingular = isAuto ? 'vehicle' : (config?.unitLabel ?? 'unit').toLowerCase();
-  const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: prefs.reduceMotion ? 'auto' : 'smooth', block: 'start' });
+  const scrollTo = (id: string) => { setPage('overview'); window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: prefs.reduceMotion ? 'auto' : 'smooth', block: 'start' }), 0); };
+  const openHub = (panel: HubPanel | null = null) => { setHubOpen(true); setHubPanel(panel); };
+  const hubActions: HubActions = {
+    change: (type) => setDialog({ kind: 'change', type }), can,
+    pay: () => setDialog({ kind: 'pay' }), delivery: () => setDialog({ kind: 'delivery' }), loyalty: () => setDialog({ kind: 'loyalty' }), newQuotes: () => setDialog({ kind: 'quotes' }),
+    updateCard: () => { setHubOpen(false); setPage('autopay'); }, unenroll: () => setDialog({ kind: 'unenroll' }), scrollTo,
+  };
+  const unenroll = () => runWithSpinner('Updating automatic payments...', () => {
+    const failure = servicePolicy(policy.id, (record, today) => unenrollAutopay(record, today));
+    setDialog(null);
+    setMessage(failure || `Unenrolled from automatic payments. Remaining installments will be billed by mail. Confirmation #${lastConfirmation()}.`);
+  });
 
   return <div className="account-page flex h-screen bg-white text-[#1f2a33]">
-    <AccountDrawer policy={policy} open={drawerOpen} onToggle={() => setDrawerOpen(!drawerOpen)} onNewQuotes={() => setDialog({ kind: 'quotes' })} onPreferences={() => setDialog({ kind: 'prefs' })} />
+    <AccountDrawer policy={policy} open={drawerOpen} onToggle={() => setDrawerOpen(!drawerOpen)} onNewQuotes={() => setDialog({ kind: 'quotes' })} onPreferences={() => setDialog({ kind: 'prefs' })} hubOpen={hubOpen} onToggleHub={() => (hubOpen ? setHubOpen(false) : openHub())} />
+    {hubOpen && <PolicyHub policy={policy} level={loyalty.name} panel={hubPanel} onPanel={setHubPanel} onClose={() => setHubOpen(false)} actions={hubActions} />}
     <main className="account-main min-w-0 flex-1 overflow-auto">
-      <div className="mx-auto w-full max-w-[900px] px-[32px] pb-[40px] pt-[22px]" style={{ zoom: TEXT_ZOOM[prefs.textSize] }}>
+      {page === 'autopay' ? <div style={{ zoom: TEXT_ZOOM[prefs.textSize] }}><AutoPayFlow policy={policy} onCancel={() => setPage('overview')} onDone={(text) => { setPage('overview'); setMessage(text); }} /></div> : <div className="mx-auto w-full max-w-[900px] px-[32px] pb-[40px] pt-[22px]" style={{ zoom: TEXT_ZOOM[prefs.textSize] }}>
         <TrainingClock />
         <header className="text-center">
           <h1 className="text-[30px] font-bold tracking-[-.4px] text-[#2f4a66]">Policy and Coverages</h1>
@@ -170,7 +192,7 @@ export function PolicyAccount() {
             <div className="space-y-[22px]">
               <div><Item title="Policy">{productLabel(policy.product)} {policy.policyNumber}</Item><ArrowLink onClick={() => openPolicy(policy.id, 'history')}>Policy Activity</ArrowLink></div>
               <div><Item title="Policy period">{longDate(policy.effectiveDate)} – {longDate(policy.expirationDate)}</Item><ArrowLink onClick={() => openProof(policy.id)}>{hasIdCards(policy) ? 'ID Cards' : 'Proof of Insurance'}</ArrowLink></div>
-              <div><Item title="Total policy premium">{formatCurrency(policy.termPremium)}</Item><ArrowLink onClick={() => openPolicy(policy.id, 'billing')}>Billing and Payments</ArrowLink></div>
+              <div><Item title="Total policy premium">{formatCurrency(policy.termPremium)}</Item><ArrowLink onClick={() => openHub('billing')}>Billing and Payments</ArrowLink></div>
               <Item title="Valued customer since">{since}</Item>
               <Item title="Servicing agent">{state.agent.agencyName}</Item>
               <Item title="Agent code">{policy.agentCode}</Item>
@@ -236,7 +258,7 @@ export function PolicyAccount() {
         </div>
 
         {(isAuto || drivers.length > 0) && can('addDriver') && <div className="mt-[26px] flex justify-end"><button type="button" onClick={() => change('addDriver')} className={bigButton}>Add a driver<ChevronRight size={16} strokeWidth={2.4} /></button></div>}
-        <h2 className={`${sectionTitle} mt-[14px]`}>People</h2>
+        <h2 id="account-people" className={`${sectionTitle} mt-[14px] scroll-mt-[20px]`}>People</h2>
         <div className="mt-[12px] grid grid-cols-2 gap-[20px]">
           {drivers.length ? drivers.map((driver, index) => <PersonCard key={driver.id} name={[driver.firstName, driver.lastName].join(' ')} role={driver.driverStatus === 'Excluded' ? 'Excluded driver' : index === 0 || driver.relationship === 'Insured' ? 'Named insured' : 'Insured driver'} dob={driver.dob} driver={driver} active={active} onRecord={() => setDialog({ kind: 'record', driver })} onUpdate={isAuto ? () => setDialog({ kind: 'driver', driver }) : undefined} onRemove={can('removeDriver') && index > 0 ? () => change('removeDriver') : undefined} />)
             : <PersonCard name={policy.insured.name} role="Named insured" dob={policy.insured.dob} active={false} />}
@@ -274,7 +296,7 @@ export function PolicyAccount() {
           <div className="flex flex-col items-start gap-[10px]"><LegalLink label="CA Notice at Collection" className="hover:underline" /><LegalLink label="Do Not Sell or Share My Personal Information (CA Residents Only)" className="text-left hover:underline" /></div>
           <p className="max-w-[340px] text-right">Copyright {new Date().getFullYear()} LAVA Automation. LAVA Training is a training simulator and is not affiliated with Progressive Casualty Insurance Company.</p>
         </footer>
-      </div>
+      </div>}
     </main>
 
     {dialog?.kind === 'change' && <ChangePolicyModal policy={policy} initialType={dialog.type} onClose={close} />}
@@ -288,6 +310,9 @@ export function PolicyAccount() {
     {dialog?.kind === 'vehicle' && vehicles[dialog.index] && <VehicleUpdateModal policy={policy} vehicle={vehicles[dialog.index]} onClose={close} />}
     {dialog?.kind === 'quotes' && <NewQuotesModal policy={policy} owned={owned} onClose={close} />}
     {dialog?.kind === 'prefs' && <VisualPreferencesModal onClose={close} />}
+    {dialog?.kind === 'unenroll' && <Modal title="Unenroll From Automatic Payments" width={560} onClose={() => setDialog(null)} footer={<><button type="button" className={modalButton.secondary} onClick={() => setDialog(null)}>Keep Automatic Payments</button><button type="button" className={modalButton.primary} onClick={unenroll}>Unenroll</button></>}>
+      <p className="text-[14px] leading-[20px]">Payments will stop drafting from {paymentAccountOf(policy)?.kind === 'card' ? 'the card' : 'the account'} ending in <b>{paymentAccountOf(policy)?.last4}</b>. Remaining installments move to <b>Pay by Mail</b>, which can carry a higher installment fee. Confirm the customer asked for this change.</p>
+    </Modal>}
   </div>;
 }
 
