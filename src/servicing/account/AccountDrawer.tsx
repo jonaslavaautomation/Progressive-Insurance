@@ -35,7 +35,7 @@ export function AccountDrawer({ policy, open, onToggle, onNewQuotes, onPreferenc
   if (!open) return <div className="account-drawer relative w-0 shrink-0 print:hidden">{tab}</div>;
   return <aside aria-label="Policies" className="account-drawer relative flex w-[230px] shrink-0 flex-col border-r border-[#d0d7de] bg-white print:hidden">
     {tab}
-    <button type="button" onClick={showDashboard} title="Return to dashboard" className={`flex h-[64px] shrink-0 items-center bg-[#0b2c56] px-[18px] text-[19px] font-light tracking-[-.5px] text-white ${focus}`}>LAVA<b className="font-bold">TRAINING</b></button>
+    <button type="button" onClick={showDashboard} title="Return to dashboard" className={`flex h-[63px] shrink-0 items-center bg-[#0b2c56] px-[18px] text-[19px] font-light tracking-[-.5px] text-white ${focus}`}>LAVA<b className="font-bold">TRAINING</b></button>
     <form onSubmit={find} className="border-b border-[#dde3e8] px-[16px] pb-[14px] pt-[16px]">
       <label className="sr-only" htmlFor="drawer-search">Enter a name or policy number</label>
       <input id="drawer-search" value={text} onChange={(event) => { setText(event.target.value); setError(''); }} placeholder="Enter a name or policy #" className="h-[34px] w-full rounded-[3px] border border-[#8b98a3] px-[10px] text-[12.5px] text-[#1f2a33] outline-none placeholder:text-[#6b7781] focus:border-[#0073cf] focus:shadow-[0_0_0_1px_#0073cf]" />

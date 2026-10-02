@@ -48,7 +48,7 @@ function CommercialHeader({ quote }: { quote: CommercialQuote }) {
   const b = quote.business;
   const item = (label: string, value: string) => <div className="mr-[30px] min-w-0"><div className="text-[11px] font-bold uppercase leading-[14px] tracking-[.2px]">{label}</div><div className="mt-[3px] min-h-[20px] truncate font-slab text-[15px] leading-[20px]">{value}</div></div>;
   const button = `h-[30px] rounded-[3px] border border-white/70 px-[10px] text-[11.5px] font-bold uppercase hover:bg-white/10 ${focusable}`;
-  return <header className="flex h-[60px] shrink-0 items-center bg-[#003865] pl-[24px] pr-[26px] text-white print:hidden">
+  return <header className="flex h-[63px] shrink-0 items-center bg-[#003865] pl-[24px] pr-[26px] text-white print:hidden">
     <button type="button" onClick={showDashboard} title="Return to dashboard" className={`w-[195px] shrink-0 text-left ${focusable}`}><Logo /></button>
     {b.name ? <>{item('Business', b.dba ? `${b.name} DBA ${b.dba}` : b.name)}{item('Contact', b.contact ?? '')}{item('Phone', b.phone ?? '')}</> : item('Commercial Lines Quote', quote.products.map((key) => COMMERCIAL_CONFIGS[key].name).join(', '))}
     <div className="ml-auto flex shrink-0 items-center gap-[14px]">
