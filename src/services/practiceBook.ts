@@ -19,7 +19,7 @@ import { addMonths, formatDate, parseDate } from '@/utils/dates';
 /** Reference accounts are recognised by this email domain. */
 export const PRACTICE_DOMAIN = '@practice.example.com';
 /** Bumped when the reference accounts change, so saved books rebuild them. */
-export const PRACTICE_VERSION = 3;
+export const PRACTICE_VERSION = 4;
 
 interface AccountEvent {
   /** Days before today (negative numbers are not used). */
@@ -134,7 +134,9 @@ function quoteFor(customer: PracticeCustomer, agent: AgentProfile, effectiveDate
     insured: { ...base.insured, firstName: customer.first, lastName: customer.last, dob: customer.dob, email, phones: [{ type: 'Cell', number: customer.phone }], address: { ...base.insured.address, line1: customer.street, city: customer.city, zip: customer.zip } },
     vehicles,
     drivers,
-    additional: { ...base.additional, continuousInsurance: customer.priorTerms > 8 ? 'Yes' : 'No' },
+    additional: customer.priorTerms > 8
+      ? { ...base.additional, continuousInsurance: 'Yes', priorCarrier: 'Other standard carrier', priorLimits: '100/300', priorYears: '3 years or more' }
+      : { ...base.additional, continuousInsurance: 'No', priorCarrier: '', priorLimits: '', priorYears: '' },
     pointOfSale: { ...base.pointOfSale, billPlan: customer.autoPlan, paymentMethod: customer.autoPlan.startsWith('EFT') ? 'Bank account (EFT)' : 'Credit/debit card via secure IVR', documentDelivery: 'In person (print and sign)' },
     products: customer.renters ? ['auto', 'renters'] : ['auto'],
     productQuotes: {},

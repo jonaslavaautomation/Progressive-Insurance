@@ -57,6 +57,10 @@ export const OWNERSHIP_LENGTHS = ['Less than 1 month', 'At least 1 month but les
 export const PRIMARY_USES = ['1A - Pleasure', '2A - Commute', '3A - Business', '4A - Farm'];
 export const ANNUAL_MILES = ['0 - 3,999', '4,000 - 5,999', '6,000 - 7,999', '8,000 - 9,999', '10,000 - 11,999', '12,000 - 14,999', '15,000 - 19,999', '20,000 or more'];
 
+// Prior insurance (asked on Additional Details when the applicant is currently insured).
+export const PRIOR_CARRIERS = ['Allstate', 'GEICO', 'Liberty Mutual', 'Nationwide', 'State Farm', 'Travelers', 'USAA', 'Farmers', 'Other standard carrier', 'Non-standard carrier'];
+export const PRIOR_LIMITS = ['State Minimum Limits', '50/100', '100/300', '250/500 or higher'];
+export const PRIOR_YEARS = ['Less than 6 months', 'At least 6 months but less than 1 year', 'At least 1 year but less than 3 years', '3 years or more'];
 export const PRIMARY_RESIDENCES = ['Single Family Home', 'Condo', 'Apartment/Rented', 'Townhouse'];
 /** Residences that qualify for the Homeowner discount. */
 export const OWNED_RESIDENCES = ['Single Family Home', 'Condo', 'Townhouse'];

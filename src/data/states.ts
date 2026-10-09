@@ -70,7 +70,7 @@ export const STATE_RULES: Record<StateName, StateRules> = {
     plateSurrender: null,
     idCardTitle: 'Texas Liability Insurance Card',
     statuteText: 'Texas law (Transportation Code, Chapter 601) requires proof of financial responsibility in every vehicle. Keep this card in the insured vehicle and show it on request.',
-    rateLevel: 1.14, metroPrefixes: ['770', '752', '782'],
+    rateLevel: 1.3, metroPrefixes: ['770', '752', '782', '787'],
   },
   Florida: {
     name: 'Florida', code: 'FL', zip: /^3[2-4]\d{3}$/, zipHint: 'FL ZIP codes start with 32-34',
@@ -85,7 +85,7 @@ export const STATE_RULES: Record<StateName, StateRules> = {
     plateSurrender: { agency: 'a Florida tax collector or FLHSMV service center', consequence: 'FLHSMV sends an insurance letter and suspends the driver license if the plate is still active with no Florida policy on file.' },
     idCardTitle: 'Florida Insurance Identification Card',
     statuteText: 'Florida law (s. 627.733, F.S.) requires Personal Injury Protection and Property Damage Liability on vehicles with four or more wheels. Keep this card in the vehicle.',
-    rateLevel: 1.32, metroPrefixes: ['331', '330', '328'],
+    rateLevel: 1.7, metroPrefixes: ['331', '330', '328', '336'],
   },
   Wisconsin: {
     name: 'Wisconsin', code: 'WI', zip: /^5[34]\d{3}$/, zipHint: 'WI ZIP codes start with 53 or 54',
@@ -98,7 +98,7 @@ export const STATE_RULES: Record<StateName, StateRules> = {
     reporting: null, plateSurrender: null,
     idCardTitle: 'Wisconsin Insurance Identification Card',
     statuteText: 'Wisconsin law requires liability and uninsured motorist coverage on vehicles registered in the state. Keep this card in the vehicle and show it on request.',
-    rateLevel: 0.84, metroPrefixes: ['532'],
+    rateLevel: 0.95, metroPrefixes: ['532'],
   },
   'New Hampshire': {
     name: 'New Hampshire', code: 'NH', zip: /^03[0-8]\d{2}$/, zipHint: 'NH ZIP codes start with 030-038',
@@ -111,7 +111,7 @@ export const STATE_RULES: Record<StateName, StateRules> = {
     reporting: null, plateSurrender: null,
     idCardTitle: 'New Hampshire Insurance Identification Card',
     statuteText: 'New Hampshire does not require auto insurance, but this policy meets the state minimums for a motor vehicle liability policy. Keep this card in the vehicle.',
-    rateLevel: 0.8, metroPrefixes: ['031'],
+    rateLevel: 0.86, metroPrefixes: ['031'],
   },
   Oregon: {
     name: 'Oregon', code: 'OR', zip: /^97\d{3}$/, zipHint: 'OR ZIP codes start with 97',
@@ -125,7 +125,7 @@ export const STATE_RULES: Record<StateName, StateRules> = {
     reporting: null, plateSurrender: null,
     idCardTitle: 'Oregon Insurance Identification Card',
     statuteText: 'Oregon law (ORS 806.060) requires liability, Personal Injury Protection and uninsured motorist coverage. Keep this card in the vehicle and show it on request.',
-    rateLevel: 1.06, metroPrefixes: ['972'],
+    rateLevel: 1.15, metroPrefixes: ['972'],
   },
 };
 

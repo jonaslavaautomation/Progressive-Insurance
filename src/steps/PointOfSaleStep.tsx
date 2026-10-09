@@ -4,7 +4,7 @@ import type { ReportStatus, YesNo } from '@/types/quote';
 import { fieldHints } from '@/data/trainingHints';
 import { useQuote } from '@/context/useQuote';
 import { formatCurrency } from '@/utils/masks';
-import { driverName, vehicleName } from '@/utils/ratingEngine';
+import { SCORE_TIER_NAMES, driverName, vehicleName } from '@/utils/ratingEngine';
 import { vendorAnswer, vendorDiffers, type PosOrderResult } from '@/utils/reportSimulator';
 import { isLicensed, validateStep } from '@/utils/validation';
 import { WizardLayout } from '@/components/wizard/WizardLayout';
@@ -48,12 +48,31 @@ function VendorDialog({ result, onCancel, onContinue }: { result: PosOrderResult
     <p className="text-[14px] leading-[21px]">Do not click &lsquo;Continue&rsquo; unless the insured agrees with the information provided by the vendor.</p>
     <table className="mt-[20px] w-full border-collapse border border-[#d7e0e6] text-[14px] leading-[20px]"><thead><tr className="bg-[#f6f9fb]"><th className={`${cell} w-[330px]`} /><th className={`${cell} border-l border-[#d7e0e6]`}>{radio('vendor', 'Vendor Provided')}</th><th className={`${cell} border-l border-[#d7e0e6]`}>{radio('insured', 'Insured Provided')}</th></tr></thead><tbody>
       <tr><td className={cell}>Insured/Spouse has vehicle liability insurance for past 6 months with no more than 31 days lapse:</td><td className={`${cell} border-l border-[#d7e0e6]`}>{vendor.liabilityStatus}</td><td className={`${cell} border-l border-[#d7e0e6]`}><span className="flex items-center gap-[10px]">{differs && <AlertTriangle size={18} className="shrink-0 fill-[#e87722] text-white" aria-label="Differs from vendor" />}<span className="flex h-[38px] w-[150px] items-center rounded-[4px] border border-[#cdd5db] bg-[#f2f4f5] px-[12px] text-[#5c6670]">{insured}</span></span></td></tr>
-      <tr><td className={cell}>Prior Auto Insurance Carrier:</td><td className={`${cell} border-l border-[#d7e0e6]`}>{vendor.carrier}</td><td className={`${cell} border-l border-[#d7e0e6] text-[#7b858a]`}>—</td></tr>
-      <tr><td className={cell}>Bodily Injury limits on most recent policy:</td><td className={`${cell} border-l border-[#d7e0e6]`}>{vendor.biLimits}</td><td className={`${cell} border-l border-[#d7e0e6] text-[#7b858a]`}>—</td></tr>
-      <tr><td className={cell}>Length with most recent carrier:</td><td className={`${cell} border-l border-[#d7e0e6]`}>{vendor.length}</td><td className={`${cell} border-l border-[#d7e0e6] text-[#7b858a]`}>—</td></tr>
+      <tr><td className={cell}>Prior Auto Insurance Carrier:</td><td className={`${cell} border-l border-[#d7e0e6]`}>{vendor.carrier}</td><td className={`${cell} border-l border-[#d7e0e6]`}>{state.additional.priorCarrier || '—'}</td></tr>
+      <tr><td className={cell}>Bodily Injury limits on most recent policy:</td><td className={`${cell} border-l border-[#d7e0e6]`}>{vendor.biLimits}</td><td className={`${cell} border-l border-[#d7e0e6]`}>{state.additional.priorLimits || '—'}</td></tr>
+      <tr><td className={cell}>Length with most recent carrier:</td><td className={`${cell} border-l border-[#d7e0e6]`}>{vendor.length}</td><td className={`${cell} border-l border-[#d7e0e6]`}>{state.additional.priorYears || '—'}</td></tr>
     </tbody></table>
     {source === 'insured' && <p className="mt-[12px] flex items-start gap-2 text-[13px] text-[#9a4a0b]"><AlertTriangle size={16} className="mt-px shrink-0" />Using insured provided data. Proof of prior insurance will be required, and the rate will not receive verified prior-insurance credit.</p>}
   </Modal>;
+}
+
+const SCORE_RESULTS = ['Preferred', 'Standard', 'Nonstandard', 'High Risk'];
+const PRIOR_RESULTS: [string, string][] = [['stated', "Confirms the applicant's answers"], ['lapsed', 'Finds a lapse in coverage'], ['none', 'Finds no prior insurance']];
+
+/** Trainer Mode: choose the simulated credit and prior-insurance report results before ordering. */
+function TrainerReportSettings({ disabled }: { disabled: boolean }) {
+  const { state, updateReports } = useQuote();
+  const simulation = state.reports.simulation ?? { scoreTier: 1, prior: 'stated' as const };
+  if (!state.trainerMode) return null;
+  const select = 'mt-[4px] h-[30px] w-full rounded-[3px] border border-[#8b98a3] bg-white px-[6px] text-[13px]';
+  return <div className="mb-[20px] w-[990px] rounded-[3px] border border-dashed border-[#e87722] bg-[#fff6ee] px-[16px] py-[10px] text-[13px] text-[#2e3a43]">
+    <div className="font-bold text-[#9a4a0b]">Trainer: simulated report results</div>
+    <p className="mt-[2px] text-[12px] text-[#5c6670]">Reports are simulated. CLUE and MVR return the accidents and violations entered for each driver. Choose what the credit and prior-insurance reports return, then order (or re-order) the reports.</p>
+    <div className="mt-[8px] grid grid-cols-2 gap-[16px]">
+      <label className="font-bold">Insurance score (credit report)<select disabled={disabled} value={simulation.scoreTier} onChange={(event) => updateReports({ simulation: { ...simulation, scoreTier: Number(event.target.value) } })} className={select}>{SCORE_RESULTS.map((name, index) => <option key={name} value={index}>{name}</option>)}</select></label>
+      <label className="font-bold">Prior insurance report<select disabled={disabled} value={simulation.prior} onChange={(event) => updateReports({ simulation: { ...simulation, prior: event.target.value as 'stated' | 'lapsed' | 'none' } })} className={select}>{PRIOR_RESULTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+    </div>
+  </div>;
 }
 
 function OrderResults() {
@@ -64,6 +83,7 @@ function OrderResults() {
   return <div role="status" className="mb-[20px] w-[990px] rounded-[3px] border border-[#0f7a52] bg-[#e6f4ef] px-[16px] py-[12px] text-[14px] leading-[20px] text-[#0b3d2a]">
     <div className="flex items-center gap-2 font-bold"><CheckCircle2 size={18} className="text-[#0f7a52]" />Point of Sale ordered {reports.orderedAt}.</div>
     <ul className="mt-1 list-disc pl-[46px]">
+      <li>Insurance score: {SCORE_TIER_NAMES[reports.scoreTier]} (credit-based)</li>
       <li>Prior insurance: {reports.priorSource === 'vendor' && reports.vendor ? `vendor data accepted (${reports.vendor.liabilityStatus}${reports.vendor.carrier.startsWith('NO ') ? '' : `, ${reports.vendor.carrier}`})` : 'insured provided data used (unverified)'}</li>
       {findings.length ? findings.map((finding) => <li key={finding}>{finding}</li>) : <li>No losses or violations found on ordered reports.</li>}
     </ul>
@@ -109,6 +129,7 @@ function PosContent() {
     {selectError && <p className="-mt-2 mb-3 text-[13px] font-medium text-[#c8102e]">{selectError}</p>}
     {reports.staleReason && <p className="mb-[16px] flex w-[990px] items-start gap-2 rounded-[3px] border border-[#f5a45d] bg-[#fff6ee] px-[16px] py-[10px] text-[14px] text-[#9a4a0b]"><AlertTriangle size={17} className="mt-px shrink-0" />{reports.staleReason}</p>}
     {posError && <div id="pos" tabIndex={-1} className="mb-[16px] w-[990px] outline-none"><InlineError message={posError} /></div>}
+    <TrainerReportSettings disabled={busy} />
     <OrderResults />
     <div className="flex items-start gap-[24px]">
       <nav aria-label="Point of Sale sections" className="sticky top-0 w-[160px] shrink-0 pt-[4px]"><ul className="space-y-[10px]">{sections.map(([id, label]) => <li key={id}><button type="button" onClick={() => jump(id)} className={`relative block w-full py-[2px] pl-[12px] text-left text-[14px] underline-offset-2 ${active === id ? 'font-medium text-[#2e3a43] before:absolute before:bottom-0 before:left-0 before:top-0 before:w-[3px] before:bg-[#003865]' : 'text-[#003865] underline hover:text-[#0073cf]'}`}>{label}</button></li>)}</ul></nav>

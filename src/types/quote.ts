@@ -117,6 +117,10 @@ export type CrossSellProduct = (typeof CROSS_SELL_PRODUCTS)[number];
 export interface AdditionalDetails {
   /** Insured/Spouse had liability coverage for the past 6 months with no more than a 31-day lapse. */
   continuousInsurance: YesNo;
+  /** Current/most recent auto carrier, its bodily injury limits and how long with it (asked when insured). */
+  priorCarrier: string;
+  priorLimits: string;
+  priorYears: string;
   allDriversListed: YesNo;
   priorCancellation: YesNo;
   jointOwnership: YesNo;
@@ -149,6 +153,13 @@ export interface VendorHistory {
   length: string;
 }
 
+export interface ReportSimulation {
+  /** Credit-based insurance score tier the simulated credit report returns (0 = Preferred). */
+  scoreTier: number;
+  /** Prior-insurance report: confirms what the applicant said, or finds a lapse / no coverage. */
+  prior: 'stated' | 'lapsed' | 'none';
+}
+
 export interface SimulatedReports {
   orderClue: boolean;
   orderMvr: boolean;
@@ -161,6 +172,8 @@ export interface SimulatedReports {
   priorSource: '' | 'vendor' | 'insured';
   /** Simulated insurance-score tier returned with the POS order (0 = best). */
   scoreTier: number;
+  /** What the simulated vendors will return (Trainer Mode sets it; otherwise Standard and "as stated"). */
+  simulation: ReportSimulation;
   orderedAt: string;
   staleReason: string;
   requestId: number;
@@ -257,4 +270,28 @@ export interface RatingResult {
   eligibleDiscounts: string[];
   factors: RatingFactor[];
   reportsApplied: boolean;
+  /** Policy fees (for example an SR-22 filing fee), included in fullTermPremium. */
+  fees: { label: string; amount: number }[];
+  /** Step-by-step calculation of every premium on the quote. */
+  worksheet: RatingWorksheet;
+}
+
+/** One line of a premium calculation: a base rate, a factor or a flat amount. */
+export interface WorksheetLine {
+  label: string;
+  /** "$212.00" for a base rate, "×0.92" for a factor. */
+  value: string;
+}
+
+export interface CoverageWorksheet {
+  coverage: string;
+  limit: string;
+  lines: WorksheetLine[];
+  premium: number;
+}
+
+export interface RatingWorksheet {
+  vehicles: { label: string; principal: string; coverages: CoverageWorksheet[]; total: number }[];
+  policy: CoverageWorksheet[];
+  drivers: { name: string; lines: WorksheetLine[]; factor: number }[];
 }

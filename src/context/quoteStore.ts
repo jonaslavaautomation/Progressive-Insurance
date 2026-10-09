@@ -133,7 +133,7 @@ export function createQuoteData(agent: AgentProfile = DEFAULT_AGENT, state: stri
     insured: createInsured(state),
     vehicles: [createVehicle()],
     drivers: [createDriver({ relationship: 'Insured', operatorType: 'Principal', licenseState: state })],
-    additional: { continuousInsurance: '', allDriversListed: '', priorCancellation: '', jointOwnership: '', paperless: '', primaryResidence: '', crossSell: [], noAdditionalRisks: false },
+    additional: { continuousInsurance: '', priorCarrier: '', priorLimits: '', priorYears: '', allDriversListed: '', priorCancellation: '', jointOwnership: '', paperless: '', primaryResidence: '', crossSell: [], noAdditionalRisks: false },
     coverages: coveragesFor(state),
     reports: emptyReports(),
     pointOfSale: { billPlan: 'PIF', paymentMethod: '', paymentAuthorized: '', documentDelivery: '', reviewedCoverages: false, confirmedHousehold: false, agreedToTerms: false },
@@ -174,7 +174,7 @@ export function createSampleQuote(agent: AgentProfile = DEFAULT_AGENT, state: st
       education: "Bachelor's degree", employment: 'Business/Sales/Office', occupation: 'Accountant/Auditor', licenseType: 'Personal Auto',
       licenseStatus: 'Valid', licenseState: state, licenseNumber: '000000001', ageFirstLicensed: '16', internationalYears: 'None', primaryVehicleId: vehicle.id,
     })],
-    additional: { continuousInsurance: 'No', allDriversListed: 'Yes', priorCancellation: 'No', jointOwnership: 'No', paperless: 'Yes', primaryResidence: 'Single Family Home', crossSell: [], noAdditionalRisks: true },
+    additional: { continuousInsurance: 'Yes', priorCarrier: 'State Farm', priorLimits: '100/300', priorYears: '3 years or more', allDriversListed: 'Yes', priorCancellation: 'No', jointOwnership: 'No', paperless: 'Yes', primaryResidence: 'Single Family Home', crossSell: [], noAdditionalRisks: true },
   };
 }
 
@@ -195,7 +195,7 @@ export type QuoteAction =
   | { type: 'updateCoverages'; patch: Partial<Coverages> }
   | { type: 'updatePointOfSale'; patch: Partial<PointOfSale> }
   | { type: 'recalculate' }
-  | { type: 'updateReports'; patch: Partial<Pick<SimulatedReports, 'orderClue' | 'orderMvr'>> }
+  | { type: 'updateReports'; patch: Partial<Pick<SimulatedReports, 'orderClue' | 'orderMvr' | 'simulation'>> }
   | { type: 'posOrderStarted'; requestId: number }
   | { type: 'posOrderApplied'; result: PosOrderResult; priorSource: 'vendor' | 'insured' }
   | { type: 'posOrderCancelled' }
