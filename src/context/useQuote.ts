@@ -34,7 +34,7 @@ export interface QuoteContextValue {
   updateCoverages: (patch: Partial<Coverages>) => void;
   updatePointOfSale: (patch: Partial<PointOfSale>) => void;
   recalculate: () => void;
-  updateReports: (patch: Partial<Pick<SimulatedReports, 'orderClue' | 'orderMvr'>>) => void;
+  updateReports: (patch: Partial<Pick<SimulatedReports, 'orderClue' | 'orderMvr' | 'simulation'>>) => void;
   /** Places the POS order; resolves with vendor results, or null if the order was superseded. */
   orderPointOfSale: () => Promise<PosOrderResult | null>;
   applyPosOrder: (result: PosOrderResult, priorSource: 'vendor' | 'insured') => void;

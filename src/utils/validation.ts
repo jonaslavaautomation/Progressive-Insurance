@@ -180,6 +180,11 @@ function validateAdditional(quote: QuoteData, errors: FieldErrors) {
     return;
   }
   required(errors, 'additional.continuousInsurance', additional.continuousInsurance, 'Answer whether the Insured/Spouse had vehicle liability insurance for the past 6 months.');
+  if (additional.continuousInsurance === 'Yes') {
+    required(errors, 'additional.priorCarrier', additional.priorCarrier, 'Select the current auto insurance company.');
+    required(errors, 'additional.priorLimits', additional.priorLimits, 'Select the bodily injury limits on the current policy.');
+    required(errors, 'additional.priorYears', additional.priorYears, 'Select how long the applicant has been with the current company.');
+  }
   required(errors, 'additional.allDriversListed', additional.allDriversListed, 'Answer whether all required drivers are listed.');
   if (additional.allDriversListed === 'No') errors['additional.allDriversListed'] = 'All drivers required to be listed must be added in Household Members before continuing.';
   required(errors, 'additional.priorCancellation', additional.priorCancellation, 'Answer whether an auto policy was canceled in the past 5 years.');

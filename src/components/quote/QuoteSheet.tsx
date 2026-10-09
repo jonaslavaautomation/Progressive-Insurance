@@ -135,6 +135,7 @@ export function QuoteSheet({ kind = 'binder', agencyAddress = 'Agency default' }
     {(kind === 'set' || kind === 'binder') && <Section title="Application Answers">
       <Table head={['Question', 'Answer']} rows={[
         ['Liability insurance for past 6 months with no more than 31 days lapse', additional.continuousInsurance],
+        ...(additional.continuousInsurance === 'Yes' ? [['Current company / limits / time with company', `${additional.priorCarrier} / ${additional.priorLimits} / ${additional.priorYears}`] as [string, string]] : []),
         ['All drivers required to be listed are included', additional.allDriversListed],
         ['Auto policy canceled (except non-payment) within the past 5 years', additional.priorCancellation],
         ['Vehicles owned by a corporation/partnership or jointly outside the household', additional.jointOwnership],

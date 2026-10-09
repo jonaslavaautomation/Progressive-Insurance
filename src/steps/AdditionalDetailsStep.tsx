@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Car, Check } from 'lucide-react';
 import { CROSS_SELL_PRODUCTS, type AdditionalDetails, type CrossSellProduct, type YesNo } from '@/types/quote';
-import { PRIMARY_RESIDENCES, YES_NO } from '@/data/options';
+import { PRIMARY_RESIDENCES, PRIOR_CARRIERS, PRIOR_LIMITS, PRIOR_YEARS, YES_NO } from '@/data/options';
 import { fieldHints } from '@/data/trainingHints';
 import { useQuote } from '@/context/useQuote';
 import { WizardLayout } from '@/components/wizard/WizardLayout';
@@ -53,7 +53,12 @@ function AdditionalDetailsContent() {
   return <div className="grid grid-cols-[560px_560px] items-start gap-[21px]">
       <div className="space-y-[21px]">{hasAuto(state) && <Card title="Auto Details" icon={<Car size={30} strokeWidth={1.3} className="text-[#2e3a43]" />} action={<HelpDot label="Auto Details" text="These underwriting questions determine eligibility and rating. Ask each question exactly as written." />}>
         <div className="space-y-[34px]">
-          <QuestionRow id="additional.continuousInsurance" label="Insured/Spouse has vehicle liability insurance for past 6 months with no more than 31 days lapse:*" options={YES_NO} value={additional.continuousInsurance} onChange={setYesNo('continuousInsurance')} hint={fieldHints.continuousInsurance} />
+          <QuestionRow id="additional.continuousInsurance" label="Insured/Spouse has vehicle liability insurance for past 6 months with no more than 31 days lapse:*" options={YES_NO} value={additional.continuousInsurance} onChange={(value) => updateAdditional(value === 'Yes' ? { continuousInsurance: 'Yes' } : { continuousInsurance: value as YesNo, priorCarrier: '', priorLimits: '', priorYears: '' })} hint={fieldHints.continuousInsurance} />
+          {additional.continuousInsurance === 'Yes' && <>
+            <QuestionRow id="additional.priorCarrier" label="Current auto insurance company:*" options={PRIOR_CARRIERS} value={additional.priorCarrier} onChange={(priorCarrier) => updateAdditional({ priorCarrier })} hint={fieldHints.priorCarrier} />
+            <QuestionRow id="additional.priorLimits" label="Bodily injury limits on the current policy:*" tag options={PRIOR_LIMITS} value={additional.priorLimits} onChange={(priorLimits) => updateAdditional({ priorLimits })} hint={fieldHints.priorLimits} />
+            <QuestionRow id="additional.priorYears" label="How long with the current company:*" tag options={PRIOR_YEARS} value={additional.priorYears} onChange={(priorYears) => updateAdditional({ priorYears })} hint={fieldHints.priorYears} />
+          </>}
           <QuestionRow id="additional.allDriversListed" label="Have you included all drivers required to be listed within the driver section of the quote?*" help={fieldHints.allDriversListed} options={YES_NO} value={additional.allDriversListed} onChange={setYesNo('allDriversListed')} />
           <QuestionRow id="additional.priorCancellation" label="Insured/Spouse had an auto policy canceled by an insurance company (except for non-payment of premium) within the past 5 years: *" help={fieldHints.priorCancellation} options={YES_NO} value={additional.priorCancellation} onChange={setYesNo('priorCancellation')} />
           <QuestionRow id="additional.jointOwnership" label="Are any vehicles owned by a corporation or a partnership; OR jointly owned by 2 or more individuals who do not reside in the same household? *" help={fieldHints.jointOwnership} options={YES_NO} value={additional.jointOwnership} onChange={setYesNo('jointOwnership')} />

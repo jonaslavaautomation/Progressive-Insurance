@@ -1,7 +1,7 @@
-// Simulated Point of Sale vendor order: Auto CLUE (claims + prior insurance history),
-// MVR (driving record) and an insurance-score tier. Results are deterministic for a given
-// customer so a trainee sees the same outcome when re-ordering, and are derived only from
-// data entered in this session.
+// Simulated Point of Sale vendor order: Auto CLUE (claims + prior insurance history), MVR (driving
+// record) and an insurance-score tier. Nothing is random: CLUE and MVR return the accidents and
+// violations entered for each driver, the prior-insurance report confirms the applicant's answers,
+// and the insurance score is Standard unless a trainer sets another result in Trainer Mode.
 import type { Driver, QuoteData, SimulatedReports, VendorHistory } from '@/types/quote';
 import { INCIDENT_CODES } from '@/data/options';
 import { driverName, ratedDrivers } from '@/utils/ratingEngine';
@@ -9,35 +9,35 @@ import { formatDate } from '@/utils/dates';
 
 export const REPORT_DELAY_MS = 2000;
 
-const CARRIERS = ['STATE FARM', 'GEICO', 'ALLSTATE', 'NATIONWIDE', 'NC FARM BUREAU', 'USAA', 'LIBERTY MUTUAL'];
-const LIMITS = ['State Minimum Limits', '50/100', '100/300', '250/500'];
+const LIMITS = ['State Minimum Limits', '50/100', '100/300', '250/500 or higher'];
 const LENGTHS = ['Less than 6 months', 'At least 6 months but less than 1 year', 'At least 1 year but less than 3 years', '3 years or more'];
 
 export function emptyReports(requestId = 0): SimulatedReports {
-  return { orderClue: true, orderMvr: false, clueStatus: 'not-ordered', mvrStatus: 'not-ordered', clueFindings: [], mvrFindings: [], vendor: null, priorSource: '', scoreTier: 1, orderedAt: '', staleReason: '', requestId };
+  return { orderClue: true, orderMvr: false, clueStatus: 'not-ordered', mvrStatus: 'not-ordered', clueFindings: [], mvrFindings: [], vendor: null, priorSource: '', scoreTier: 1, simulation: { scoreTier: 1, prior: 'stated' }, orderedAt: '', staleReason: '', requestId };
 }
 
-function hash(text: string): number {
-  let value = 2166136261;
-  for (let i = 0; i < text.length; i += 1) value = Math.imul(value ^ text.charCodeAt(i), 16777619);
-  return Math.abs(value);
-}
+const simulationOf = (quote: QuoteData) => quote.reports.simulation ?? { scoreTier: 1, prior: 'stated' as const };
 
-function customerKey(quote: QuoteData): string {
-  const { insured } = quote;
-  return `${insured.firstName}|${insured.lastName}|${insured.dob}|${insured.address.zip}`.toLowerCase();
-}
-
+/**
+ * The prior-insurance vendor confirms what the applicant stated. In Trainer Mode the trainer can make
+ * it find a lapse or no prior coverage to practice the "Auto Insurance History" discrepancy.
+ */
 export function vendorHistoryFor(quote: QuoteData): VendorHistory {
-  const h = hash(customerKey(quote));
-  const bucket = h % 10;
-  const liabilityStatus: VendorHistory['liabilityStatus'] = bucket < 5 ? 'Yes, currently insured' : bucket < 8 ? 'Yes, not currently insured' : 'No';
-  if (liabilityStatus === 'No') return { liabilityStatus, carrier: 'NO PRIOR CARRIER FOUND', biLimits: '—', length: '—' };
-  return { liabilityStatus, carrier: CARRIERS[(h >> 4) % CARRIERS.length], biLimits: LIMITS[(h >> 8) % LIMITS.length], length: LENGTHS[(h >> 12) % LENGTHS.length] };
+  const { additional } = quote;
+  const outcome = simulationOf(quote).prior;
+  const carrier = (additional.priorCarrier || 'Other standard carrier').toUpperCase();
+  if (outcome === 'none' || (outcome === 'stated' && additional.continuousInsurance !== 'Yes')) return { liabilityStatus: 'No', carrier: 'NO PRIOR CARRIER FOUND', biLimits: '—', length: '—' };
+  return {
+    liabilityStatus: outcome === 'lapsed' ? 'Yes, not currently insured' : 'Yes, currently insured',
+    carrier,
+    biLimits: additional.priorLimits || LIMITS[0],
+    length: outcome === 'lapsed' ? LENGTHS[0] : additional.priorYears || LENGTHS[0],
+  };
 }
 
+/** The simulated credit report's insurance-score tier (Standard unless the trainer chooses another). */
 export function scoreTierFor(quote: QuoteData): number {
-  return hash(`score|${customerKey(quote)}|${quote.drivers[0]?.ssn ?? ''}`) % 4;
+  return simulationOf(quote).scoreTier;
 }
 
 /** Vendor answer to "liability coverage for past 6 months with no more than a 31-day lapse". */
@@ -45,8 +45,12 @@ export function vendorAnswer(vendor: VendorHistory): 'Yes' | 'No' {
   return vendor.liabilityStatus === 'No' ? 'No' : 'Yes';
 }
 
+/** True when the prior-insurance report disagrees with any of the applicant's prior-insurance answers. */
 export function vendorDiffers(vendor: VendorHistory, quote: QuoteData): boolean {
-  return vendorAnswer(vendor) !== quote.additional.continuousInsurance;
+  const { additional } = quote;
+  if (vendorAnswer(vendor) !== additional.continuousInsurance) return true;
+  if (additional.continuousInsurance !== 'Yes') return false;
+  return vendor.liabilityStatus !== 'Yes, currently insured' || vendor.biLimits !== additional.priorLimits || vendor.length !== additional.priorYears;
 }
 
 export function buildFindings(drivers: Driver[]) {
