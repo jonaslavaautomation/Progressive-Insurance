@@ -6,12 +6,13 @@ import type { PolicyRecord } from '@/types/policy';
 import { useQuote } from '@/context/useQuote';
 import { nextInstallment } from '@/services/policyEngine';
 import { AUTOPAY_LABELS, autopayActions, paymentAccountOf, paymentMethodName, type AutopayMode } from '@/services/autopay';
-import { productLabel } from '@/products/configs';
+import { configFor, productLabel } from '@/products/configs';
 import { formatCurrency } from '@/utils/masks';
-import { formatLongDate, shortDate } from '@/servicing/portal/portalUtils';
+import { formatLongDate, hasIdCards, shortDate } from '@/servicing/portal/portalUtils';
 import { billingStatus, driversOf, lastPayment, longDate, stateCode, statusText } from '@/servicing/account/accountModel';
 import type { ChangeType } from '@/servicing/changeTypes';
 import { customerKey } from '@/servicing/policyFilters';
+import { MORTGAGEE_PRODUCTS } from '@/products/property';
 
 const focus = 'outline-none focus-visible:shadow-[inset_0_0_0_2px_#0073cf]';
 const hid = () => `his-${Math.random().toString(36).slice(2, 10)}`;
@@ -88,6 +89,14 @@ export function PolicyHub({ policy, level, panel, onPanel, onClose, actions }: {
   const next = nextInstallment(policy);
   const paid = lastPayment(policy);
   const renewal = policy.renewal;
+  const home = (MORTGAGEE_PRODUCTS as string[]).includes(policy.product);
+  // Commercial policies insure a business: drivers only for motorized lines, units named by the product.
+  const business = policy.source.kind === 'commercial' ? policy.source.quote : null;
+  const motorized = policy.product === 'commercialAuto' || policy.product === 'trucking';
+  const hasDrivers = !business || motorized;
+  const unitName = auto ? 'Vehicle' : configFor(policy.product)?.unitLabel ?? 'Unit';
+  const unitsTitle = auto ? 'Vehicles' : home ? 'Dwelling and Mortgagees' : configFor(policy.product)?.unitPlural ?? 'Units';
+  const idCards = hasIdCards(policy);
   const autopayItems: Item[] = autopayActions(policy).map((mode: AutopayMode) => ({ label: AUTOPAY_LABELS[mode], onClick: go(() => actions.autopay(mode)) }));
   const star: Record<string, string> = { Bronze: 'fill-[#c9874b] text-[#8a5626]', Silver: 'fill-none text-[#5c6670]', Gold: 'fill-[#f2c94c] text-[#b8860b]', Platinum: 'fill-[#dfe7ee] text-[#6f8696]' };
 
@@ -121,29 +130,33 @@ export function PolicyHub({ policy, level, panel, onPanel, onClose, actions }: {
       ...autopayItems,
       { label: 'View Print Receipt', onClick: go(actions.receipt) },
     ] },
-    customer: { title: 'Customer Information', rows: [['Named insured', policy.insured.name], ['Mailing address', `${policy.insured.street}, ${policy.insured.cityStateZip}`], ['Phone', policy.insured.phone || '—'], ['Email', policy.insured.email || '—']], items: [
+    customer: { title: business ? 'Business Information' : 'Customer Information', rows: [[business ? 'Business name' : 'Named insured', policy.insured.name], ...(business ? [['Entity', business.business.entity || '—'], ['Contact', [business.business.contact, business.business.contactTitle].filter(Boolean).join(', ') || '—']] as [string, string][] : []), ['Mailing address', `${policy.insured.street}, ${policy.insured.cityStateZip}`], ['Phone', policy.insured.phone || '—'], ['Email', policy.insured.email || '—']], items: [
       { label: 'Update Email or Phone Number', onClick: go(() => actions.change('contact')), hidden: !actions.can('contact') },
       { label: 'Update Address', onClick: go(() => actions.change('address')), hidden: !actions.can('address') },
       { label: 'Paperless Preferences', onClick: go(actions.delivery) },
       { label: 'Customer Summary', onClick: go(() => openCustomer(customerKey(policy))) },
     ] },
     discounts: { title: 'Discounts and Rewards', rows: [['Loyalty level', level], ['Discounts', policy.discounts.join(', ') || 'None']], items: [{ label: 'Loyalty Levels and Rewards', onClick: go(actions.loyalty) }] },
-    drivers: { title: auto ? 'Drivers' : 'Operators', rows: driversOf(policy).map((driver) => [[driver.firstName, driver.lastName].join(' '), driver.driverStatus === 'Excluded' ? 'Excluded driver' : driver.relationship === 'Insured' ? 'Named insured' : driver.relationship || 'Insured driver']), items: [
+    drivers: { title: auto || motorized ? 'Drivers' : 'Operators', rows: business ? business.drivers.map((driver) => [[driver.firstName, driver.lastName].join(' '), [driver.role || 'Scheduled driver', driver.licenseType].filter(Boolean).join(' · ')] as [string, string]) : driversOf(policy).map((driver) => [[driver.firstName, driver.lastName].join(' '), driver.driverStatus === 'Excluded' ? 'Excluded driver' : driver.relationship === 'Insured' ? 'Named insured' : driver.relationship || 'Insured driver']), items: [
       { label: 'View Drivers', onClick: go(() => actions.scrollTo('account-people')) },
       { label: 'Add a Driver', onClick: go(() => actions.change('addDriver')), hidden: !actions.can('addDriver') },
-      { label: 'Remove or Exclude a Driver', onClick: go(() => actions.change('removeDriver')), hidden: !actions.can('removeDriver') },
+      { label: business ? 'Remove a Driver' : 'Remove or Exclude a Driver', onClick: go(() => actions.change('removeDriver')), hidden: !actions.can('removeDriver') },
     ] },
-    documents: { title: 'ID Cards and Documents', items: [
-      { label: 'ID Cards and Proof of Insurance', onClick: go(() => openProof(policy.id)) },
+    documents: { title: idCards ? 'ID Cards and Documents' : 'Policy Documents', items: [
+      { label: 'ID Cards and Proof of Insurance', onClick: go(() => openProof(policy.id)), hidden: !idCards },
       { label: 'Declarations and Policy Packet', onClick: go(() => openPolicy(policy.id, 'documents')) },
       { label: 'All Policy Documents', onClick: go(() => openPolicy(policy.id, 'documents')) },
     ] },
-    vehicles: { title: auto ? 'Vehicles' : 'Units', rows: policy.units.map((unit) => [unit.label, unit.idNumber || '—']), items: [
-      { label: 'View Vehicle Coverages', onClick: go(() => actions.scrollTo('coverage-0')) },
-      { label: auto ? 'Add a Vehicle' : 'Add a Unit', onClick: go(() => actions.change(auto ? 'addVehicle' : 'addUnit')), hidden: !actions.can(auto ? 'addVehicle' : 'addUnit') },
+    vehicles: { title: unitsTitle, rows: [...policy.units.map((unit) => [unit.label, unit.idNumber || '—'] as [string, string]), ...policy.lienholders.filter((holder) => holder.kind === 'Mortgagee').map((holder) => [`${holder.position ?? 'First'} Mortgagee`, `${holder.name}, loan #${holder.loanNumber}`] as [string, string])], items: [
+      { label: home ? 'View Dwelling Coverages' : `View ${unitName} Coverages`, onClick: go(() => actions.scrollTo('coverage-0')) },
+      { label: 'Change a Vehicle', onClick: go(() => actions.change('changeVehicle')), hidden: !actions.can('changeVehicle') },
+      { label: 'Update Dwelling Information', onClick: go(() => actions.change('dwelling')), hidden: !actions.can('dwelling') },
+      { label: 'Add, Change or Remove a Mortgagee', onClick: go(() => actions.change('mortgagee')), hidden: !actions.can('mortgagee') },
+      { label: 'View Mortgagees', onClick: go(() => actions.scrollTo('account-mortgagees')), hidden: !home },
+      { label: `Add a ${unitName}`, onClick: go(() => actions.change(auto ? 'addVehicle' : 'addUnit')), hidden: !actions.can(auto ? 'addVehicle' : 'addUnit') },
       { label: 'Replace a Vehicle', onClick: go(() => actions.change('replaceVehicle')), hidden: !actions.can('replaceVehicle') },
-      { label: auto ? 'Remove a Vehicle' : 'Remove a Unit', onClick: go(() => actions.change(auto ? 'removeVehicle' : 'removeUnit')), hidden: !actions.can(auto ? 'removeVehicle' : 'removeUnit') },
-      { label: 'Add or Remove a Lienholder', onClick: go(() => actions.change('lienholder')), hidden: !actions.can('lienholder') },
+      { label: `Remove a ${unitName}`, onClick: go(() => actions.change(auto ? 'removeVehicle' : 'removeUnit')), hidden: !actions.can(auto ? 'removeVehicle' : 'removeUnit') },
+      { label: 'Add, Change or Remove a Lienholder', onClick: go(() => actions.change('lienholder')), hidden: !actions.can('lienholder') },
     ] },
   };
   const current = panel ? panels[panel] : null;
@@ -167,12 +180,12 @@ export function PolicyHub({ policy, level, panel, onPanel, onClose, actions }: {
         <Row icon={<Banknote size={18} />} label="Billing and Payments" more active={panel === 'billing'} onClick={() => toggle('billing')} />
         <Row icon={<ClipboardList size={18} />} label="Claims" onClick={go(() => openPage('claims'))} />
         <Row icon={<CircleCheck size={18} />} label="Coverages" onClick={go(() => actions.scrollTo('coverage-0'))} />
-        <Row icon={<UserRound size={18} />} label="Customer Information" more active={panel === 'customer'} onClick={() => toggle('customer')} />
+        <Row icon={<UserRound size={18} />} label={business ? 'Business Information' : 'Customer Information'} more active={panel === 'customer'} onClick={() => toggle('customer')} />
         <Row icon={<Star size={18} />} label="Discounts and Rewards" more active={panel === 'discounts'} onClick={() => toggle('discounts')} />
-        <Row icon={<Users size={18} />} label={auto ? 'Drivers' : 'Operators'} more active={panel === 'drivers'} onClick={() => toggle('drivers')} />
-        <Row icon={<IdCard size={18} />} label="ID Cards and Documents" more active={panel === 'documents'} onClick={() => toggle('documents')} />
+        {hasDrivers && <Row icon={<Users size={18} />} label={auto || motorized ? 'Drivers' : 'Operators'} more active={panel === 'drivers'} onClick={() => toggle('drivers')} />}
+        <Row icon={<IdCard size={18} />} label={idCards ? 'ID Cards and Documents' : 'Policy Documents'} more active={panel === 'documents'} onClick={() => toggle('documents')} />
         <Row icon={<ShieldCheck size={18} />} label="Policy Activity" onClick={go(() => openPolicy(policy.id, 'history'))} />
-        <Row icon={<KeyRound size={18} />} label={auto ? 'Vehicles' : 'Units'} more active={panel === 'vehicles'} onClick={() => toggle('vehicles')} />
+        <Row icon={<KeyRound size={18} />} label={unitsTitle} more active={panel === 'vehicles'} onClick={() => toggle('vehicles')} />
       </ul>
     </nav>
     {panel === 'notes' && <NotesPanel policy={policy} onClose={() => onPanel(null)} />}

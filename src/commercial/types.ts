@@ -12,6 +12,10 @@ export interface CommercialDriver {
   experience: string;
   violations: string;
   accidents: string;
+  /** Relationship to the business (ACORD 127 driver schedule). */
+  role: string;
+  /** Date hired (MM/DD/YYYY). */
+  hireDate: string;
 }
 
 export interface CommercialQuote {

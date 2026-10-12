@@ -1,7 +1,7 @@
 // Commercial Lines step validation.
 import type { CommercialQuote } from '@/commercial/types';
 import type { CommercialKey } from '@/products/types';
-import { BUSINESS_FIELDS, COMMERCIAL_CONFIGS, INDUSTRIES, SHARED_QUESTIONS } from '@/commercial/configs';
+import { BUSINESS_FIELDS, COMMERCIAL_CONFIGS, GENERAL_QUESTIONS, HOUSEHOLD_GOODS, INDUSTRIES, SHARED_QUESTIONS, needsCdl } from '@/commercial/configs';
 import { commercialContext, isCommercialRated } from '@/commercial/engine';
 import { EMAIL, PHONE, VIN, checkField, setValidationState, type FieldErrors } from '@/utils/validation';
 import { SUPPORTED_STATES } from '@/data/states';
@@ -33,8 +33,10 @@ function validateUnits(quote: CommercialQuote, key: CommercialKey, errors: Field
 }
 
 function validateDrivers(quote: CommercialQuote, errors: FieldErrors) {
-  if (!quote.products.includes('commercialAuto')) return;
+  if (!quote.products.some((key) => COMMERCIAL_CONFIGS[key].motorized)) return;
   if (!quote.drivers.length) { errors['cdriver.none'] = 'Add every employee who drives a business vehicle.'; return; }
+  const trucking = !!quote.productQuotes.trucking;
+  const interstate = (trucking && quote.productQuotes.trucking!.answers.operation !== 'Intrastate only') || quote.productQuotes.commercialAuto?.answers.interstate === 'Yes';
   quote.drivers.forEach((driver, index) => {
     const who = `${[driver.firstName, driver.lastName].filter(Boolean).join(' ') || `Driver ${index + 1}`}: `;
     const id = (field: string) => `cdriver.${driver.id}.${field}`;
@@ -44,10 +46,17 @@ function validateDrivers(quote: CommercialQuote, errors: FieldErrors) {
     if (!driver.dob) errors[id('dob')] = `${who}Date of Birth is required.`;
     else if (age === null) errors[id('dob')] = `${who}Date of Birth must be a valid date in MM/DD/YYYY format.`;
     else if (age < 18) errors[id('dob')] = `${who}Commercial drivers must be at least 18 years old.`;
-    need('licenseState', 'License State'); need('licenseNumber', 'License Number'); need('licenseType', 'License Type'); need('experience', 'Commercial Driving Experience'); need('violations', 'Violations'); need('accidents', 'Accidents');
+    else if (age < 21 && interstate) errors[id('dob')] = `${who}Drivers in interstate commerce must be at least 21 years old (FMCSA, 49 CFR 391.11).`;
+    if (trucking && driver.licenseType.startsWith('CDL') && driver.experience === 'Less than 2 years') errors[id('experience')] = `${who}Trucking requires at least 2 years of verifiable CDL driving experience.`;
+    need('licenseState', 'License State'); need('licenseNumber', 'License Number'); need('licenseType', 'License Type'); need('experience', 'Commercial Driving Experience'); need('role', 'Relationship to Business'); need('hireDate', 'Date Hired'); need('violations', 'Violations'); need('accidents', 'Accidents');
+    const hired = parseDate(driver.hireDate);
+    if (driver.hireDate && !hired) errors[id('hireDate')] = `${who}Date Hired must be a valid date in MM/DD/YYYY format.`;
+    else if (hired && daysBetween(today(), hired) > 0) errors[id('hireDate')] = `${who}Date Hired cannot be in the future.`;
+    else if (hired && age !== null && ageOn(driver.dob, hired) !== null && ageOn(driver.dob, hired)! < 16) errors[id('hireDate')] = `${who}Date Hired is before the driver was 16.`;
     if (driver.violations === '3 or more') errors[id('violations')] = `${who}Drivers with 3 or more violations in 3 years are not acceptable. Remove this driver from the schedule.`;
   });
-  const heavy = quote.productQuotes.commercialAuto?.units.some((unit) => unit.values.gvw === 'Over 26,000 lbs');
+  // Trucking power units are all over 26,000 lbs.
+  const heavy = quote.productQuotes.commercialAuto?.units.some((unit) => needsCdl(unit.values.gvw)) || !!quote.productQuotes.trucking?.units.some((unit) => !unit.values.type?.includes('Trailer'));
   if (heavy && !quote.drivers.some((driver) => driver.licenseType.startsWith('CDL'))) errors['cdriver.cdl'] = 'Vehicles over 26,000 lbs GVW require at least one driver with a CDL.';
 }
 
@@ -61,11 +70,18 @@ function validateUnderwriting(quote: CommercialQuote, errors: FieldErrors) {
       else if (question.ineligibleIf && answers[question.key] === question.ineligibleIf) errors[fieldId] = `${who}${question.ineligibleMessage}`;
     }
   };
-  check('cq.shared', SHARED_QUESTIONS, quote.answers, 'Business: ');
+  check('cq.shared', [...GENERAL_QUESTIONS, ...SHARED_QUESTIONS], quote.answers, 'Business: ');
   for (const key of quote.products) check(`cq.${key}`, COMMERCIAL_CONFIGS[key].questions, quote.productQuotes[key]?.answers ?? {}, `${COMMERCIAL_CONFIGS[key].name}: `);
   const industry = INDUSTRIES[quote.business.industry];
   const bop = quote.productQuotes.bop;
   if (bop && industry && bop.answers.form === 'Businessowners Policy (BOP)' && !industry.bop) errors['cq.bop.form'] = `Businessowners / Contractor GL: ${quote.business.industry} is not eligible for a BOP. Select Contractor General Liability (GL only).`;
+  else if (bop && bop.answers.form === 'Businessowners Policy (BOP)') {
+    const locations = Math.max(1, bop.units.length);
+    const sales = Number((quote.business.revenue ?? '').replace(/[^0-9.]/g, '')) || 0;
+    const large = bop.units.find((unit) => Number(unit.values.squareFeet) > 35000);
+    if (large) errors['cq.bop.form'] = `Businessowners / Contractor GL: a BOP location can be up to 35,000 sq ft (${bop.units.indexOf(large) + 1}: ${Number(large.values.squareFeet).toLocaleString('en-US')} sq ft). Quote Commercial Property and General Liability instead.`;
+    else if (sales / locations > 6000000) errors['cq.bop.form'] = `Businessowners / Contractor GL: BOP eligibility is up to $6,000,000 gross sales per location ($${Math.round(sales / locations).toLocaleString('en-US')} here). Quote Commercial Property and General Liability instead.`;
+  }
 }
 
 function validateCoverages(quote: CommercialQuote, errors: FieldErrors) {
@@ -79,6 +95,9 @@ function validateCoverages(quote: CommercialQuote, errors: FieldErrors) {
     }
     product.units.forEach((unit, index) => { if (unit.coverages.coll && unit.coverages.coll !== 'None' && unit.coverages.comp === 'None') errors[`ccov.${key}.${unit.id}.comp`] = `${config.unitLabel} ${index + 1}: Collision requires Comprehensive coverage.`; });
   }
+  const truck = quote.productQuotes.trucking;
+  if (truck && truck.answers.commodity === HOUSEHOLD_GOODS && (truck.coverages.cargo ?? 'None') === 'None') errors['ccov.trucking.policy.cargo'] = 'Trucking: household goods carriers must carry Motor Truck Cargo (FMCSA requires a BMC-34 cargo filing).';
+  if (truck && truck.answers.authority === 'Own MC authority (for-hire)' && truck.answers.commodity === HOUSEHOLD_GOODS && truck.coverages.cargo === '50000') errors['ccov.trucking.policy.cargo'] = 'Trucking: household goods movers should carry at least $100,000 cargo.';
   const mgmt = quote.productQuotes.mgmt;
   if (mgmt) {
     const c = mgmt.coverages;
@@ -90,10 +109,11 @@ function validateCoverages(quote: CommercialQuote, errors: FieldErrors) {
 }
 
 function validateFinal(quote: CommercialQuote, errors: FieldErrors) {
-  quote.productQuotes.commercialAuto?.units.forEach((unit, index) => {
+  for (const key of ['commercialAuto', 'trucking'] as const) quote.productQuotes[key]?.units.forEach((unit, index) => {
     const fieldId = `cfinal.vin.${unit.id}`;
-    if (!unit.values.vin) errors[fieldId] = `Vehicle ${index + 1}: VIN is required before binding.`;
-    else if (!VIN.test(unit.values.vin)) errors[fieldId] = `Vehicle ${index + 1}: VIN must be 17 characters (no I, O or Q).`;
+    const who = `${COMMERCIAL_CONFIGS[key].unitLabel} ${index + 1}`;
+    if (!unit.values.vin) errors[fieldId] = `${who}: VIN is required before binding.`;
+    else if (!VIN.test(unit.values.vin)) errors[fieldId] = `${who}: VIN must be 17 characters (no I, O or Q).`;
   });
   if (!quote.paymentMethod) errors['cfinal.paymentMethod'] = 'Down Payment Method is required.';
   if (quote.paymentAuthorized !== 'Yes') errors['cfinal.paymentAuthorized'] = 'The business must authorize the payment before binding.';

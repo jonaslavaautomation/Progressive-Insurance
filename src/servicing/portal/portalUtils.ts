@@ -1,13 +1,15 @@
 // Shared helpers for the Customer Summary and ID Cards / Proof of Insurance pages.
-import { Snowflake, Bike, Building2, BriefcaseBusiness, Bus, Car, Caravan, Sailboat, Store, Truck, type LucideIcon } from 'lucide-react';
+import { Snowflake, Bike, Building, Building2, Container, Factory, House, HousePlus, BriefcaseBusiness, Bus, Car, Caravan, Sailboat, Store, Truck, type LucideIcon } from 'lucide-react';
 import type { PolicyDocument, PolicyRecord } from '@/types/policy';
 import type { AnyProductKey } from '@/products/types';
 import { parseDate } from '@/utils/dates';
 
-export const POLICY_ICONS: Record<AnyProductKey, LucideIcon> = { snowmobile: Snowflake, auto: Car, motorcycle: Bike, boat: Sailboat, motorhome: Bus, trailer: Caravan, renters: Building2, commercialAuto: Truck, bop: Store, mgmt: BriefcaseBusiness };
+export const POLICY_ICONS: Record<AnyProductKey, LucideIcon> = { snowmobile: Snowflake, auto: Car, motorcycle: Bike, boat: Sailboat, motorhome: Bus, trailer: Caravan, renters: Building2, homeowners: House, condo: Building, landlord: HousePlus, trucking: Container, property: Factory, commercialAuto: Truck, bop: Store, mgmt: BriefcaseBusiness };
 
 /** Products that carry vehicle ID cards. */
-export const hasIdCards = (policy: PolicyRecord) => !['renters', 'boat', 'bop', 'mgmt'].includes(policy.product);
+/** Products without vehicle ID cards (property, boat and non-auto commercial lines). */
+export const NO_ID_CARDS = ['renters', 'homeowners', 'condo', 'landlord', 'boat', 'bop', 'property', 'mgmt'];
+export const hasIdCards = (policy: PolicyRecord) => !NO_ID_CARDS.includes(policy.product);
 
 export function customerSince(policies: PolicyRecord[]): string {
   const years = policies.map((policy) => Number(policy.issuedOn.slice(-4))).filter(Boolean);

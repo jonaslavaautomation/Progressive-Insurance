@@ -76,7 +76,7 @@ function AdditionalDetailsContent() {
         <div className="mt-[14px] flex h-[51px] items-center gap-[14px] rounded-[2px] border border-[#9aa6ae] px-[16px] text-[14px]"><Check size={18} className="text-[#5c7f9e]" strokeWidth={2} />{products.map(productLabel).join(', ')}</div>
         <p className="mt-[24px] text-[14px] leading-[21px]">Choose any additional LAVA products that the Insured or Spouse currently has or will purchase in the next month: *</p>
         <fieldset id="additional.crossSell" tabIndex={-1} aria-label="Additional LAVA products" className={`mt-[14px] grid grid-cols-3 gap-x-[20px] gap-y-[19px] rounded-[2px] border px-[10px] py-[16px] outline-none ${crossSellError ? 'border-[#c8102e] shadow-[inset_0_0_0_1px_#c8102e]' : 'border-[#9aa6ae]'}`}>
-          {CROSS_SELL_PRODUCTS.map((product) => <ProductCheckbox key={product} label={product} checked={additional.crossSell.includes(product)} onChange={(checked) => toggleProduct(product, checked)} />)}
+          {CROSS_SELL_PRODUCTS.filter((product) => !products.some((key) => productLabel(key).startsWith(product))).map((product) => <ProductCheckbox key={product} label={product} checked={additional.crossSell.includes(product)} onChange={(checked) => toggleProduct(product, checked)} />)}
           <ProductCheckbox label="No additional risks apply" checked={additional.noAdditionalRisks} onChange={setNoRisks} />
         </fieldset>
         <InlineError message={crossSellError} />

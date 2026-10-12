@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Home, Snowflake, Bike, Building2, BriefcaseBusiness, Bus, Car, Caravan, ExternalLink, Sailboat, Store, Truck, type LucideIcon } from 'lucide-react';
+import { Building, Container, Factory, Home, House, HousePlus, Snowflake, Bike, Building2, BriefcaseBusiness, Bus, Car, Caravan, ExternalLink, Sailboat, Store, Truck, type LucideIcon } from 'lucide-react';
 import type { CommercialKey, ProductKey } from '@/products/types';
 
 type Product = { name: string; icon: LucideIcon; key?: ProductKey; commercial?: CommercialKey; partner?: string };
 const productGroups: { title: string; products: Product[] }[] = [
   { title: 'Auto & Toys', products: [{ name: 'AUTO', icon: Car, key: 'auto' }, { name: 'MOTORCYCLE/ATV', icon: Bike, key: 'motorcycle' }, { name: 'BOAT/PWC', icon: Sailboat, key: 'boat' }, { name: 'MOTOR HOME', icon: Bus, key: 'motorhome' }, { name: 'TRAVEL TRAILER', icon: Caravan, key: 'trailer' }, { name: 'SNOWMOBILE', icon: Snowflake, key: 'snowmobile' }] },
-  { title: 'Property', products: [{ name: 'RENTERS (HO4)', icon: Building2, key: 'renters' }, { name: 'MANUFACTURED HOME', icon: Home, partner: 'Manufactured Home' }] },
-  { title: 'Business', products: [{ name: 'COMMERCIAL AUTO', icon: Truck, commercial: 'commercialAuto' }, { name: 'BUSINESSOWNER/ CONTRACTOR GL', icon: Store, commercial: 'bop' }, { name: 'EPLI, NPDO, CYBER AND MORE', icon: BriefcaseBusiness, commercial: 'mgmt' }] },
+  { title: 'Property', products: [{ name: 'HOMEOWNERS (HO3)', icon: House, key: 'homeowners' }, { name: 'RENTERS (HO4)', icon: Building2, key: 'renters' }, { name: 'CONDO (HO6)', icon: Building, key: 'condo' }, { name: 'LANDLORD (DP3)', icon: HousePlus, key: 'landlord' }, { name: 'MANUFACTURED HOME', icon: Home, partner: 'Manufactured Home' }] },
+  { title: 'Business', products: [{ name: 'COMMERCIAL AUTO', icon: Truck, commercial: 'commercialAuto' }, { name: 'TRUCKING', icon: Container, commercial: 'trucking' }, { name: 'COMMERCIAL PROPERTY', icon: Factory, commercial: 'property' }, { name: 'BUSINESSOWNER/ CONTRACTOR GL', icon: Store, commercial: 'bop' }, { name: 'EPLI, NPDO, CYBER AND MORE', icon: BriefcaseBusiness, commercial: 'mgmt' }] },
 ];
 
 type Choice = { kind: 'personal'; key: ProductKey } | { kind: 'business'; key: CommercialKey } | null;

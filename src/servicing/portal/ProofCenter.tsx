@@ -6,6 +6,7 @@ import type { PolicyDocument, PolicyRecord } from '@/types/policy';
 import { useQuote } from '@/context/useQuote';
 import { useOpenAccount } from '@/servicing/account/useOpenAccount';
 import { loadWithCar, loaderIconFor } from '@/services/carLoader';
+import { MORTGAGEE_PRODUCTS } from '@/products/property';
 import { queryFromText, resolveSearch } from '@/servicing/account/accountModel';
 import { customerKey } from '@/servicing/policyFilters';
 import { DocumentPreview } from '@/servicing/PolicyDocuments';
@@ -96,7 +97,7 @@ function Hub({ policy, onPreview }: { policy: PolicyRecord; onPreview: (document
     <h1 className="mt-[4px] text-[32px] font-light leading-[40px]">Which document would you like to review?</h1>
     <div className="mt-[28px] rounded-[3px] border border-[#d5d9dd]">
       {hasIdCards(policy) && <DocumentOption title="ID Cards" text="View, send, or print your ID cards to keep in your car." onClick={() => openProof(policy.id, 'idcards')} />}
-      <DocumentOption title="Verification of Insurance" text={policy.product === 'renters' ? 'Get proof of insurance for your landlord or property manager.' : 'Get proof of insurance for your lender or leasing company.'} onClick={() => openProof(policy.id, 'verification')} />
+      <DocumentOption title="Verification of Insurance" text={policy.product === 'renters' ? 'Get proof of insurance for your landlord or property manager.' : (MORTGAGEE_PRODUCTS as string[]).includes(policy.product) ? 'Get proof of insurance (evidence of insurance) for your mortgage company.' : 'Get proof of insurance for your lender or leasing company.'} onClick={() => openProof(policy.id, 'verification')} />
       {declarations && <DocumentOption title="Declarations Page" text="See a full summary of your coverages and policy details." onClick={() => onPreview(declarations)} />}
     </div>
   </>;
@@ -169,6 +170,8 @@ function IdCardsPage({ policy, onPreview, onNotice }: { policy: PolicyRecord; on
 function VerificationPage({ policy, onPreview }: { policy: PolicyRecord; onPreview: (document: PolicyDocument) => void }) {
   const { servicePolicy, state } = useQuote();
   const renters = policy.product === 'renters';
+  const home = (MORTGAGEE_PRODUCTS as string[]).includes(policy.product);
+  const firstMortgagee = home ? policy.lienholders.find((holder) => holder.kind === 'Mortgagee' && holder.position !== 'Second') : undefined;
   const [unit, setUnit] = useState(policy.units[0]?.label ?? policy.productName);
   const [kind, setKind] = useState<'Lienholder' | 'Lessor'>('Lienholder');
   const [name, setName] = useState('');
@@ -176,8 +179,8 @@ function VerificationPage({ policy, onPreview }: { policy: PolicyRecord; onPrevi
   const [loan, setLoan] = useState('');
   const [error, setError] = useState('');
   const generate = () => {
-    if (!name.trim() || !address.trim()) { setError(`Enter the ${renters ? 'landlord or property manager' : 'lender or leasing company'} name and address.`); return; }
-    const document: PolicyDocument = { id: newId('doc'), type: 'Evidence of Insurance', date: state.simDate, term: policy.termNumber, data: { name: name.trim(), address: address.trim(), loanNumber: loan.trim(), unit, kind: renters ? 'Interested party' : kind } };
+    if (!name.trim() || !address.trim()) { setError(`Enter the ${renters ? 'landlord or property manager' : home ? 'mortgage company' : 'lender or leasing company'} name and address.`); return; }
+    const document: PolicyDocument = { id: newId('doc'), type: 'Evidence of Insurance', date: state.simDate, term: policy.termNumber, data: { name: name.trim(), address: address.trim(), loanNumber: loan.trim(), unit, kind: renters ? 'Interested party' : home ? 'Mortgagee' : kind } };
     const result = servicePolicy(policy.id, (record, day) => withHistory({ ...record, documents: [...record.documents, document] }, day, 'Verification of insurance issued', `Issued to ${name.trim()} for ${unit}.`));
     if (result) { setError(result); return; }
     onPreview(document);
@@ -186,13 +189,14 @@ function VerificationPage({ policy, onPreview }: { policy: PolicyRecord; onPrevi
   return <>
     <h2 className="text-[16px] font-bold">Verification of Insurance</h2>
     <h1 className="mt-[4px] text-[34px] font-light leading-[42px]">Who needs proof of insurance?</h1>
-    <p className="mt-2 max-w-[760px] text-[14px] text-[#3d4b55]">We&rsquo;ll create a verification letter showing the coverage on this {renters ? 'policy' : 'vehicle'}. It opens ready to print, save as PDF or send to the {renters ? 'landlord' : 'lender or leasing company'}.</p>
+    <p className="mt-2 max-w-[760px] text-[14px] text-[#3d4b55]">We&rsquo;ll create a verification letter showing the coverage on this {renters || home ? 'policy' : 'vehicle'}. It opens ready to print, save as PDF or send to the {renters ? 'landlord' : home ? 'mortgage company' : 'lender or leasing company'}.</p>
+    {home && firstMortgagee && !name && <button type="button" onClick={() => { setName(firstMortgagee.name); setAddress(firstMortgagee.address); setLoan(firstMortgagee.loanNumber); }} className="mt-2 text-[13px] font-bold text-[#0073cf] underline">Use the first mortgagee on the policy ({firstMortgagee.name})</button>}
     <div className="mt-6 grid max-w-[760px] grid-cols-2 gap-4">
-      {!renters && field('Vehicle', <SelectControl value={unit} options={policy.units.map((entry) => entry.label)} onChange={setUnit} />)}
-      {!renters && field('Interest', <SelectControl value={kind} options={['Lienholder', 'Lessor']} onChange={(value) => setKind(value as 'Lienholder' | 'Lessor')} />)}
-      {field(renters ? 'Landlord / property manager' : 'Lender or leasing company', <TextControl value={name} onChange={setName} />)}
+      {!renters && !home && field('Vehicle', <SelectControl value={unit} options={policy.units.map((entry) => entry.label)} onChange={setUnit} />)}
+      {!renters && !home && field('Interest', <SelectControl value={kind} options={['Lienholder', 'Lessor']} onChange={(value) => setKind(value as 'Lienholder' | 'Lessor')} />)}
+      {field(renters ? 'Landlord / property manager' : home ? 'Mortgage company' : 'Lender or leasing company', <TextControl value={name} onChange={setName} />)}
       {field('Mailing address', <TextControl value={address} onChange={setAddress} />)}
-      {!renters && field('Loan or lease number (optional)', <TextControl value={loan} onChange={setLoan} />)}
+      {!renters && field(home ? 'Loan number' : 'Loan or lease number (optional)', <TextControl value={loan} onChange={setLoan} />)}
     </div>
     <InlineError message={error} />
     <button type="button" onClick={generate} className="mt-5 h-[44px] rounded-[2px] bg-[#0073cf] px-[22px] text-[15px] font-bold text-white hover:bg-[#003865]">Create Verification</button>

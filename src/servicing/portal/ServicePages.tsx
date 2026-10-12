@@ -118,7 +118,7 @@ function ReportClaimModal({ onClose }: { onClose: (message?: string) => void }) 
   const policies = state.policies.filter(inForce);
   const [policyId, setPolicyId] = useState(policies[0]?.id ?? '');
   const policy = policies.find((entry) => entry.id === policyId);
-  const group = !policy ? 'vehicle' : policy.source.kind === 'commercial' ? 'commercial' : policy.product === 'renters' ? 'property' : 'vehicle';
+  const group = !policy ? 'vehicle' : policy.source.kind === 'commercial' ? 'commercial' : ['renters', 'homeowners', 'condo', 'landlord'].includes(policy.product) ? 'property' : 'vehicle';
   const [form, setForm] = useState({ lossDate: state.simDate, type: '', unit: '', description: '', injuries: 'No', police: '', atFault: 'Undetermined' });
   const [error, setError] = useState('');
   const set = (patch: Partial<typeof form>) => setForm({ ...form, ...patch });

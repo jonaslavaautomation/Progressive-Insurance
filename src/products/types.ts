@@ -2,10 +2,10 @@
 // Travel Trailer, Renters). Auto keeps its dedicated model in src/types/quote.ts.
 import type { BillPlan, RatingFactor } from '@/types/quote';
 
-export type OtherProductKey = 'motorcycle' | 'boat' | 'motorhome' | 'trailer' | 'snowmobile' | 'renters';
+export type OtherProductKey = 'motorcycle' | 'boat' | 'motorhome' | 'trailer' | 'snowmobile' | 'renters' | 'homeowners' | 'condo' | 'landlord';
 export type ProductKey = 'auto' | OtherProductKey;
 /** Commercial Lines products (quoted in the separate Commercial flow). */
-export type CommercialKey = 'commercialAuto' | 'bop' | 'mgmt';
+export type CommercialKey = 'commercialAuto' | 'trucking' | 'bop' | 'property' | 'mgmt';
 /** Any product a policy can be issued for. */
 export type AnyProductKey = ProductKey | CommercialKey;
 
@@ -19,6 +19,8 @@ export interface FieldContext {
   /** Auto vehicles on the quote, for e.g. a trailer's tow vehicle. */
   autoVehicles: { id: string; label: string }[];
   mailingZip: string;
+  /** Commercial Lines: the business profile (industry, entity, revenue...). */
+  business?: Record<string, string>;
 }
 
 export interface FieldDef {
@@ -59,6 +61,9 @@ export interface InterestedParty {
   id: string;
   name: string;
   address: string;
+  /** Mortgagees (Homeowners): loan number and lien position. */
+  loanNumber?: string;
+  position?: 'First' | 'Second';
 }
 
 export interface ProductQuote {

@@ -173,7 +173,7 @@ export function VehicleUpdateModal({ policy, vehicle, onClose }: { policy: Polic
   return <QuickChange policy={policy} title={`Update Vehicle: ${name}`} initial={initial} build={build} onClose={onClose} fields={[{ key: 'primaryUse', label: 'Primary use', options: PRIMARY_USES }, { key: 'annualMiles', label: 'Annual miles', options: ANNUAL_MILES }, { key: 'garagingZip', label: 'Garaging ZIP code', digits: 5 }]} />;
 }
 
-const PERSONAL: ProductKey[] = ['auto', 'motorcycle', 'boat', 'motorhome', 'trailer', 'snowmobile', 'renters'];
+const PERSONAL: ProductKey[] = ['auto', 'motorcycle', 'boat', 'motorhome', 'trailer', 'snowmobile', 'homeowners', 'renters', 'condo', 'landlord'];
 
 export function NewQuotesModal({ policy, owned, onClose }: { policy: PolicyRecord; owned: string[]; onClose: Close }) {
   const { startQuoteFor } = useQuote();

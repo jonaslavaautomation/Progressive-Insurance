@@ -182,11 +182,11 @@ function SummaryTab({ policy, open, openDoc }: { policy: PolicyRecord; open: (di
         <WizardRow label="Minimum Due Now" strong value={formatCurrency(engine.minimumDue(policy, day))} />
         <WizardRow label="Agent" value={`${policy.agentName} · ${policy.agentCode}`} />
       </WizardCard>
-      <WizardCard title="Named Insured" split={false}>
+      <WizardCard title={policy.source.kind === 'commercial' ? 'Named Insured (Business)' : 'Named Insured'} split={false}>
         <WizardRow label="Name" value={policy.insured.name} />
         <WizardRow label="Mailing Address" value={`${policy.insured.street}, ${policy.insured.cityStateZip}`} />
         <WizardRow label="Phone / Email" value={`${policy.insured.phone} · ${policy.insured.email || '—'}`} />
-        {policy.drivers.length > 0 && <WizardRow label="Rated Drivers/Operators" value={policy.drivers.join(', ')} />}
+        {policy.drivers.length > 0 && <WizardRow label={policy.source.kind === 'commercial' ? 'Scheduled Drivers' : 'Rated Drivers/Operators'} value={policy.drivers.join(', ')} />}
       </WizardCard>
     </div>
     <div className="w-[540px] shrink-0 space-y-[20px]">

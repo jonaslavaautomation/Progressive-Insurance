@@ -1,6 +1,6 @@
 // Full-page "Loading...this should only take a moment." screen the carrier shows while it opens a
 // page (an account, a policy screen, ID cards, a portal page). The picture follows the policy: a
-// car for auto and other vehicle products, a house for home (renters) policies.
+// car for auto and other vehicle products, a house for home policies (Homeowners and Renters).
 
 export type LoaderIcon = 'auto' | 'home';
 
@@ -17,7 +17,7 @@ export const carLoaderStore = {
 };
 
 /** Home policies show the house; everything else shows the car. */
-export const loaderIconFor = (product: string | undefined): LoaderIcon => (product === 'renters' ? 'home' : 'auto');
+export const loaderIconFor = (product: string | undefined): LoaderIcon => (['renters', 'homeowners', 'condo', 'landlord'].includes(product ?? '') ? 'home' : 'auto');
 
 /** Shows the loading page, then runs `work`. Ignored while a page is already loading. */
 export function loadWithCar(work: () => void, icon: LoaderIcon = 'auto', ms = LOADING_MS) {

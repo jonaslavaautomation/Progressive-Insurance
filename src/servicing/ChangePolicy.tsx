@@ -11,7 +11,7 @@ import { createDriver, createVehicle } from '@/context/quoteStore';
 import { ANNUAL_MILES, BI_PD, PIP_OPTIONS, COLL_DEDUCTIBLES, ETE, GENDERS, MARITAL_STATUSES, MED_PAY, OTC_DEDUCTIBLES, PRIMARY_RESIDENCES, PRIMARY_USES, RELATIONSHIPS, TOWING, UM_BI, US_STATES, coverageOptions } from '@/data/options';
 import { MODEL_YEARS, bodyStylesFor, decodeVin, lookupVehicleDetails, makesFor, modelsFor } from '@/data/vehicleCatalog';
 import { configFor } from '@/products/configs';
-import { DRIVER_ACCIDENTS, DRIVER_EXPERIENCE, DRIVER_LICENSE_TYPES, DRIVER_VIOLATIONS } from '@/commercial/configs';
+import { DRIVER_ACCIDENTS, DRIVER_EXPERIENCE, DRIVER_LICENSE_TYPES, DRIVER_ROLES, DRIVER_VIOLATIONS } from '@/commercial/configs';
 import { createUnit, fieldContext } from '@/products/engine';
 import { commercialContext, createCommercialDriver } from '@/commercial/engine';
 import { driverName, vehicleName } from '@/utils/ratingEngine';
@@ -25,11 +25,13 @@ import { Modal } from '@/components/wizard/Modal';
 import { modalButton } from '@/components/wizard/modalStyles';
 import { InlineError, SelectControl, TextControl } from '@/components/wizard/primitives';
 import { ConfigField } from '@/components/products/Editors';
+import { hasIdCards } from '@/servicing/portal/portalUtils';
 
 const TYPE_LABELS: Record<ChangeType, string> = {
-  address: 'Change address', contact: 'Update phone / email', addVehicle: 'Add a vehicle', replaceVehicle: 'Replace a vehicle', removeVehicle: 'Remove a vehicle',
+  address: 'Change address', contact: 'Update phone / email', addVehicle: 'Add a vehicle', changeVehicle: 'Change a vehicle (use, miles, garaging, ownership, driver)', replaceVehicle: 'Replace a vehicle', removeVehicle: 'Remove a vehicle',
   addDriver: 'Add a driver', removeDriver: 'Remove or exclude a driver', coverages: 'Change coverages', lienholder: 'Add or remove a lienholder / loss payee',
   addUnit: 'Add a unit', removeUnit: 'Remove a unit',
+  dwelling: 'Update dwelling information (Coverage A, roof, protection, occupancy)', mortgagee: 'Add, change or remove a mortgagee / escrow billing',
 };
 
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -60,10 +62,11 @@ function labelFor(type: ChangeType, policy: PolicyRecord): string {
   if (type === 'addUnit') return `Add a ${config?.unitLabel.toLowerCase() ?? 'unit'}`;
   if (type === 'removeUnit') return `Remove a ${config?.unitLabel.toLowerCase() ?? 'unit'}`;
   if (type === 'lienholder' && policy.product === 'renters') return 'Add or remove an interested party (landlord)';
+  if (type === 'lienholder') return 'Add, change or remove a lienholder / lessor';
   return TYPE_LABELS[type];
 }
 
-interface EditorProps { policy: PolicyRecord; draft: PolicySource; onSave: (draft: PolicySource, description: string, extra?: { vehicles?: boolean; lienholders?: PolicyRecord['lienholders']; added?: PolicyRecord['lienholders'] }) => void; lienholders: PolicyRecord['lienholders']; effectiveDate: string }
+interface EditorProps { policy: PolicyRecord; draft: PolicySource; onSave: (draft: PolicySource, description: string, extra?: { vehicles?: boolean; lienholders?: PolicyRecord['lienholders']; added?: PolicyRecord['lienholders']; billTo?: 'Mortgagee' | 'Insured' }) => void; lienholders: PolicyRecord['lienholders']; effectiveDate: string; billTo: 'Mortgagee' | 'Insured' }
 
 // ------------------------------------------------------------------ Address change (guided)
 
@@ -129,14 +132,14 @@ function AddressEditor({ policy, draft, onSave }: EditorProps) {
     <ol className="mb-4 flex gap-2 text-[12px]">{steps.map((label, position) => <li key={label} className={`flex items-center gap-1 rounded-full px-3 py-1 font-bold ${position === index ? 'bg-[#003865] text-white' : position < index ? 'bg-[#e6f4ef] text-[#0b5d3f]' : 'bg-[#eef3f6] text-[#5c6670]'}`}>{position + 1}. {label}</li>)}</ol>
     {step === 'enter' && <div className="grid grid-cols-2 gap-3">
       <p className="col-span-2 rounded-[3px] bg-[#f6f9fb] px-3 py-2 text-[12px]">Current address: <b>{[current.line1, current.line2].filter(Boolean).join(' ')}, {current.city} {current.zip}</b></p>
-      <Field label="What changed?" wide><SelectControl value={moved} options={[{ value: 'moved', label: 'Customer moved (mailing and garaging address)' }, { value: 'mailing', label: 'Mailing address only (vehicles stay garaged where they are)' }]} onChange={(value) => setMoved(value as 'moved' | 'mailing')} /></Field>
+      <Field label="What changed?" wide><SelectControl value={moved} options={personal ? [{ value: 'moved', label: 'Customer moved (mailing and garaging address)' }, { value: 'mailing', label: 'Mailing address only (vehicles stay garaged where they are)' }] : [{ value: 'moved', label: 'Business relocated (mailing and scheduled locations)' }, { value: 'mailing', label: 'Mailing address only (scheduled units stay where they are)' }]} onChange={(value) => setMoved(value as 'moved' | 'mailing')} /></Field>
       <Field label="Street address" wide><TextControl value={entered.line1} onChange={(line1) => set({ line1 })} placeholder="e.g. 120 Oak Sample Street" /></Field>
       <Field label="Apt / suite / unit (optional)"><TextControl value={entered.line2} onChange={(line2) => set({ line2 })} /></Field>
       <Field label="City"><TextControl value={entered.city} onChange={(city) => set({ city })} /></Field>
       <Field label="State"><SelectControl value={entered.state} options={US_STATES} onChange={(state) => set({ state })} /></Field>
       <Field label="ZIP code"><TextControl value={entered.zip} mask="zip" onChange={(zip) => set({ zip })} /></Field>
       {personal && moved === 'moved' && <Field label="Residence at the new address"><SelectControl value={residence} options={PRIMARY_RESIDENCES} onChange={setResidence} /></Field>}
-      <p className="col-span-2 text-[12px] text-[#5c6670]">Use the date the customer moved as the change effective date. Rates follow the garaging ZIP, so the premium may go up or down.</p>
+      <p className="col-span-2 text-[12px] text-[#5c6670]">{personal ? 'Use the date the customer moved as the change effective date. Rates follow the garaging ZIP, so the premium may go up or down.' : 'Use the date the business relocated as the change effective date. Rates follow the garaging or location ZIP, so the premium may go up or down.'}</p>
       <div className="col-span-2"><InlineError message={error} /><SaveButton onClick={verify} label="Verify Address" /></div>
     </div>}
     {step === 'verify' && <div className="space-y-3 text-[13px]">
@@ -147,7 +150,7 @@ function AddressEditor({ policy, draft, onSave }: EditorProps) {
     {step === 'garage' && <div className="space-y-3 text-[13px]">
       <p><b>{[chosen.line1, chosen.line2].filter(Boolean).join(' ')}, {chosen.city}, {rules.code} {chosen.zip}</b></p>
       {units.length ? <>
-        <p>{moved === 'moved' ? 'Confirm every vehicle now kept overnight at the new address.' : 'Mailing address only: vehicles stay garaged at their current ZIP. Check any that did move.'}</p>
+        <p>{moved === 'moved' ? `Confirm every ${personal ? 'vehicle now kept overnight' : 'scheduled unit now garaged or located'} at the new address.` : `Mailing address only: ${personal ? 'vehicles stay garaged' : 'scheduled units stay'} at their current ZIP. Check any that did move.`}</p>
         <ul className="space-y-1">{units.map((unit) => <li key={unit.id}><label className="flex items-center gap-2"><input type="checkbox" checked={garaged.includes(unit.id)} onChange={(event) => setGaraged(event.target.checked ? [...garaged, unit.id] : garaged.filter((entry) => entry !== unit.id))} className="h-[16px] w-[16px] accent-[#003865]" />{unit.label} <span className="text-[#5c6670]">garaged {unit.zip || '—'}{garaged.includes(unit.id) ? ` → ${chosen.zip.slice(0, 5)}` : ''}</span></label></li>)}</ul>
       </> : <p>No garaged units on this policy.</p>}
       <div className="flex gap-2"><button type="button" onClick={() => setStep('verify')} className={modalButton.secondary}>Back</button><SaveButton onClick={save} label="Save Address Change" /></div>
@@ -329,7 +332,7 @@ function RemoveVehicleEditor({ policy, draft, onSave, lienholders }: EditorProps
 }
 
 function AddDriverEditor({ draft, onSave }: EditorProps) {
-  const [d, setD] = useState({ firstName: '', lastName: '', dob: '', gender: '', maritalStatus: '', relationship: '', licenseState: draft.kind === 'personal' ? draft.quote.policy.quoteState : draft.quote.business.state, licenseNumber: '', ageFirstLicensed: '16', driverStatus: 'Rated', licenseType: DRIVER_LICENSE_TYPES[0], experience: '', violations: '0', accidents: '0' });
+  const [d, setD] = useState({ firstName: '', lastName: '', dob: '', gender: '', maritalStatus: '', relationship: '', licenseState: draft.kind === 'personal' ? draft.quote.policy.quoteState : draft.quote.business.state, licenseNumber: '', ageFirstLicensed: '16', driverStatus: 'Rated', licenseType: DRIVER_LICENSE_TYPES[0], experience: '', violations: '0', accidents: '0', role: DRIVER_ROLES[1], hireDate: '' });
   const [error, setError] = useState('');
   const set = (patch: Partial<typeof d>) => setD({ ...d, ...patch });
   const commercial = draft.kind === 'commercial';
@@ -347,7 +350,12 @@ function AddDriverEditor({ draft, onSave }: EditorProps) {
       onSave(next, `Added driver ${driverName(driver)} (${d.driverStatus})`);
     } else {
       if (!d.experience) { setError('Select commercial driving experience.'); return; }
-      next.quote.drivers.push({ ...createCommercialDriver(), firstName: d.firstName, lastName: d.lastName, dob: d.dob, licenseState: d.licenseState, licenseNumber: d.licenseNumber.toUpperCase(), licenseType: d.licenseType, experience: d.experience, violations: d.violations, accidents: d.accidents });
+      if (!parseDate(d.hireDate)) { setError('Enter the date hired (MM/DD/YYYY).'); return; }
+      if (d.violations === '3 or more') { setError('Drivers with 3 or more violations in 3 years are not acceptable.'); return; }
+      if (next.quote.productQuotes.trucking && d.licenseType.startsWith('CDL') && d.experience === 'Less than 2 years') { setError('Trucking requires at least 2 years of verifiable CDL driving experience.'); return; }
+      const interstate = (!!next.quote.productQuotes.trucking && next.quote.productQuotes.trucking.answers.operation !== 'Intrastate only') || next.quote.productQuotes.commercialAuto?.answers.interstate === 'Yes';
+      if (interstate && age < 21) { setError('Drivers in interstate commerce must be at least 21 years old (49 CFR 391.11).'); return; }
+      next.quote.drivers.push({ ...createCommercialDriver(), firstName: d.firstName, lastName: d.lastName, dob: d.dob, licenseState: d.licenseState, licenseNumber: d.licenseNumber.toUpperCase(), licenseType: d.licenseType, experience: d.experience, violations: d.violations, accidents: d.accidents, role: d.role, hireDate: d.hireDate });
       onSave(next, `Added driver ${d.firstName} ${d.lastName} (${d.licenseType})`);
     }
   };
@@ -358,6 +366,8 @@ function AddDriverEditor({ draft, onSave }: EditorProps) {
     <Field label="License state"><SelectControl value={d.licenseState} options={US_STATES} onChange={(licenseState) => set({ licenseState })} /></Field>
     <Field label="License number"><TextControl value={d.licenseNumber} onChange={(licenseNumber) => set({ licenseNumber })} /></Field>
     {commercial ? <>
+      <Field label="Relationship to business"><SelectControl value={d.role} options={DRIVER_ROLES} onChange={(role) => set({ role })} /></Field>
+      <Field label="Date hired"><TextControl value={d.hireDate} mask="date" placeholder="MM/DD/YYYY" onChange={(hireDate) => set({ hireDate })} className="mt-[8px] w-full" /></Field>
       <Field label="License type"><SelectControl value={d.licenseType} options={DRIVER_LICENSE_TYPES} onChange={(licenseType) => set({ licenseType })} /></Field>
       <Field label="Commercial driving experience"><SelectControl value={d.experience} options={DRIVER_EXPERIENCE} onChange={(experience) => set({ experience })} /></Field>
       <Field label="Violations (3 years)"><SelectControl value={d.violations} options={DRIVER_VIOLATIONS} onChange={(violations) => set({ violations })} /></Field>
@@ -483,6 +493,7 @@ function RemoveUnitEditor({ policy, draft, onSave }: EditorProps) {
 
 function LienholderEditor({ policy, draft, onSave, lienholders }: EditorProps) {
   const renters = policy.product === 'renters';
+  const [editing, setEditing] = useState<PolicyRecord['lienholders'][number] | null>(null);
   const units = policy.product === 'auto' && draft.kind === 'personal' ? draft.quote.vehicles.map((vehicle) => ({ id: vehicle.id, label: vehicleName(vehicle), comp: vehicle.compDeductible, coll: vehicle.collDeductible })) : (productQuoteOf(draft, policy)?.units ?? []).map((unit) => ({ id: unit.id, label: configOf(policy)!.describe(unit), comp: unit.coverages.comp ?? unit.coverages.deductible ?? '', coll: unit.coverages.coll ?? unit.coverages.deductible ?? '' }));
   const [unitId, setUnitId] = useState(units[0]?.id ?? '');
   const [kind, setKind] = useState<'Lienholder' | 'Lessor'>('Lienholder');
@@ -499,7 +510,8 @@ function LienholderEditor({ policy, draft, onSave, lienholders }: EditorProps) {
     onSave(clone(draft), `${renters ? 'Interested party' : kind} added on ${unit.label}: ${holder.name}`, { lienholders: [...lienholders, holder], added: [holder] });
   };
   return <div className="space-y-3">
-    {lienholders.length > 0 && <ul className="space-y-1 text-[13px]">{lienholders.map((holder) => <li key={holder.id} className="flex items-center justify-between rounded-[3px] border border-[#cfdbe3] px-3 py-2"><span><b>{holder.name}</b> · {holder.kind} · {holder.unit}{holder.loanNumber ? ` · Loan #${holder.loanNumber}` : ''}</span><button type="button" onClick={() => onSave(clone(draft), `${holder.kind} removed from ${holder.unit}: ${holder.name}`, { lienholders: lienholders.filter((entry) => entry.id !== holder.id) })} className="flex items-center gap-1 text-[12px] font-bold text-[#c8102e] underline"><Trash2 size={13} />Remove</button></li>)}</ul>}
+    {lienholders.length > 0 && <ul className="space-y-1 text-[13px]">{lienholders.map((holder) => <li key={holder.id} className="flex items-center justify-between rounded-[3px] border border-[#cfdbe3] px-3 py-2"><span><b>{holder.name}</b> · {holder.kind} · {holder.unit}{holder.loanNumber ? ` · Loan #${holder.loanNumber}` : ''}</span><span className="flex items-center gap-3">{!renters && <button type="button" onClick={() => setEditing(holder)} className="text-[12px] font-bold text-[#0073cf] underline">Change</button>}<button type="button" onClick={() => onSave(clone(draft), `${holder.kind} removed from ${holder.unit}: ${holder.name}`, { lienholders: lienholders.filter((entry) => entry.id !== holder.id) })} className="flex items-center gap-1 text-[12px] font-bold text-[#c8102e] underline"><Trash2 size={13} />Remove</button></span></li>)}</ul>}
+    {editing && <LenderChangeForm holder={editing} onCancel={() => setEditing(null)} onSubmit={(holder, description) => onSave(clone(draft), description, { lienholders: lienholders.map((entry) => (entry.id === holder.id ? holder : entry)), added: [holder] })} />}
     <div className="grid grid-cols-2 gap-3">
       <Field label={renters ? 'Location' : 'Vehicle / unit'}><SelectControl value={unitId} options={units.map((entry) => ({ value: entry.id, label: entry.label }))} onChange={setUnitId} /></Field>
       {!renters && <Field label="Type"><SelectControl value={kind} options={['Lienholder', 'Lessor']} onChange={(value) => setKind(value as 'Lienholder' | 'Lessor')} /></Field>}
@@ -511,6 +523,173 @@ function LienholderEditor({ policy, draft, onSave, lienholders }: EditorProps) {
   </div>;
 }
 
+/** Change a lienholder/lessor/mortgagee's name, address or loan number without removing it. */
+function LenderChangeForm({ holder, onCancel, onSubmit }: { holder: PolicyRecord['lienholders'][number]; onCancel: () => void; onSubmit: (holder: PolicyRecord['lienholders'][number], description: string) => void }) {
+  const [name, setName] = useState(holder.name);
+  const [address, setAddress] = useState(holder.address);
+  const [loan, setLoan] = useState(holder.loanNumber);
+  const [error, setError] = useState('');
+  const label = holder.position ? `${holder.position} ${holder.kind}` : holder.kind;
+  const submit = () => {
+    if (!name.trim() || !address.trim()) { setError('Enter the company name and mailing address.'); return; }
+    if (holder.kind === 'Mortgagee' && !/^[A-Za-z0-9-]{4,20}$/.test(loan.trim())) { setError('Enter the loan number (4 to 20 letters, digits or dashes).'); return; }
+    const changed = [name.trim() !== holder.name && `name ${holder.name} to ${name.trim()}`, address.trim() !== holder.address && 'mailing address', loan.trim() !== holder.loanNumber && `loan # ${holder.loanNumber || 'none'} to ${loan.trim() || 'none'}`].filter(Boolean);
+    if (!changed.length) { setError('Nothing has changed yet.'); return; }
+    onSubmit({ ...holder, name: name.trim(), address: address.trim(), loanNumber: loan.trim() }, `${label} changed${holder.kind === 'Mortgagee' ? '' : ` on ${holder.unit}`}: ${changed.join(', ')}`);
+  };
+  return <div className="space-y-3 rounded-[3px] border border-[#0073cf] bg-[#f6f9fb] p-3">
+    <div className="text-[13px] font-bold text-[#003865]">Change {label}: {holder.name}</div>
+    <div className="grid grid-cols-2 gap-3">
+      <Field label="Company name and clause"><TextControl value={name} onChange={setName} /></Field>
+      <Field label="Mailing address"><TextControl value={address} onChange={setAddress} /></Field>
+      <Field label={holder.kind === 'Mortgagee' ? 'Loan number' : 'Loan / account number'}><TextControl value={loan} onChange={setLoan} /></Field>
+    </div>
+    <InlineError message={error} />
+    <div className="flex gap-2"><button type="button" onClick={onCancel} className={modalButton.secondary}>Cancel</button><SaveButton onClick={submit} label={`Save ${holder.kind} Change`} /></div>
+  </div>;
+}
+
+/** Auto: change an existing vehicle's use, miles, garaging, ownership or principal driver. */
+function ChangeVehicleEditor({ policy, draft, onSave, lienholders }: EditorProps) {
+  const vehicles = draft.kind === 'personal' ? draft.quote.vehicles : [];
+  const [target, setTarget] = useState(vehicles[0]?.id ?? '');
+  const vehicle = vehicles.find((entry) => entry.id === target);
+  const label = vehicle ? vehicleName(vehicle) : '';
+  const lien = lienholders.find((holder) => holder.unit === label);
+  const rated = draft.kind === 'personal' ? draft.quote.drivers.filter((driver) => driver.driverStatus === 'Rated') : [];
+  const principal = rated.find((driver) => driver.primaryVehicleId === target);
+  const initial = { primaryUse: vehicle?.primaryUse ?? '', annualMiles: vehicle?.annualMiles ?? '', garagingZip: vehicle?.garagingZip ?? '', rideshare: vehicle?.rideshare || 'No', ownership: lien ? (lien.kind === 'Lessor' ? 'Leased' : 'Financed') : 'Owned', driverId: principal?.id ?? '' };
+  const [v, setV] = useState<Record<keyof typeof initial, string>>(initial);
+  const [lender, setLender] = useState({ name: '', address: '', loanNumber: '' });
+  const [error, setError] = useState('');
+  if (draft.kind !== 'personal' || !vehicle) return null;
+  const personal = draft as { kind: 'personal'; quote: QuoteData };
+  const choose = (id: string) => {
+    const next = vehicles.find((entry) => entry.id === id);
+    const nextLien = next ? lienholders.find((holder) => holder.unit === vehicleName(next)) : undefined;
+    setTarget(id);
+    setV({ primaryUse: next?.primaryUse ?? '', annualMiles: next?.annualMiles ?? '', garagingZip: next?.garagingZip ?? '', rideshare: next?.rideshare || 'No', ownership: nextLien ? (nextLien.kind === 'Lessor' ? 'Leased' : 'Financed') : 'Owned', driverId: rated.find((driver) => driver.primaryVehicleId === id)?.id ?? '' });
+    setError('');
+  };
+  const submit = () => {
+    const rules = rulesFor(policy.state);
+    if (!rules.zip.test(v.garagingZip)) { setError(`The vehicle must be garaged in ${rules.name} (${rules.zipHint}).`); return; }
+    const newlyFinanced = v.ownership !== 'Owned' && v.ownership !== initial.ownership;
+    if (newlyFinanced && (!lender.name.trim() || !lender.address.trim())) { setError(`Enter the ${v.ownership === 'Leased' ? 'leasing company' : 'lender'} name and mailing address.`); return; }
+    if (v.ownership !== 'Owned' && (vehicle.compDeductible === 'None' || vehicle.collDeductible === 'None')) { setError(`${label} has no Comprehensive/Collision. Lenders require both; add them under Change coverages first.`); return; }
+    const changes: string[] = [];
+    if (v.primaryUse !== initial.primaryUse) changes.push(`primary use ${initial.primaryUse} to ${v.primaryUse}`);
+    if (v.annualMiles !== initial.annualMiles) changes.push(`annual miles ${initial.annualMiles} to ${v.annualMiles}`);
+    if (v.garagingZip !== initial.garagingZip) changes.push(`garaging ZIP ${initial.garagingZip} to ${v.garagingZip}`);
+    if (v.rideshare !== initial.rideshare) changes.push(`rideshare use ${v.rideshare === 'Yes' ? 'added' : 'removed'}`);
+    if (v.ownership !== initial.ownership) changes.push(`ownership ${initial.ownership.toLowerCase()} to ${v.ownership.toLowerCase()}${v.ownership === 'Owned' ? ' (loan paid off, lienholder removed)' : `, ${v.ownership === 'Leased' ? 'lessor' : 'lienholder'} ${lender.name.trim()}`}`);
+    if (v.driverId !== initial.driverId) changes.push(`principal driver ${rated.find((driver) => driver.id === v.driverId) ? driverName(rated.find((driver) => driver.id === v.driverId)!) : 'none'}`);
+    if (!changes.length) { setError('Nothing has changed yet.'); return; }
+    const next = clone(personal);
+    next.quote.vehicles = next.quote.vehicles.map((entry) => (entry.id === vehicle.id ? { ...entry, primaryUse: v.primaryUse, annualMiles: v.annualMiles, garagingZip: v.garagingZip, rideshare: v.rideshare as 'Yes' | 'No' } : entry));
+    if (v.driverId !== initial.driverId) next.quote.drivers = next.quote.drivers.map((driver) => (driver.id === v.driverId ? { ...driver, primaryVehicleId: vehicle.id } : driver));
+    let list = lienholders;
+    let added: PolicyRecord['lienholders'] = [];
+    if (v.ownership === 'Owned' && lien) list = lienholders.filter((holder) => holder.id !== lien.id);
+    if (newlyFinanced) {
+      const holder = { id: `lh-${Math.random().toString(36).slice(2, 9)}`, unit: label, name: lender.name.trim(), address: lender.address.trim(), loanNumber: lender.loanNumber.trim(), kind: v.ownership === 'Leased' ? 'Lessor' as const : 'Lienholder' as const };
+      list = [...lienholders.filter((holder) => holder.unit !== label), holder];
+      added = [holder];
+    }
+    onSave(next, `Changed ${label}: ${changes.join('; ')}`, { vehicles: true, lienholders: list, added });
+  };
+  return <div className="grid grid-cols-2 gap-3">
+    <Field label="Vehicle" wide><SelectControl value={target} options={vehicles.map((entry) => ({ value: entry.id, label: `${vehicleName(entry)} (VIN ${entry.vin || '—'})` }))} onChange={choose} /></Field>
+    <Field label="Primary use"><SelectControl value={v.primaryUse} options={PRIMARY_USES} onChange={(primaryUse) => setV({ ...v, primaryUse })} /></Field>
+    <Field label="Annual miles"><SelectControl value={v.annualMiles} options={ANNUAL_MILES} onChange={(annualMiles) => setV({ ...v, annualMiles })} /></Field>
+    <Field label="Garaging ZIP"><TextControl value={v.garagingZip} mask="zip" onChange={(garagingZip) => setV({ ...v, garagingZip })} /></Field>
+    <Field label="Used for rideshare (Uber, Lyft)"><SelectControl value={v.rideshare} options={['No', 'Yes']} onChange={(rideshare) => setV({ ...v, rideshare })} /></Field>
+    <Field label="Ownership"><SelectControl value={v.ownership} options={['Owned', 'Financed', 'Leased']} onChange={(ownership) => setV({ ...v, ownership })} /></Field>
+    {rated.length > 0 && <Field label="Principal driver"><SelectControl value={v.driverId} options={rated.map((driver) => ({ value: driver.id, label: driverName(driver) }))} onChange={(driverId) => setV({ ...v, driverId })} /></Field>}
+    {v.ownership !== 'Owned' && v.ownership !== initial.ownership && <>
+      <Field label={v.ownership === 'Leased' ? 'Leasing company' : 'Lender (lienholder)'}><TextControl value={lender.name} onChange={(name) => setLender({ ...lender, name })} /></Field>
+      <Field label="Lender mailing address"><TextControl value={lender.address} onChange={(address) => setLender({ ...lender, address })} /></Field>
+      <Field label="Loan / lease number (optional)"><TextControl value={lender.loanNumber} onChange={(loanNumber) => setLender({ ...lender, loanNumber })} /></Field>
+    </>}
+    {v.ownership === 'Owned' && initial.ownership !== 'Owned' && <p className="col-span-2 text-[12px] text-[#5c6670]">The {lien?.kind.toLowerCase()} {lien?.name} will be removed. Get the lien release before removing a lender.</p>}
+    <div className="col-span-2"><InlineError message={error} /><SaveButton onClick={submit} label="Save Vehicle Change" /></div>
+  </div>;
+}
+
+/** Homeowners: update the dwelling (Coverage A, construction, roof, protection, alarm). */
+const DWELLING_FIELDS = ['dwellingValue', 'unitValue', 'personalProperty', 'squareFeet', 'families', 'construction', 'roofType', 'roofYear', 'protection', 'alarm', 'sprinklered', 'occupancy', 'lease'];
+function DwellingEditor({ policy, draft, onSave }: EditorProps) {
+  const config = configOf(policy)!;
+  const [next, setNext] = useState(() => clone(draft));
+  const [error, setError] = useState('');
+  const quote = productQuoteOf(next, policy);
+  const unit = quote?.units[0];
+  if (!quote || !unit || next.kind !== 'personal') return null;
+  const original = productQuoteOf(draft, policy)!.units[0].values;
+  const fields = config.unitFields.filter((field) => DWELLING_FIELDS.includes(field.key));
+  const set = (key: string, value: string) => setNext(withProductQuote(next, policy, (current) => ({ ...current, units: current.units.map((entry) => ({ ...entry, values: { ...entry.values, [key]: value } })) })));
+  const save = () => {
+    const errors: FieldErrors = {};
+    for (const field of fields) checkField(errors, field.key, field, unit.values[field.key] ?? '', '', true);
+    Object.assign(errors, config.unitRules?.(unit.values) ?? {});
+    const first = Object.values(errors)[0];
+    if (first) { setError(first); return; }
+    const show = (key: string, value: string) => (key === 'dwellingValue' && value ? `$${Number(value.replace(/\D/g, '')).toLocaleString('en-US')}` : value || 'blank');
+    const changes = fields.filter((field) => (unit.values[field.key] ?? '') !== (original[field.key] ?? '')).map((field) => `${field.label.replace(/[:*]+$/, '').replace(/ \(.*\)$/, '')}: ${show(field.key, original[field.key] ?? '')} to ${show(field.key, unit.values[field.key] ?? '')}`);
+    if (!changes.length) { setError('Nothing has changed yet.'); return; }
+    onSave(next, `Dwelling updated: ${changes.join('; ')}`);
+  };
+  return <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+    <div className="rounded-[3px] border border-[#cfdbe3]">{fields.map((field) => <ConfigField key={field.key} field={field} id={`chg.dwelling.${field.key}`} value={unit.values[field.key] ?? ''} ctx={fieldContext(next.quote, unit.values)} onChange={(value) => set(field.key, value)} />)}</div>
+    <p className="text-[12px] text-[#5c6670]">Raising Coverage A raises Coverages B, C and D with it. A new roof or alarm earns a lower rate from the change date.</p>
+    <InlineError message={error} /><SaveButton onClick={save} label="Save Dwelling Change" />
+  </div>;
+}
+
+/** Homeowners: add, change or remove first/second mortgagees and switch escrow billing. */
+function MortgageeEditor({ policy, draft, onSave, lienholders, billTo }: EditorProps) {
+  const mortgagees = lienholders.filter((holder) => holder.kind === 'Mortgagee');
+  const open = (['First', 'Second'] as const).filter((position) => !mortgagees.some((holder) => holder.position === position));
+  const [editing, setEditing] = useState<PolicyRecord['lienholders'][number] | null>(null);
+  const [form, setForm] = useState({ name: '', address: '', loanNumber: '' });
+  const [error, setError] = useState('');
+  const unit = policy.units[0]?.label ?? 'Dwelling';
+  const escrow = billTo === 'Mortgagee';
+  const add = () => {
+    const position = open[0];
+    if (!position) return;
+    if (!form.name.trim() || !form.address.trim()) { setError('Enter the mortgage company name and mailing address.'); return; }
+    if (!/^[A-Za-z0-9-]{4,20}$/.test(form.loanNumber.trim())) { setError('Enter the loan number (4 to 20 letters, digits or dashes).'); return; }
+    const holder = { id: `lh-${Math.random().toString(36).slice(2, 9)}`, unit, name: form.name.trim(), address: form.address.trim(), loanNumber: form.loanNumber.trim(), kind: 'Mortgagee' as const, position };
+    onSave(clone(draft), `${position} Mortgagee added: ${holder.name}, loan #${holder.loanNumber}`, { lienholders: [...lienholders, holder], added: [holder] });
+  };
+  const remove = (holder: PolicyRecord['lienholders'][number]) => {
+    const remaining = lienholders.filter((entry) => entry.id !== holder.id).map((entry) => (holder.position === 'First' && entry.position === 'Second' ? { ...entry, position: 'First' as const } : entry));
+    if (escrow && !remaining.some((entry) => entry.kind === 'Mortgagee')) { setError('Escrow billing needs a first mortgagee. Move billing to the insured before removing the last mortgagee.'); return; }
+    onSave(clone(draft), `${holder.position} Mortgagee removed: ${holder.name}${holder.position === 'First' && remaining.some((entry) => entry.kind === 'Mortgagee') ? '; second mortgagee moved to first position' : ''}`, { lienholders: remaining });
+  };
+  const toggleEscrow = () => {
+    if (!escrow && !mortgagees.some((holder) => holder.position === 'First')) { setError('Add a first mortgagee before moving billing to escrow.'); return; }
+    onSave(clone(draft), escrow ? 'Billing moved from the mortgagee (escrow) to the insured' : `Billing moved to the first mortgagee (escrow): ${mortgagees.find((holder) => holder.position === 'First')?.name}`, { billTo: escrow ? 'Insured' : 'Mortgagee' });
+  };
+  if (editing) return <LenderChangeForm holder={editing} onCancel={() => setEditing(null)} onSubmit={(holder, description) => onSave(clone(draft), description, { lienholders: lienholders.map((entry) => (entry.id === holder.id ? holder : entry)) })} />;
+  return <div className="space-y-3 text-[13px]">
+    {mortgagees.length ? <ul className="space-y-1">{mortgagees.sort((a, b) => (a.position ?? '').localeCompare(b.position ?? '')).map((holder) => <li key={holder.id} className="flex items-center justify-between rounded-[3px] border border-[#cfdbe3] px-3 py-2"><span><b>{holder.position} Mortgagee: {holder.name}</b><span className="block text-[#5c6670]">{holder.address} · Loan #{holder.loanNumber}</span></span><span className="flex items-center gap-3"><button type="button" onClick={() => setEditing(holder)} className="text-[12px] font-bold text-[#0073cf] underline">Change</button><button type="button" onClick={() => remove(holder)} className="flex items-center gap-1 text-[12px] font-bold text-[#c8102e] underline"><Trash2 size={13} />Remove</button></span></li>)}</ul> : <p className="text-[#5c6670]">No mortgagee on this policy.</p>}
+    <div className="flex items-center justify-between rounded-[3px] border border-[#cfdbe3] bg-[#f6f9fb] px-3 py-2"><span><b>Billing:</b> {escrow ? `Mortgagee billed (escrow), ${mortgagees.find((holder) => holder.position === 'First')?.name ?? 'first mortgagee'}` : 'Billed to the insured'}</span><button type="button" onClick={toggleEscrow} className="text-[12px] font-bold text-[#0073cf] underline">{escrow ? 'Bill the insured instead' : 'Bill the mortgagee (escrow)'}</button></div>
+    {open[0] && <div className="space-y-3 rounded-[3px] border border-[#cfdbe3] p-3">
+      <div className="font-bold text-[#003865]">Add {open[0]} Mortgagee</div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Mortgagee name and clause"><TextControl value={form.name} onChange={(name) => setForm({ ...form, name })} /></Field>
+        <Field label="Mailing address"><TextControl value={form.address} onChange={(address) => setForm({ ...form, address })} /></Field>
+        <Field label="Loan number"><TextControl value={form.loanNumber} onChange={(loanNumber) => setForm({ ...form, loanNumber })} /></Field>
+      </div>
+      <SaveButton onClick={add} label={`Add ${open[0]} Mortgagee`} />
+    </div>}
+    <InlineError message={error} />
+    <p className="text-[12px] text-[#5c6670]">Mortgagee changes do not change the premium. Each new or changed mortgagee receives evidence of insurance and a mortgagee copy of the amended declarations.</p>
+  </div>;
+}
+
 function SaveButton({ onClick, label = 'Save Change' }: { onClick: () => void; label?: string }) {
   return <button type="button" onClick={onClick} className={`mt-2 ${modalButton.blue}`}>{label}</button>;
 }
@@ -519,13 +698,15 @@ const EDITORS: Record<ChangeType, (props: EditorProps) => ReactNode> = {
   address: AddressEditor, contact: ContactEditor, addVehicle: AddVehicleEditor, replaceVehicle: ReplaceVehicleEditor, removeVehicle: RemoveVehicleEditor,
   addDriver: AddDriverEditor, removeDriver: RemoveDriverEditor, coverages: (props) => (props.policy.product === 'auto' ? <AutoCoverageEditor {...props} /> : <ConfigCoverageEditor {...props} />),
   lienholder: LienholderEditor, addUnit: AddUnitEditor, removeUnit: RemoveUnitEditor,
+  changeVehicle: ChangeVehicleEditor, dwelling: DwellingEditor, mortgagee: MortgageeEditor,
 };
 
 export function ChangePolicyModal({ policy, onClose, initialType }: { policy: PolicyRecord; onClose: (message?: string) => void; initialType?: ChangeType }) {
   setValidationState(policy.state);
-  const { state, servicePolicy, engine } = useQuote();
+  const { state, servicePolicy, engine, openProof, openPolicy, lastConfirmation } = useQuote();
   const day = state.simDate;
-  const [stage, setStage] = useState<'select' | 'edit' | 'review'>('select');
+  const [stage, setStage] = useState<'select' | 'edit' | 'review' | 'done'>('select');
+  const [done, setDone] = useState('');
   const [effectiveDate, setEffectiveDate] = useState(day);
   const [noLoss, setNoLoss] = useState(false);
   const [type, setType] = useState<ChangeType>(initialType && availableTypes(policy).includes(initialType) ? initialType : availableTypes(policy)[0]);
@@ -534,6 +715,9 @@ export function ChangePolicyModal({ policy, onClose, initialType }: { policy: Po
   const [vehiclesChanged, setVehiclesChanged] = useState(false);
   const [lienholders, setLienholders] = useState(policy.lienholders);
   const [added, setAdded] = useState<PolicyRecord['lienholders']>([]);
+  // Homeowners escrow: who is billed now, and whether this change moves it.
+  const original = policy.billTo === 'Mortgagee' ? 'Mortgagee' : 'Insured';
+  const [billTo, setBillTo] = useState<'Mortgagee' | 'Insured'>(original);
   const [approved, setApproved] = useState(false);
   const [error, setError] = useState('');
   const preview = useMemo(() => (stage === 'review' ? previewChange(policy, draft, effectiveDate) : null), [stage, policy, draft, effectiveDate]);
@@ -550,19 +734,32 @@ export function ChangePolicyModal({ policy, onClose, initialType }: { policy: Po
     if (extra?.vehicles) setVehiclesChanged(true);
     if (extra?.lienholders) setLienholders(extra.lienholders);
     if (extra?.added) setAdded([...added, ...extra.added]);
+    if (extra?.billTo) setBillTo(extra.billTo);
     setStage('select');
   };
   const submit = () => {
     if (!approved) { setError('Confirm the customer requested these changes and agrees to the premium change.'); return; }
     runWithSpinner('Submitting policy change...', () => {
-      const result = servicePolicy(policy.id, (record, today) => applyChange(record, { draft, effectiveDate, changes, vehiclesChanged, lienholders, newLienholders: added }, today));
+      const result = servicePolicy(policy.id, (record, today) => applyChange(record, { draft, effectiveDate, changes, vehiclesChanged, lienholders, newLienholders: added, billTo: billTo !== original ? billTo : undefined }, today));
       if (result) { setError(result); return; }
-      onClose(`Policy change processed effective ${effectiveDate}. Amended declarations issued.`);
+      const message = `Policy change processed effective ${effectiveDate}. Amended declarations issued.`;
+      // A vehicle change issues new ID cards: show them right away.
+      if (vehiclesChanged && hasIdCards(policy)) { setDone(`${message} New ID cards issued. Confirmation #${lastConfirmation()}.`); setStage('done'); return; }
+      onClose(message);
     }, 1100);
   };
   const Editor = EDITORS[type];
   const backdated = engine.dayDiff(effectiveDate, day) > 0;
 
+  if (stage === 'done') return <Modal title="Policy Change Processed" width={620} onClose={() => onClose(`Policy change processed effective ${effectiveDate}. New ID cards issued.`)} footer={<button type="button" className={modalButton.blue} onClick={() => onClose(`Policy change processed effective ${effectiveDate}. New ID cards issued.`)}>Done</button>}>
+    <p className="text-[14px] leading-[20px] text-[#0b5d3f]"><b>{done}</b></p>
+    <ul className="mt-2 list-disc pl-5 text-[13px] text-[#2e3a43]">{changes.map((change, index) => <li key={index}>{change}</li>)}</ul>
+    <p className="mt-3 text-[13px]">Give the customer the new ID cards now: the old cards no longer show the correct vehicles.</p>
+    <div className="mt-3 flex flex-wrap gap-2">
+      <button type="button" className={modalButton.primary} onClick={() => { onClose(); openProof(policy.id, 'idcards'); }}>View / Print New ID Cards</button>
+      <button type="button" className={modalButton.secondary} onClick={() => { onClose(); openPolicy(policy.id, 'documents'); }}>Amended Declarations</button>
+    </div>
+  </Modal>;
   return <Modal title={stage === 'review' ? 'Policy Change Review' : 'Change Policy'} width={820} onClose={() => onClose()} footer={stage === 'select' ? <><button type="button" className={modalButton.secondary} onClick={() => onClose()}>Cancel</button>{changes.length > 0 && <button type="button" className={modalButton.primary} onClick={() => setStage('review')}>Review Changes</button>}</> : stage === 'review' ? <><button type="button" className={modalButton.secondary} onClick={() => setStage('select')}>Back</button><button type="button" className={modalButton.primary} onClick={submit}>Submit Policy Change</button></> : undefined}>
     <p className="mb-3 text-[13px] text-[#5c6670]">{policy.productName} Policy #{policy.policyNumber} · {policy.insured.name} · Term {policy.effectiveDate} – {policy.expirationDate}</p>
     {stage === 'select' && <>
@@ -578,7 +775,7 @@ export function ChangePolicyModal({ policy, onClose, initialType }: { policy: Po
     </>}
     {stage === 'edit' && <>
       <div className="mb-3 flex items-center justify-between"><h3 className="font-slab text-[16px] font-bold">{labelFor(type, policy)}</h3><button type="button" onClick={() => setStage('select')} className="flex items-center gap-1 text-[13px] font-bold text-[#0073cf] underline"><ArrowLeft size={14} />Back</button></div>
-      <Editor policy={policy} draft={draft} onSave={save} lienholders={lienholders} effectiveDate={effectiveDate} />
+      <Editor policy={policy} draft={draft} onSave={save} lienholders={lienholders} effectiveDate={effectiveDate} billTo={billTo} />
     </>}
     {stage === 'review' && preview && <>
       <div className="rounded-[3px] border border-[#cfdbe3] px-3 py-2 text-[13px]"><div className="mb-1 font-bold">Changes effective {effectiveDate}</div><ul className="list-disc space-y-0.5 pl-5">{changes.map((change, index) => <li key={index}>{change}</li>)}</ul></div>

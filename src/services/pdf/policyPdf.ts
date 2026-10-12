@@ -9,7 +9,7 @@ import { rulesFor } from '@/data/states';
 import { notify } from '@/services/activity';
 import { LOGO_RATIO, loadLogoDataUrl } from '@/services/pdf/logo';
 
-export type PacketCopy = 'Insured Copy' | 'Agent Copy' | 'Lienholder Copy';
+export type PacketCopy = 'Insured Copy' | 'Agent Copy' | 'Lienholder Copy' | 'Mortgagee Copy';
 
 const PAGE_W = 612;
 const PAGE_H = 792;
@@ -166,7 +166,7 @@ function drivers(policy: PolicyRecord): string[][] {
   if (policy.source.kind === 'personal') {
     return policy.source.quote.drivers.map((driver) => [[driver.firstName, driver.lastName].filter(Boolean).join(' '), driver.relationship || '—', driver.driverStatus, driver.licenseState ? `${driver.licenseState} ····${(driver.licenseNumber || '').slice(-4)}` : '—']);
   }
-  return policy.source.quote.drivers.map((driver) => [[driver.firstName, driver.lastName].filter(Boolean).join(' '), 'Employee', driver.licenseType || '—', driver.licenseState ? `${driver.licenseState} ····${(driver.licenseNumber || '').slice(-4)}` : '—']);
+  return policy.source.quote.drivers.map((driver) => [[driver.firstName, driver.lastName].filter(Boolean).join(' '), driver.role || 'Employee', driver.licenseType || '—', driver.licenseState ? `${driver.licenseState} ····${(driver.licenseNumber || '').slice(-4)}` : '—']);
 }
 
 /** The Declarations Page (coverage summary) sections. */
@@ -211,8 +211,8 @@ function declarations(ctx: Ctx, heading = 'Declarations Page') {
   const schedule = policy.installments.filter((entry) => entry.status !== 'void');
   if (schedule.length) table(ctx, ['Payment', 'Due date', 'Amount', 'Status'], schedule.map((entry) => [entry.number === 0 ? 'Down payment' : `Installment ${entry.number}`, entry.due, money(entry.amount), entry.status === 'paid' ? 'Paid' : entry.status === 'past due' ? 'Past due' : 'Scheduled']), [0.3, 0.25, 0.25, 0.2], [2]);
   if (policy.lienholders.length) {
-    section(ctx, 'Lienholders / additional interests');
-    table(ctx, ['Interest', 'Name and address', 'Loan number', 'Unit'], policy.lienholders.map((holder) => [holder.kind, `${holder.name}, ${holder.address}`, holder.loanNumber || '—', holder.unit]), [0.16, 0.44, 0.16, 0.24]);
+    section(ctx, policy.lienholders.some((holder) => holder.kind === 'Mortgagee') ? 'Mortgagees' : 'Lienholders / additional interests');
+    table(ctx, ['Interest', 'Name and address', 'Loan number', 'Unit'], policy.lienholders.map((holder) => [holder.position ? `${holder.position} ${holder.kind}` : holder.kind, `${holder.name}, ${holder.address}`, holder.loanNumber || '—', holder.unit]), [0.16, 0.44, 0.16, 0.24]);
   }
   section(ctx, 'Important notices');
   paragraph(ctx, `${policy.product === 'auto' ? `${rulesFor(policy.state).statuteText} ` : ''}${rulesFor(policy.state).reporting && policy.product === 'auto' ? `${rulesFor(policy.state).reporting!.text} ` : ''}Report claims 24 hours a day at ${CLAIMS_LINE} (training line). This declarations page, together with the policy contract, endorsements and application, makes up your policy. Coverage is subject to all terms and conditions of the policy.`, 8);
@@ -261,8 +261,11 @@ function applicationPage(ctx: Ctx, signed: string) {
   doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
   doc.text('Application for Insurance (summary)', MARGIN, ctx.y + 4);
   ctx.y += 18;
-  rows(ctx, [['Applicant', policy.insured.name], ['Date of birth', policy.insured.dob || '—'], ['Product', policy.productName], ['Requested effective date', policy.source.kind === 'personal' ? policy.source.quote.policy.effectiveDate || policy.issuedOn : policy.source.quote.effectiveDate || policy.issuedOn], ['Quote number', policy.quoteNumber], ['Bound by', `${policy.agentName} · producer code ${policy.agentCode.split(' ')[0]} · ${policy.issuedOn}`], ['Signature', signed]]);
-  paragraph(ctx, 'The applicant confirmed that the information in this application is true and complete, that every household member of driving age and every vehicle regularly used has been disclosed, and that misrepresentation may void coverage.');
+  const business = policy.source.kind === 'commercial' ? policy.source.quote.business : null;
+  rows(ctx, [['Applicant', policy.insured.name], ...(business ? [['Entity', business.entity || '—'], ['Business type', business.industry || '—'], ['Signed by', [business.contact, business.contactTitle].filter(Boolean).join(', ') || '—']] as [string, string][] : [['Date of birth', policy.insured.dob || '—']] as [string, string][]), ['Product', policy.productName], ['Requested effective date', policy.source.kind === 'personal' ? policy.source.quote.policy.effectiveDate || policy.issuedOn : policy.source.quote.effectiveDate || policy.issuedOn], ['Quote number', policy.quoteNumber], ['Bound by', `${policy.agentName} · producer code ${policy.agentCode.split(' ')[0]} · ${policy.issuedOn}`], ['Signature', signed]]);
+  paragraph(ctx, business
+    ? 'The applicant, through an authorized owner or officer, confirmed that the information in this application is true and complete, that every driver, vehicle, location and prior loss has been disclosed, and that misrepresentation may void coverage.'
+    : 'The applicant confirmed that the information in this application is true and complete, that every household member of driving age and every vehicle regularly used has been disclosed, and that misrepresentation may void coverage.');
 }
 
 function coverLetter(ctx: Ctx) {
@@ -272,14 +275,16 @@ function coverLetter(ctx: Ctx) {
   ctx.y += 26;
   const intro = copy === 'Agent Copy'
     ? `Agency file copy for ${policy.insured.name}. Retain this copy with the signed application for your records. The insured received an identical Insured Copy with their ID cards.`
+    : copy === 'Mortgagee Copy'
+      ? `Mortgagee copy for policy #${policy.policyNumber}. You are named as ${policy.lienholders.filter((holder) => holder.kind === 'Mortgagee').map((holder) => `${holder.position ?? 'First'} Mortgagee (loan #${holder.loanNumber})`).join(' and ')} under the standard mortgage clause. You will receive notice before any cancellation or non-renewal.${policy.billTo === 'Mortgagee' ? ' The annual premium is billed to the first mortgagee (escrow).' : ''}`
     : copy === 'Lienholder Copy'
       ? `Lienholder / additional interest copy for policy #${policy.policyNumber}. You are named on this policy as shown on the declarations page and will receive notice before any cancellation.`
-      : `Dear ${policy.insured.firstName || policy.insured.name}, thank you for choosing us. Your ${policy.productName} policy is in force as of ${policy.effectiveDate}. This packet contains your declarations page and${['auto', 'motorcycle', 'motorhome', 'trailer', 'snowmobile', 'commercialAuto'].includes(policy.product) ? ' your ID cards and' : ''} a summary of your application. Your agent is ${policy.agentName}, producer code ${policy.agentCode.split(' ')[0]}.`;
+      : `Dear ${policy.insured.firstName || policy.insured.name}, thank you for choosing us. Your ${policy.productName} policy is in force as of ${policy.effectiveDate}. This packet contains your declarations page and${['auto', 'motorcycle', 'motorhome', 'trailer', 'snowmobile', 'commercialAuto', 'trucking'].includes(policy.product) ? ' your ID cards and' : ''} a summary of your application. Your agent is ${policy.agentName}, producer code ${policy.agentCode.split(' ')[0]}.`;
   paragraph(ctx, intro, 10);
   section(ctx, 'Contents');
   const contents = ['Declarations Page'];
-  if (copy !== 'Lienholder Copy' && ['auto', 'motorcycle', 'motorhome', 'trailer', 'snowmobile', 'commercialAuto'].includes(policy.product)) contents.push('Insurance Identification Cards');
-  if (copy !== 'Lienholder Copy') contents.push('Application for Insurance (summary)');
+  if (copy !== 'Lienholder Copy' && copy !== 'Mortgagee Copy' && ['auto', 'motorcycle', 'motorhome', 'trailer', 'snowmobile', 'commercialAuto', 'trucking'].includes(policy.product)) contents.push('Insurance Identification Cards');
+  if (copy !== 'Lienholder Copy' && copy !== 'Mortgagee Copy') contents.push('Application for Insurance (summary)');
   table(ctx, ['#', 'Document'], contents.map((name, index) => [String(index + 1), name]), [0.1, 0.9]);
   return contents;
 }
@@ -329,5 +334,6 @@ export function policyPacketPdf(policy: PolicyRecord, copy: PacketCopy, logo?: s
 
 /** Copies issued at bind: every policy gets an Insured and an Agent copy; a Lienholder copy when one is listed. */
 export function packetCopies(policy: PolicyRecord): PacketCopy[] {
-  return policy.lienholders.length ? ['Insured Copy', 'Agent Copy', 'Lienholder Copy'] : ['Insured Copy', 'Agent Copy'];
+  if (!policy.lienholders.length) return ['Insured Copy', 'Agent Copy'];
+  return ['Insured Copy', 'Agent Copy', policy.lienholders.some((holder) => holder.kind === 'Mortgagee') ? 'Mortgagee Copy' : 'Lienholder Copy'];
 }

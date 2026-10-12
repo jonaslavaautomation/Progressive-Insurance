@@ -4,9 +4,10 @@ import type { ReactNode } from 'react';
 import type { FieldDef, OtherProductKey } from '@/products/types';
 import { PRODUCT_ICONS } from '@/products/icons';
 import { PRODUCT_CONFIGS } from '@/products/configs';
+import { MORTGAGEE_PRODUCTS } from '@/products/property';
 import { fieldContext, isProductRated, rateProduct } from '@/products/engine';
 import { useQuote } from '@/context/useQuote';
-import { ConfigField, CoveragesEditor, InterestedPartiesCard, QuestionsCard, UnitsEditor } from '@/components/products/Editors';
+import { ConfigField, CoveragesEditor, InterestedPartiesCard, MortgageesCard, QuestionsCard, UnitsEditor } from '@/components/products/Editors';
 
 /** A single config field bound to the personal quote's field context. */
 export function ProductField({ field, id, value, values, onChange }: { field: FieldDef; id: string; value: string; values: Record<string, string>; onChange: (value: string) => void }) {
@@ -18,7 +19,7 @@ export function ProductUnitsContent({ product }: { product: OtherProductKey }) {
   const { state, addUnit, removeUnit, updateUnitValues, updateProduct } = useQuote();
   const quote = state.productQuotes[product];
   if (!quote) return null;
-  const side = product === 'renters' ? <InterestedPartiesCard interests={quote.interests} onChange={(interests) => updateProduct(product, { interests })} description="Add the landlord or property manager if the lease requires proof of renters insurance. They receive a copy of the declarations and notice of cancellation." /> : undefined;
+  const side = MORTGAGEE_PRODUCTS.includes(product) ? <MortgageesCard mortgagees={quote.interests} onChange={(interests) => updateProduct(product, { interests })} /> : product === 'renters' ? <InterestedPartiesCard interests={quote.interests} onChange={(interests) => updateProduct(product, { interests })} description="Add the landlord or property manager if the lease requires proof of renters insurance. They receive a copy of the declarations and notice of cancellation." /> : undefined;
   return <div className="mt-[20px]"><UnitsEditor config={PRODUCT_CONFIGS[product]} quote={quote} ctxFor={(values) => fieldContext(state, values)} idPrefix={`unit.${product}`} icon={PRODUCT_ICONS[product]} onValues={(unitId, values) => updateUnitValues(product, unitId, values)} onAdd={() => addUnit(product)} onRemove={(unitId) => removeUnit(product, unitId)} side={side} /></div>;
 }
 

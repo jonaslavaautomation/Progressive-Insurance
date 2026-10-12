@@ -5,6 +5,7 @@ import { rateSource } from '@/services/policyBuilder';
 import { dayDiff, shiftDate } from '@/services/policyEngine';
 import { parseDate } from '@/utils/dates';
 import { rulesFor } from '@/data/states';
+import { NO_ID_CARDS } from '@/servicing/portal/portalUtils';
 
 export const MAX_BACKDATE_DAYS = 30;
 export const MAX_FUTURE_DAYS = 30;
@@ -55,6 +56,8 @@ export interface ChangeRequest {
   vehiclesChanged: boolean;
   lienholders: PolicyRecord['lienholders'];
   newLienholders: PolicyRecord['lienholders'];
+  /** Homeowners: move billing to the first mortgagee (escrow) or back to the insured. */
+  billTo?: 'Mortgagee' | 'Insured';
 }
 
 export function applyChange(policy: PolicyRecord, request: ChangeRequest, day: string): PolicyRecord {
@@ -81,7 +84,7 @@ export function applyChange(policy: PolicyRecord, request: ChangeRequest, day: s
     : { ...policy.insured, email: source.quote.business.email, phone: source.quote.business.phone, street: source.quote.business.street, cityStateZip: `${source.quote.business.city}, ${source.quote.business.state} ${source.quote.business.zip}` };
   const drivers = source.kind === 'personal' ? source.quote.drivers.filter((driver) => driver.driverStatus === 'Rated').map((driver) => [driver.firstName, driver.lastName].filter(Boolean).join(' ')) : source.quote.drivers.map((driver) => [driver.firstName, driver.lastName].filter(Boolean).join(' '));
   const documents = [...policy.documents, { id: id('doc'), type: 'Amended Declarations' as const, date: day, term: policy.termNumber, data: { changeEffective: request.effectiveDate, changes: request.changes.join('; '), prorated } }];
-  if (request.vehiclesChanged && !['renters', 'boat', 'bop', 'mgmt'].includes(policy.product)) documents.push({ id: id('doc'), type: 'ID Cards', date: day, term: policy.termNumber, data: {} });
+  if (request.vehiclesChanged && !NO_ID_CARDS.includes(policy.product)) documents.push({ id: id('doc'), type: 'ID Cards', date: day, term: policy.termNumber, data: {} });
   if (request.vehiclesChanged && policy.product === 'auto' && rulesFor(policy.state).reporting?.system.includes('FS-1')) documents.push({ id: id('doc'), type: 'FS-1 Certificate of Insurance', date: day, term: policy.termNumber, data: { reason: 'Policy change' } });
   for (const holder of request.newLienholders) documents.push({ id: id('doc'), type: 'Evidence of Insurance', date: day, term: policy.termNumber, data: { name: holder.name, address: holder.address, loanNumber: holder.loanNumber, unit: holder.unit, kind: holder.kind } });
   return {
@@ -98,6 +101,8 @@ export function applyChange(policy: PolicyRecord, request: ChangeRequest, day: s
     ledger,
     documents,
     lienholders: request.lienholders,
+    ...(request.billTo === 'Mortgagee' ? { billTo: 'Mortgagee' as const, paymentMethod: 'Mortgagee escrow', autopay: false, billPlanName: policy.billPlanName.replace(/ - Mortgagee Billed$/, '') + ' - Mortgagee Billed' } : {}),
+    ...(request.billTo === 'Insured' ? { billTo: undefined, paymentMethod: 'Paper bill (mail)', billPlanName: policy.billPlanName.replace(/ - Mortgagee Billed$/, '') } : {}),
     // A pending renewal offer was priced on the old coverage; re-offer at the next clock run.
     renewal: null,
     history: [...policy.history, { id: id('his'), date: day, event: 'Policy change processed', detail: `Effective ${request.effectiveDate}: ${request.changes.join('; ')}. ${prorated > 0 ? `Additional premium $${prorated.toFixed(2)}` : prorated < 0 ? `Return premium $${(-prorated).toFixed(2)}` : 'No premium change'}.` }],

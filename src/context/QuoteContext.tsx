@@ -13,7 +13,7 @@ import { lookupVehicleDetails } from '@/data/vehicleCatalog';
 import type { Coverages, Vehicle } from '@/types/quote';
 import { kindForEvent, notify, setActivityContext } from '@/services/activity';
 import { noteSessionStart } from '@/services/session';
-import { productLabel } from '@/products/configs';
+import { productLabel, termMonthsFor } from '@/products/configs';
 import * as engine from '@/services/policyEngine';
 import { setClock } from '@/utils/clock';
 import { loadWithCar, loaderIconFor } from '@/services/carLoader';
@@ -130,16 +130,19 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
 
   const summary = useMemo<QuoteSummary>(() => {
     const effective = parseDate(state.policy.effectiveDate);
+    const products = state.products ?? ['auto'];
+    const months = products.includes('auto') ? TERM_MONTHS : termMonthsFor(products[0]);
     return {
       quoteNumber: state.policy.quoteNumber,
       policyNumber: state.policy.policyNumber,
       effectiveDate: state.policy.effectiveDate,
-      expirationDate: effective ? formatDate(addMonths(effective, TERM_MONTHS)) : '',
+      expirationDate: effective ? formatDate(addMonths(effective, months)) : '',
+      termMonths: months,
       totalPremium: plan.total,
       billPlanName: plan.name,
       discountsApplied: rating.appliedDiscounts,
     };
-  }, [state.policy, plan, rating]);
+  }, [state.policy, state.products, plan, rating]);
 
   const orderPointOfSale = useCallback(async () => {
     const requestId = stateRef.current.reports.requestId + 1;

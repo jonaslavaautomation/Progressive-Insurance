@@ -95,6 +95,18 @@ export interface ClaimRecord {
 
 export type CancelKind = 'nonpayment' | 'insured' | 'company';
 
+/** A lender on the policy: lienholder or lessor on a vehicle, mortgagee on a home. */
+export interface Lienholder {
+  id: string;
+  unit: string;
+  name: string;
+  address: string;
+  loanNumber: string;
+  kind: 'Lienholder' | 'Lessor' | 'Mortgagee';
+  /** Mortgagees: lien position. */
+  position?: 'First' | 'Second';
+}
+
 export interface PolicyRecord {
   id: string;
   policyNumber: string;
@@ -138,7 +150,9 @@ export interface PolicyRecord {
   lapse: null | { from: string; to: string };
   source: PolicySource;
   /** Lienholders / loss payees by unit label. */
-  lienholders: { id: string; unit: string; name: string; address: string; loanNumber: string; kind: 'Lienholder' | 'Lessor' }[];
+  lienholders: Lienholder[];
+  /** Homeowners: the premium is billed to the first mortgagee (escrow). */
+  billTo?: 'Mortgagee';
   /** Claims reported on this policy (First Notice of Loss and history). */
   claims?: ClaimRecord[];
   /** Version of the reference account this record was built from (practice book only). */
