@@ -11,6 +11,8 @@ import { applyChange, previewChange } from '@/services/endorsement';
 import { setVisualPrefs, visualPrefsStore, type TextSize } from '@/services/visualPrefs';
 import { ANNUAL_MILES, INCIDENT_CODES, MARITAL_STATUSES, PRIMARY_USES } from '@/data/options';
 import { productLabel } from '@/products/configs';
+import { rulesFor } from '@/data/states';
+import { ageOn } from '@/utils/dates';
 import { formatCurrency } from '@/utils/masks';
 import { Modal } from '@/components/wizard/Modal';
 import { modalButton } from '@/components/wizard/modalStyles';
@@ -114,7 +116,7 @@ export function DrivingRecordModal({ policy, driver, onClose }: { policy: Policy
 type Field = { key: string; label: string; options?: readonly string[]; digits?: number };
 
 /** A one-screen endorsement: edit a few fields, preview the premium change, submit. */
-function QuickChange({ policy, title, fields, initial, build, onClose }: { policy: PolicyRecord; title: string; fields: Field[]; initial: Record<string, string>; build: (values: Record<string, string>) => { draft: PolicySource; changes: string[] }; onClose: Close }) {
+function QuickChange({ policy, title, fields, initial, build, validate, onClose }: { policy: PolicyRecord; title: string; fields: Field[]; initial: Record<string, string>; build: (values: Record<string, string>) => { draft: PolicySource; changes: string[] }; validate?: (values: Record<string, string>) => string; onClose: Close }) {
   const { state, servicePolicy } = useQuote();
   const [values, setValues] = useState(initial);
   const [approved, setApproved] = useState(false);
@@ -125,6 +127,8 @@ function QuickChange({ policy, title, fields, initial, build, onClose }: { polic
     const invalid = fields.find((field) => field.digits && !new RegExp(`^\\d{${field.digits}}$`).test(values[field.key] ?? ''));
     if (invalid) { setError(`${invalid.label} must be ${invalid.digits} digits.`); return; }
     if (!changes.length) { setError('Nothing has changed yet.'); return; }
+    const problem = validate?.(values);
+    if (problem) { setError(problem); return; }
     if (!approved) { setError('Confirm the customer requested this change and agrees to the premium change.'); return; }
     runWithSpinner('Submitting policy change...', () => {
       const result = servicePolicy(policy.id, (record, day) => applyChange(record, { draft, effectiveDate: day, changes, vehiclesChanged: false, lienholders: record.lienholders, newLienholders: [] }, day));
@@ -154,7 +158,9 @@ export function DriverUpdateModal({ policy, driver, onClose }: { policy: PolicyR
     }
     return { draft, changes };
   };
-  return <QuickChange policy={policy} title={`Update Driver: ${name}`} initial={initial} build={build} onClose={onClose} fields={[{ key: 'maritalStatus', label: 'Marital status', options: MARITAL_STATUSES }, { key: 'goodStudent', label: 'Good student (B average)', options: yesNo }, { key: 'distantStudent', label: 'Student 100+ miles away without a car', options: yesNo }]} />;
+  const age = ageOn(driver.dob) ?? 0;
+  const validate = (values: Record<string, string>) => (age >= 25 && (values.goodStudent === 'Yes' || values.distantStudent === 'Yes') ? `Student discounts are for full-time students under 25 (${name} is ${age}).` : '');
+  return <QuickChange policy={policy} title={`Update Driver: ${name}`} initial={initial} build={build} validate={validate} onClose={onClose} fields={[{ key: 'maritalStatus', label: 'Marital status', options: MARITAL_STATUSES }, { key: 'goodStudent', label: 'Good student (B average)', options: yesNo }, { key: 'distantStudent', label: 'Student 100+ miles away without a car', options: yesNo }]} />;
 }
 
 export function VehicleUpdateModal({ policy, vehicle, onClose }: { policy: PolicyRecord; vehicle: Vehicle; onClose: Close }) {
@@ -170,7 +176,9 @@ export function VehicleUpdateModal({ policy, vehicle, onClose }: { policy: Polic
     }
     return { draft, changes };
   };
-  return <QuickChange policy={policy} title={`Update Vehicle: ${name}`} initial={initial} build={build} onClose={onClose} fields={[{ key: 'primaryUse', label: 'Primary use', options: PRIMARY_USES }, { key: 'annualMiles', label: 'Annual miles', options: ANNUAL_MILES }, { key: 'garagingZip', label: 'Garaging ZIP code', digits: 5 }]} />;
+  const rules = rulesFor(policy.state);
+  const validate = (values: Record<string, string>) => (!rules.zip.test(values.garagingZip ?? '') ? `The vehicle must be garaged in ${rules.name} (${rules.zipHint}).` : '');
+  return <QuickChange policy={policy} title={`Update Vehicle: ${name}`} initial={initial} build={build} validate={validate} onClose={onClose} fields={[{ key: 'primaryUse', label: 'Primary use', options: PRIMARY_USES }, { key: 'annualMiles', label: 'Annual miles', options: ANNUAL_MILES }, { key: 'garagingZip', label: 'Garaging ZIP code', digits: 5 }]} />;
 }
 
 const PERSONAL: ProductKey[] = ['auto', 'motorcycle', 'boat', 'motorhome', 'trailer', 'snowmobile', 'homeowners', 'renters', 'condo', 'landlord'];

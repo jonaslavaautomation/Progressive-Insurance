@@ -8,10 +8,10 @@ import type { CommercialKey, OtherProductKey, ProductConfig, ProductQuote } from
 import { useQuote } from '@/context/useQuote';
 import { runWithSpinner } from '@/services/processing';
 import { createDriver, createVehicle } from '@/context/quoteStore';
-import { ANNUAL_MILES, BI_PD, PIP_OPTIONS, COLL_DEDUCTIBLES, ETE, GENDERS, MARITAL_STATUSES, MED_PAY, OTC_DEDUCTIBLES, PRIMARY_RESIDENCES, PRIMARY_USES, RELATIONSHIPS, TOWING, UM_BI, US_STATES, coverageOptions } from '@/data/options';
+import { ANNUAL_MILES, BI_PD, PIP_OPTIONS, COLL_DEDUCTIBLES, ETE, GENDERS, LICENSE_STATUSES, MARITAL_STATUSES, MED_PAY, OTC_DEDUCTIBLES, PRIMARY_RESIDENCES, PRIMARY_USES, RELATIONSHIPS, TOWING, UM_BI, US_STATES, coverageOptions } from '@/data/options';
 import { MODEL_YEARS, bodyStylesFor, decodeVin, lookupVehicleDetails, makesFor, modelsFor } from '@/data/vehicleCatalog';
 import { configFor } from '@/products/configs';
-import { DRIVER_ACCIDENTS, DRIVER_EXPERIENCE, DRIVER_LICENSE_TYPES, DRIVER_ROLES, DRIVER_VIOLATIONS } from '@/commercial/configs';
+import { DRIVER_ACCIDENTS, DRIVER_EXPERIENCE, DRIVER_LICENSE_TYPES, DRIVER_ROLES, DRIVER_VIOLATIONS, needsCdl } from '@/commercial/configs';
 import { createUnit, fieldContext } from '@/products/engine';
 import { commercialContext, createCommercialDriver } from '@/commercial/engine';
 import { driverName, vehicleName } from '@/utils/ratingEngine';
@@ -29,7 +29,7 @@ import { hasIdCards } from '@/servicing/portal/portalUtils';
 
 const TYPE_LABELS: Record<ChangeType, string> = {
   address: 'Change address', contact: 'Update phone / email', addVehicle: 'Add a vehicle', changeVehicle: 'Change a vehicle (use, miles, garaging, ownership, driver)', replaceVehicle: 'Replace a vehicle', removeVehicle: 'Remove a vehicle',
-  addDriver: 'Add a driver', removeDriver: 'Remove or exclude a driver', coverages: 'Change coverages', lienholder: 'Add or remove a lienholder / loss payee',
+  addDriver: 'Add a driver', changeDriver: 'Change a driver (name, marital status, license, student discounts, rated/excluded)', removeDriver: 'Remove or exclude a driver', coverages: 'Change coverages', lienholder: 'Add or remove a lienholder / loss payee',
   addUnit: 'Add a unit', removeUnit: 'Remove a unit',
   dwelling: 'Update dwelling information (Coverage A, roof, protection, occupancy)', mortgagee: 'Add, change or remove a mortgagee / escrow billing',
 };
@@ -64,6 +64,15 @@ function labelFor(type: ChangeType, policy: PolicyRecord): string {
   if (type === 'lienholder' && policy.product === 'renters') return 'Add or remove an interested party (landlord)';
   if (type === 'lienholder') return 'Add, change or remove a lienholder / lessor';
   return TYPE_LABELS[type];
+}
+
+/** Driver license number: 4 to 20 letters, digits or dashes. */
+const LICENSE_NUMBER = /^[A-Z0-9-]{4,20}$/;
+const personKey = (first: string, last: string, dob: string) => `${first.trim().toLowerCase()} ${last.trim().toLowerCase()} ${dob}`;
+
+/** Commercial: heavy units (over 26,000 lbs) on the account that need a CDL driver. */
+function needsCdlDriver(quote: { productQuotes: Partial<Record<CommercialKey, ProductQuote>> }): boolean {
+  return !!quote.productQuotes.commercialAuto?.units.some((unit) => needsCdl(unit.values.gvw)) || !!quote.productQuotes.trucking?.units.some((unit) => !unit.values.type?.includes('Trailer'));
 }
 
 interface EditorProps { policy: PolicyRecord; draft: PolicySource; onSave: (draft: PolicySource, description: string, extra?: { vehicles?: boolean; lienholders?: PolicyRecord['lienholders']; added?: PolicyRecord['lienholders']; billTo?: 'Mortgagee' | 'Insured' }) => void; lienholders: PolicyRecord['lienholders']; effectiveDate: string; billTo: 'Mortgagee' | 'Insured' }
@@ -332,7 +341,8 @@ function RemoveVehicleEditor({ policy, draft, onSave, lienholders }: EditorProps
 }
 
 function AddDriverEditor({ draft, onSave }: EditorProps) {
-  const [d, setD] = useState({ firstName: '', lastName: '', dob: '', gender: '', maritalStatus: '', relationship: '', licenseState: draft.kind === 'personal' ? draft.quote.policy.quoteState : draft.quote.business.state, licenseNumber: '', ageFirstLicensed: '16', driverStatus: 'Rated', licenseType: DRIVER_LICENSE_TYPES[0], experience: '', violations: '0', accidents: '0', role: DRIVER_ROLES[1], hireDate: '' });
+  const [d, setD] = useState({ firstName: '', lastName: '', dob: '', gender: '', maritalStatus: '', relationship: '', licenseState: draft.kind === 'personal' ? draft.quote.policy.quoteState : draft.quote.business.state, licenseNumber: '', ageFirstLicensed: '16', driverStatus: 'Rated', licenseType: DRIVER_LICENSE_TYPES[0], experience: '', violations: '0', accidents: '0', role: DRIVER_ROLES[1], hireDate: '', primaryVehicleId: '' });
+  const vehicles = draft.kind === 'personal' ? draft.quote.vehicles : [];
   const [error, setError] = useState('');
   const set = (patch: Partial<typeof d>) => setD({ ...d, ...patch });
   const commercial = draft.kind === 'commercial';
@@ -342,10 +352,18 @@ function AddDriverEditor({ draft, onSave }: EditorProps) {
     if (age === null) { setError('Enter a valid date of birth (MM/DD/YYYY).'); return; }
     if (age < (commercial ? 18 : 15)) { setError(`Drivers must be at least ${commercial ? 18 : 15} years old.`); return; }
     if (!d.licenseNumber) { setError('Enter the driver license number.'); return; }
+    if (!LICENSE_NUMBER.test(d.licenseNumber.toUpperCase())) { setError('The license number must be 4 to 20 letters, digits or dashes.'); return; }
+    const existing = draft.kind === 'personal' ? draft.quote.drivers : draft.quote.drivers;
+    if (existing.some((driver) => personKey(driver.firstName, driver.lastName, driver.dob) === personKey(d.firstName, d.lastName, d.dob))) { setError(`${d.firstName} ${d.lastName} is already on this policy. Use Change a driver to update them.`); return; }
+    if (existing.some((driver) => driver.licenseState === d.licenseState && driver.licenseNumber.toUpperCase() === d.licenseNumber.toUpperCase())) { setError('Another driver on this policy already has that license number.'); return; }
     const next = clone(draft);
     if (next.kind === 'personal') {
       if (!d.gender || !d.maritalStatus || !d.relationship) { setError('Select gender, marital status and relationship.'); return; }
-      const driver: Driver = createDriver({ firstName: d.firstName, lastName: d.lastName, dob: d.dob, gender: d.gender, maritalStatus: d.maritalStatus, relationship: d.relationship, licenseState: d.licenseState, licenseNumber: d.licenseNumber.toUpperCase(), ageFirstLicensed: d.ageFirstLicensed, driverStatus: d.driverStatus as Driver['driverStatus'], licenseType: 'Personal Auto', licenseStatus: 'Valid', internationalYears: 'None', operatorType: 'Occasional', education: 'Some college', employment: 'Business/Sales/Office', occupation: 'Sales Representative' });
+      const firstLicensed = Number(d.ageFirstLicensed);
+      if (!firstLicensed || firstLicensed < 14 || firstLicensed > age) { setError(`Age first licensed must be between 14 and the driver's current age (${age}).`); return; }
+      if ((d.relationship === 'Spouse' || d.relationship === 'Domestic Partner') && next.quote.drivers.some((driver) => driver.relationship === 'Spouse' || driver.relationship === 'Domestic Partner')) { setError('A spouse or domestic partner is already listed. Change or remove that driver first.'); return; }
+      if (d.driverStatus === 'Rated' && next.quote.vehicles.length > 1 && !d.primaryVehicleId) { setError('Select the vehicle this driver drives most.'); return; }
+      const driver: Driver = createDriver({ firstName: d.firstName, lastName: d.lastName, dob: d.dob, gender: d.gender, maritalStatus: d.maritalStatus, relationship: d.relationship, licenseState: d.licenseState, licenseNumber: d.licenseNumber.toUpperCase(), ageFirstLicensed: d.ageFirstLicensed, driverStatus: d.driverStatus as Driver['driverStatus'], licenseType: 'Personal Auto', licenseStatus: 'Valid', internationalYears: 'None', operatorType: 'Occasional', education: 'Some college', employment: 'Business/Sales/Office', occupation: 'Sales Representative', primaryVehicleId: d.driverStatus === 'Rated' ? (d.primaryVehicleId || next.quote.vehicles[0]?.id || '') : '' });
       next.quote.drivers.push(driver);
       onSave(next, `Added driver ${driverName(driver)} (${d.driverStatus})`);
     } else {
@@ -378,8 +396,115 @@ function AddDriverEditor({ draft, onSave }: EditorProps) {
       <Field label="Relationship to insured"><SelectControl value={d.relationship} options={RELATIONSHIPS} onChange={(relationship) => set({ relationship })} /></Field>
       <Field label="Age first licensed"><TextControl value={d.ageFirstLicensed} mask="digits" onChange={(ageFirstLicensed) => set({ ageFirstLicensed })} /></Field>
       <Field label="Driver status"><SelectControl value={d.driverStatus} options={['Rated', 'Excluded']} onChange={(driverStatus) => set({ driverStatus })} /></Field>
+      {d.driverStatus === 'Rated' && vehicles.length > 1 && <Field label="Vehicle driven most"><SelectControl value={d.primaryVehicleId} options={vehicles.map((vehicle) => ({ value: vehicle.id, label: vehicleName(vehicle) }))} onChange={(primaryVehicleId) => set({ primaryVehicleId })} /></Field>}
+      {d.driverStatus === 'Excluded' && <p className="col-span-2 rounded-[3px] bg-[#fff6ee] px-3 py-2 text-[12px] text-[#9a4a0b]">An excluded driver has no coverage while driving any vehicle on this policy. The named insured must sign the named driver exclusion form.</p>}
     </>}
     <div className="col-span-2"><InlineError message={error} /><SaveButton onClick={save} label="Add Driver" /></div>
+  </div>;
+}
+
+/** Change a driver already on the policy (personal auto or a commercial driver schedule). */
+function ChangeDriverEditor(props: EditorProps) {
+  return props.draft.kind === 'personal' ? <PersonalDriverChange {...props} /> : <CommercialDriverChange {...props} />;
+}
+
+const STUDENT_AGE = 25;
+
+function PersonalDriverChange({ draft, onSave }: EditorProps) {
+  const drivers = draft.kind === 'personal' ? draft.quote.drivers : [];
+  const vehicles = draft.kind === 'personal' ? draft.quote.vehicles : [];
+  const snapshot = (driver?: Driver) => ({ firstName: driver?.firstName ?? '', lastName: driver?.lastName ?? '', maritalStatus: driver?.maritalStatus ?? '', relationship: driver?.relationship ?? '', licenseState: driver?.licenseState ?? '', licenseNumber: driver?.licenseNumber ?? '', licenseStatus: driver?.licenseStatus || 'Valid', goodStudent: String(driver?.goodStudent || 'No'), distantStudent: String(driver?.distantStudent || 'No'), driverStatus: String(driver?.driverStatus ?? 'Rated'), primaryVehicleId: driver?.primaryVehicleId ?? '' });
+  const [target, setTarget] = useState(drivers[0]?.id ?? '');
+  const driver = drivers.find((entry) => entry.id === target);
+  const [v, setV] = useState(() => snapshot(drivers[0]));
+  const [error, setError] = useState('');
+  if (draft.kind !== 'personal' || !driver) return null;
+  const isNamedInsured = drivers[0]?.id === driver.id;
+  const age = ageOn(driver.dob) ?? 0;
+  const initial = snapshot(driver);
+  const set = (patch: Partial<typeof v>) => { setV({ ...v, ...patch }); setError(''); };
+  const choose = (id: string) => { setTarget(id); setV(snapshot(drivers.find((entry) => entry.id === id))); setError(''); };
+  const LABELS: Record<keyof typeof v, string> = { firstName: 'first name', lastName: 'last name', maritalStatus: 'marital status', relationship: 'relationship', licenseState: 'license state', licenseNumber: 'license number', licenseStatus: 'license status', goodStudent: 'good student', distantStudent: 'distant student', driverStatus: 'driver status', primaryVehicleId: 'vehicle driven most' };
+  const save = () => {
+    const licenseNumber = v.licenseNumber.trim().toUpperCase();
+    if (!v.firstName.trim() || !v.lastName.trim()) { setError('Enter the first and last name (use the name on the driver license).'); return; }
+    if (!LICENSE_NUMBER.test(licenseNumber)) { setError('The license number must be 4 to 20 letters, digits or dashes.'); return; }
+    if (drivers.some((entry) => entry.id !== driver.id && entry.licenseState === v.licenseState && entry.licenseNumber.toUpperCase() === licenseNumber)) { setError('Another driver on this policy already has that license number.'); return; }
+    if (v.goodStudent === 'Yes' && age >= STUDENT_AGE) { setError(`The good student discount is for full-time students under ${STUDENT_AGE} (${driverName(driver)} is ${age}).`); return; }
+    if (v.distantStudent === 'Yes' && age >= STUDENT_AGE) { setError(`The distant student discount is for students under ${STUDENT_AGE} living 100+ miles away without a car.`); return; }
+    if (isNamedInsured && v.driverStatus === 'Excluded') { setError('The named insured cannot be excluded.'); return; }
+    if (!isNamedInsured && (v.relationship === 'Spouse' || v.relationship === 'Domestic Partner') && drivers.some((entry) => entry.id !== driver.id && (entry.relationship === 'Spouse' || entry.relationship === 'Domestic Partner'))) { setError('A spouse or domestic partner is already listed.'); return; }
+    if (v.driverStatus === 'Rated' && initial.driverStatus === 'Excluded' && vehicles.length > 1 && !v.primaryVehicleId) { setError('Select the vehicle this driver drives most.'); return; }
+    const changes = (Object.keys(v) as (keyof typeof v)[]).filter((key) => (key === 'licenseNumber' ? licenseNumber : v[key]) !== initial[key]).map((key) => {
+      if (key === 'licenseNumber') return `license number ending ${initial.licenseNumber.slice(-4) || 'none'} to ending ${licenseNumber.slice(-4)}`;
+      if (key === 'primaryVehicleId') return `vehicle driven most: ${vehicleName(vehicles.find((vehicle) => vehicle.id === v.primaryVehicleId) ?? vehicles[0])}`;
+      if (key === 'driverStatus') return v.driverStatus === 'Excluded' ? 'excluded (signed named driver exclusion form required)' : 'reinstated as a rated driver';
+      return `${LABELS[key]} ${initial[key] || 'blank'} to ${v[key]}`;
+    });
+    if (!changes.length) { setError('Nothing has changed yet.'); return; }
+    const next = clone(draft) as { kind: 'personal'; quote: QuoteData };
+    next.quote.drivers = next.quote.drivers.map((entry) => {
+      if (entry.id !== driver.id) return entry;
+      const excluded = v.driverStatus === 'Excluded';
+      return { ...entry, firstName: v.firstName.trim(), lastName: v.lastName.trim(), maritalStatus: v.maritalStatus, relationship: isNamedInsured ? entry.relationship : v.relationship, licenseState: v.licenseState, licenseNumber, licenseStatus: v.licenseStatus, goodStudent: v.goodStudent as Driver['goodStudent'], distantStudent: v.distantStudent as Driver['distantStudent'], driverStatus: v.driverStatus as Driver['driverStatus'], primaryVehicleId: excluded ? '' : (v.primaryVehicleId || entry.primaryVehicleId || vehicles[0]?.id || '') };
+    });
+    onSave(next, `Changed driver ${driverName(driver)}: ${changes.join('; ')}`);
+  };
+  const spouseListed = drivers.some((entry) => entry.relationship === 'Spouse' || entry.relationship === 'Domestic Partner');
+  return <div className="grid max-h-[460px] grid-cols-2 gap-3 overflow-y-auto pr-1">
+    <Field label="Driver" wide><SelectControl value={target} options={drivers.map((entry, index) => ({ value: entry.id, label: `${driverName(entry)}${index === 0 ? ' (named insured)' : ''} · ${entry.driverStatus}` }))} onChange={choose} /></Field>
+    <Field label="First name"><TextControl value={v.firstName} onChange={(firstName) => set({ firstName })} /></Field>
+    <Field label="Last name"><TextControl value={v.lastName} onChange={(lastName) => set({ lastName })} /></Field>
+    <Field label="Marital status"><SelectControl value={v.maritalStatus} options={MARITAL_STATUSES} onChange={(maritalStatus) => set({ maritalStatus })} /></Field>
+    {!isNamedInsured && <Field label="Relationship to insured"><SelectControl value={v.relationship} options={RELATIONSHIPS} onChange={(relationship) => set({ relationship })} /></Field>}
+    <Field label="License state"><SelectControl value={v.licenseState} options={US_STATES} onChange={(licenseState) => set({ licenseState })} /></Field>
+    <Field label="License number"><TextControl value={v.licenseNumber} onChange={(licenseNumber) => set({ licenseNumber })} /></Field>
+    <Field label="License status"><SelectControl value={v.licenseStatus} options={LICENSE_STATUSES} onChange={(licenseStatus) => set({ licenseStatus })} /></Field>
+    {age < STUDENT_AGE && <><Field label="Good student (B average or better)"><SelectControl value={v.goodStudent} options={['No', 'Yes']} onChange={(goodStudent) => set({ goodStudent })} /></Field>
+      <Field label="Student 100+ miles away without a car"><SelectControl value={v.distantStudent} options={['No', 'Yes']} onChange={(distantStudent) => set({ distantStudent })} /></Field></>}
+    {!isNamedInsured && <Field label="Driver status"><SelectControl value={v.driverStatus} options={['Rated', 'Excluded']} onChange={(driverStatus) => set({ driverStatus })} /></Field>}
+    {v.driverStatus === 'Rated' && vehicles.length > 1 && <Field label="Vehicle driven most"><SelectControl value={v.primaryVehicleId} options={vehicles.map((vehicle) => ({ value: vehicle.id, label: vehicleName(vehicle) }))} onChange={(primaryVehicleId) => set({ primaryVehicleId })} /></Field>}
+    {v.licenseStatus !== 'Valid' && v.driverStatus === 'Rated' && <p className="col-span-2 rounded-[3px] bg-[#fff6ee] px-3 py-2 text-[12px] text-[#9a4a0b]">A {v.licenseStatus.toLowerCase()} license is surcharged. The customer may exclude the driver instead until the license is reinstated.</p>}
+    {v.maritalStatus === 'Married' && initial.maritalStatus !== 'Married' && !spouseListed && <p className="col-span-2 rounded-[3px] bg-[#fff6ee] px-3 py-2 text-[12px] text-[#9a4a0b]">Newly married: add the spouse with Add a driver (or exclude them) in this same change.</p>}
+    {v.driverStatus === 'Excluded' && initial.driverStatus !== 'Excluded' && <p className="col-span-2 rounded-[3px] bg-[#fff6ee] px-3 py-2 text-[12px] text-[#9a4a0b]">An excluded driver has no coverage while driving any vehicle on this policy. The named insured must sign the named driver exclusion form.</p>}
+    <div className="col-span-2"><InlineError message={error} /><SaveButton onClick={save} label="Save Driver Change" /></div>
+  </div>;
+}
+
+function CommercialDriverChange({ draft, onSave }: EditorProps) {
+  const drivers = draft.kind === 'commercial' ? draft.quote.drivers : [];
+  const snapshot = (id: string) => { const d = drivers.find((entry) => entry.id === id); return { licenseState: d?.licenseState ?? '', licenseNumber: d?.licenseNumber ?? '', licenseType: d?.licenseType ?? '', experience: d?.experience ?? '', violations: d?.violations ?? '0', accidents: d?.accidents ?? '0', role: d?.role ?? '' }; };
+  const [target, setTarget] = useState(drivers[0]?.id ?? '');
+  const [v, setV] = useState(() => snapshot(drivers[0]?.id ?? ''));
+  const [error, setError] = useState('');
+  if (draft.kind !== 'commercial' || !drivers.length) return null;
+  const driver = drivers.find((entry) => entry.id === target)!;
+  const name = `${driver.firstName} ${driver.lastName}`;
+  const initial = snapshot(target);
+  const set = (patch: Partial<typeof v>) => { setV({ ...v, ...patch }); setError(''); };
+  const LABELS: Record<keyof typeof v, string> = { licenseState: 'license state', licenseNumber: 'license number', licenseType: 'license type', experience: 'commercial driving experience', violations: 'moving violations (3 years)', accidents: 'at-fault accidents (3 years)', role: 'relationship to business' };
+  const save = () => {
+    const licenseNumber = v.licenseNumber.trim().toUpperCase();
+    if (!LICENSE_NUMBER.test(licenseNumber)) { setError('The license number must be 4 to 20 letters, digits or dashes.'); return; }
+    if (v.violations === '3 or more') { setError('Drivers with 3 or more violations in 3 years are not acceptable. Remove this driver from the schedule instead.'); return; }
+    if (draft.quote.productQuotes.trucking && v.licenseType.startsWith('CDL') && v.experience === 'Less than 2 years') { setError('Trucking requires at least 2 years of verifiable CDL driving experience.'); return; }
+    if (needsCdlDriver(draft.quote) && !v.licenseType.startsWith('CDL') && !drivers.some((entry) => entry.id !== target && entry.licenseType.startsWith('CDL'))) { setError(`${name} is the only CDL driver. Vehicles over 26,000 lbs need at least one CDL driver.`); return; }
+    const changes = (Object.keys(v) as (keyof typeof v)[]).filter((key) => (key === 'licenseNumber' ? licenseNumber : v[key]) !== initial[key]).map((key) => (key === 'licenseNumber' ? `license number ending ${initial.licenseNumber.slice(-4)} to ending ${licenseNumber.slice(-4)}` : `${LABELS[key]} ${initial[key] || 'blank'} to ${v[key]}`));
+    if (!changes.length) { setError('Nothing has changed yet.'); return; }
+    const next = clone(draft);
+    if (next.kind === 'commercial') next.quote.drivers = next.quote.drivers.map((entry) => (entry.id === target ? { ...entry, ...v, licenseNumber } : entry));
+    onSave(next, `Changed driver ${name}: ${changes.join('; ')}`);
+  };
+  return <div className="grid grid-cols-2 gap-3">
+    <Field label="Driver" wide><SelectControl value={target} options={drivers.map((entry) => ({ value: entry.id, label: `${entry.firstName} ${entry.lastName} · ${entry.licenseType || 'license'}` }))} onChange={(id) => { setTarget(id); setV(snapshot(id)); setError(''); }} /></Field>
+    <Field label="Relationship to business"><SelectControl value={v.role} options={DRIVER_ROLES} onChange={(role) => set({ role })} /></Field>
+    <Field label="License state"><SelectControl value={v.licenseState} options={US_STATES} onChange={(licenseState) => set({ licenseState })} /></Field>
+    <Field label="License number"><TextControl value={v.licenseNumber} onChange={(licenseNumber) => set({ licenseNumber })} /></Field>
+    <Field label="License type"><SelectControl value={v.licenseType} options={DRIVER_LICENSE_TYPES} onChange={(licenseType) => set({ licenseType })} /></Field>
+    <Field label="Commercial driving experience"><SelectControl value={v.experience} options={DRIVER_EXPERIENCE} onChange={(experience) => set({ experience })} /></Field>
+    <Field label="Moving violations (3 years)"><SelectControl value={v.violations} options={DRIVER_VIOLATIONS} onChange={(violations) => set({ violations })} /></Field>
+    <Field label="At-fault accidents (3 years)"><SelectControl value={v.accidents} options={DRIVER_ACCIDENTS} onChange={(accidents) => set({ accidents })} /></Field>
+    <div className="col-span-2"><InlineError message={error} /><SaveButton onClick={save} label="Save Driver Change" /></div>
   </div>;
 }
 
@@ -387,22 +512,41 @@ function RemoveDriverEditor({ draft, onSave }: EditorProps) {
   const options = draft.kind === 'personal' ? draft.quote.drivers.slice(1).map((driver) => ({ value: driver.id, label: `${driverName(driver)} (${driver.driverStatus})` })) : draft.quote.drivers.map((driver) => ({ value: driver.id, label: `${driver.firstName} ${driver.lastName}` }));
   const [target, setTarget] = useState(options[0]?.value ?? '');
   const [action, setAction] = useState(draft.kind === 'personal' ? 'Exclude from the policy' : 'Remove from the driver schedule');
+  const [reason, setReason] = useState('');
   const [error, setError] = useState('');
+  const removing = action !== 'Exclude from the policy';
   const save = () => {
     if (!target) { setError(draft.kind === 'personal' ? 'The principal named insured cannot be removed. Only other household members can be removed or excluded.' : 'There are no drivers to remove.'); return; }
     const next = clone(draft);
     if (next.kind === 'personal') {
       const driver = next.quote.drivers.find((entry) => entry.id === target)!;
-      if (action === 'Exclude from the policy') { driver.driverStatus = 'Excluded'; onSave(next, `Excluded driver ${driverName(driver)} (signed exclusion form required)`); }
-      else { next.quote.drivers = next.quote.drivers.filter((entry) => entry.id !== target); onSave(next, `Removed ${driverName(driver)} (no longer in household)`); }
+      if (!removing) {
+        if (driver.driverStatus === 'Excluded') { setError(`${driverName(driver)} is already excluded.`); return; }
+        driver.driverStatus = 'Excluded';
+        // An excluded driver is no longer anyone's principal driver; the vehicle is re-rated on the remaining drivers.
+        const freed = driver.primaryVehicleId;
+        driver.primaryVehicleId = '';
+        const fallback = next.quote.drivers.find((entry) => entry.driverStatus === 'Rated' && entry.id !== driver.id);
+        if (freed && fallback && !next.quote.drivers.some((entry) => entry.driverStatus === 'Rated' && entry.primaryVehicleId === freed)) fallback.primaryVehicleId = fallback.primaryVehicleId || freed;
+        onSave(next, `Excluded driver ${driverName(driver)} (signed named driver exclusion form required)`);
+      } else {
+        if (!reason) { setError('Select why the driver is being removed.'); return; }
+        next.quote.drivers = next.quote.drivers.filter((entry) => entry.id !== target);
+        onSave(next, `Removed ${driverName(driver)} (${reason.toLowerCase()})`);
+      }
     } else {
-      if (next.quote.drivers.length < 2) { setError('Commercial Auto needs at least one scheduled driver.'); return; }
+      if (next.quote.drivers.length < 2) { setError('A commercial auto policy needs at least one scheduled driver.'); return; }
       const driver = next.quote.drivers.find((entry) => entry.id === target)!;
-      next.quote.drivers = next.quote.drivers.filter((entry) => entry.id !== target);
+      const remaining = next.quote.drivers.filter((entry) => entry.id !== target);
+      if (needsCdlDriver(next.quote) && !remaining.some((entry) => entry.licenseType.startsWith('CDL'))) { setError(`${driver.firstName} ${driver.lastName} is the only CDL driver. Vehicles over 26,000 lbs need at least one CDL driver; add another CDL driver first.`); return; }
+      next.quote.drivers = remaining;
       onSave(next, `Removed driver ${driver.firstName} ${driver.lastName} from the schedule`);
     }
   };
-  return <div className="grid grid-cols-2 gap-3"><Field label="Driver"><SelectControl value={target} options={options} onChange={setTarget} /></Field>{draft.kind === 'personal' && <Field label="Action"><SelectControl value={action} options={['Exclude from the policy', 'Remove (no longer lives in household)']} onChange={setAction} /></Field>}<div className="col-span-2"><InlineError message={error} /><SaveButton onClick={save} label="Save Driver Change" /></div></div>;
+  return <div className="grid grid-cols-2 gap-3"><Field label="Driver"><SelectControl value={target} options={options} onChange={setTarget} /></Field>{draft.kind === 'personal' && <Field label="Action"><SelectControl value={action} options={['Exclude from the policy', 'Remove (no longer lives in household)']} onChange={setAction} /></Field>}
+    {draft.kind === 'personal' && removing && <Field label="Reason"><SelectControl value={reason} options={['Moved out of the household', 'Divorced or separated', 'Has own auto policy elsewhere', 'Deceased', 'Away in the military']} onChange={setReason} /></Field>}
+    {draft.kind === 'personal' && <p className="col-span-2 text-[12px] text-[#5c6670]">{removing ? 'Every licensed household member must be listed. Remove a driver only when they no longer live in the household.' : 'Excluded drivers have no coverage on this policy. The named insured must sign the named driver exclusion form.'}</p>}
+    <div className="col-span-2"><InlineError message={error} /><SaveButton onClick={save} label="Save Driver Change" /></div></div>;
 }
 
 function AutoCoverageEditor({ policy, draft, onSave }: EditorProps) {
@@ -587,7 +731,11 @@ function ChangeVehicleEditor({ policy, draft, onSave, lienholders }: EditorProps
     if (!changes.length) { setError('Nothing has changed yet.'); return; }
     const next = clone(personal);
     next.quote.vehicles = next.quote.vehicles.map((entry) => (entry.id === vehicle.id ? { ...entry, primaryUse: v.primaryUse, annualMiles: v.annualMiles, garagingZip: v.garagingZip, rideshare: v.rideshare as 'Yes' | 'No' } : entry));
-    if (v.driverId !== initial.driverId) next.quote.drivers = next.quote.drivers.map((driver) => (driver.id === v.driverId ? { ...driver, primaryVehicleId: vehicle.id } : driver));
+    if (v.driverId !== initial.driverId) {
+      // The new principal moves to this vehicle; the previous principal takes the vehicle the new one drove.
+      const swapTo = next.quote.drivers.find((driver) => driver.id === v.driverId)?.primaryVehicleId ?? '';
+      next.quote.drivers = next.quote.drivers.map((driver) => (driver.id === v.driverId ? { ...driver, primaryVehicleId: vehicle.id } : driver.primaryVehicleId === vehicle.id && driver.driverStatus === 'Rated' ? { ...driver, primaryVehicleId: swapTo !== vehicle.id ? swapTo : '' } : driver));
+    }
     let list = lienholders;
     let added: PolicyRecord['lienholders'] = [];
     if (v.ownership === 'Owned' && lien) list = lienholders.filter((holder) => holder.id !== lien.id);
@@ -696,7 +844,7 @@ function SaveButton({ onClick, label = 'Save Change' }: { onClick: () => void; l
 
 const EDITORS: Record<ChangeType, (props: EditorProps) => ReactNode> = {
   address: AddressEditor, contact: ContactEditor, addVehicle: AddVehicleEditor, replaceVehicle: ReplaceVehicleEditor, removeVehicle: RemoveVehicleEditor,
-  addDriver: AddDriverEditor, removeDriver: RemoveDriverEditor, coverages: (props) => (props.policy.product === 'auto' ? <AutoCoverageEditor {...props} /> : <ConfigCoverageEditor {...props} />),
+  addDriver: AddDriverEditor, changeDriver: ChangeDriverEditor, removeDriver: RemoveDriverEditor, coverages: (props) => (props.policy.product === 'auto' ? <AutoCoverageEditor {...props} /> : <ConfigCoverageEditor {...props} />),
   lienholder: LienholderEditor, addUnit: AddUnitEditor, removeUnit: RemoveUnitEditor,
   changeVehicle: ChangeVehicleEditor, dwelling: DwellingEditor, mortgagee: MortgageeEditor,
 };
