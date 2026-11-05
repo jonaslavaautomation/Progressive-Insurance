@@ -14,9 +14,11 @@ import { resolveOptions } from '@/products/helpers';
 import { driverName, rateQuote, ratedDrivers, vehicleName } from '@/utils/ratingEngine';
 import { addMonths, formatDate, parseDate } from '@/utils/dates';
 import { buildInstallments } from '@/services/policyEngine';
+import { NO_ID_CARDS } from '@/servicing/portal/portalUtils';
+import { MORTGAGEE_PRODUCTS } from '@/products/property';
 
 const id = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
-const EXTRA_NAMES: Record<string, string> = { hull: 'Physical Damage (Hull)', trailer: 'Boat Trailer', fullTimer: "Full-Timer's Coverage", filing: 'State/Federal Filing', property: 'Property (Building & Contents)' };
+const EXTRA_NAMES: Record<string, string> = { dwelling: 'Dwelling (Coverages A-D)', unitValue: 'Dwelling / Walls-In (Coverage A)', personalProperty: 'Personal Property (Coverage C)', building: 'Building', bpp: 'Business Personal Property', businessIncome: 'Business Income & Extra Expense', hull: 'Physical Damage (Hull)', trailer: 'Boat Trailer', fullTimer: "Full-Timer's Coverage", filing: 'State/Federal Filing', property: 'Property (Building & Contents)' };
 
 export function generatePolicyNumber(): string {
   return `9${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
@@ -108,19 +110,22 @@ export function rateSource(source: PolicySource, product: AnyProductKey): Source
 
 function newPolicy(input: { key: AnyProductKey; quoteNumber: string; policyNumber: string; plan: BillPlanQuote; termMonths: number; effectiveDate: string; insured: InsuredSnapshot; drivers: string[]; agentCode: string; agentName: string; day: string; paymentMethod: string; delivery: string; source: PolicySource; rating: SourceRating }): PolicyRecord {
   const { key, plan, termMonths, effectiveDate, day, rating } = input;
+  // Homeowners: mortgagees from the quote, and escrow billing to the first mortgagee.
+  const home = (MORTGAGEE_PRODUCTS as string[]).includes(key) && input.source.kind === 'personal' ? input.source.quote.productQuotes[key as OtherProductKey] : undefined;
+  const escrow = home?.answers.mortgageeBilled === 'Yes';
   const autopay = plan.id === 'EFT' || plan.id === 'CARD';
-  const paymentMethod = plan.id === 'EFT' ? 'Bank account (EFT)' : plan.id === 'CARD' ? 'Recurring credit card' : input.paymentMethod || 'Bank account (EFT)';
+  const paymentMethod = escrow ? 'Mortgagee escrow' : plan.id === 'EFT' ? 'Bank account (EFT)' : plan.id === 'CARD' ? 'Recurring credit card' : input.paymentMethod || 'Bank account (EFT)';
   const documents: PolicyDocument[] = [
     { id: id('doc'), type: 'Declarations', date: day, term: 1, data: {} },
     { id: id('doc'), type: 'Application', date: day, term: 1, data: { delivery: input.delivery } },
-    { id: id('doc'), type: 'Payment Receipt', date: day, term: 1, data: { amount: plan.dueToday, method: input.paymentMethod || paymentMethod, confirmation: `P${Math.floor(Math.random() * 1e9)}` } },
+    { id: id('doc'), type: 'Payment Receipt', date: day, term: 1, data: { amount: plan.dueToday, method: escrow ? paymentMethod : input.paymentMethod || paymentMethod, confirmation: `P${Math.floor(Math.random() * 1e9)}` } },
   ];
-  if (!['renters', 'boat', 'bop', 'mgmt'].includes(key)) documents.splice(1, 0, { id: id('doc'), type: 'ID Cards', date: day, term: 1, data: {} });
+  if (!NO_ID_CARDS.includes(key)) documents.splice(1, 0, { id: id('doc'), type: 'ID Cards', date: day, term: 1, data: {} });
   const stateName = input.source.kind === 'personal' ? input.source.quote.policy.quoteState : input.source.quote.business.state;
   if (key === 'auto' && rulesFor(stateName).reporting?.system.includes('FS-1')) documents.push({ id: id('doc'), type: 'FS-1 Certificate of Insurance', date: day, term: 1, data: { reason: 'New business' } });
-  if (key === 'bop' || key === 'commercialAuto' || key === 'mgmt') documents.push({ id: id('doc'), type: 'Certificate of Insurance', date: day, term: 1, data: { holder: 'Evidence of coverage' } });
+  if (input.source.kind === 'commercial') documents.push({ id: id('doc'), type: 'Certificate of Insurance', date: day, term: 1, data: { holder: 'Evidence of coverage' } });
   // The bind packet: one copy for the insured, one for the agency file.
-  for (const copy of ['Insured Copy', 'Agent Copy']) documents.push({ id: id('doc'), type: 'Policy Packet', date: day, term: 1, data: { copy } });
+  for (const copy of ['Insured Copy', 'Agent Copy', ...(home?.interests.length ? ['Mortgagee Copy'] : [])]) documents.push({ id: id('doc'), type: 'Policy Packet', date: day, term: 1, data: { copy } });
   return {
     id: id('pol'),
     policyNumber: input.policyNumber,
@@ -141,7 +146,7 @@ function newPolicy(input: { key: AnyProductKey; quoteNumber: string; policyNumbe
     termPremium: plan.total,
     fullTermPremium: rating.fullTermPremium,
     billPlanId: plan.id,
-    billPlanName: plan.name,
+    billPlanName: escrow ? `${plan.name} - Mortgagee Billed` : plan.name,
     feePerPayment: plan.feePerPayment,
     autopay,
     paymentMethod,
@@ -151,13 +156,14 @@ function newPolicy(input: { key: AnyProductKey; quoteNumber: string; policyNumbe
     installments: buildInstallments(plan.total, plan.dueToday, plan.payments, plan.paymentAmount, effectiveDate, termMonths, true),
     ledger: [
       { id: id('led'), date: day, type: 'Premium', amount: plan.total, detail: `New business, term 1 (${plan.name})` },
-      { id: id('led'), date: day, type: 'Payment', amount: -plan.dueToday, detail: `Down payment - ${input.paymentMethod || paymentMethod}` },
+      { id: id('led'), date: day, type: 'Payment', amount: -plan.dueToday, detail: escrow ? `Annual premium paid by ${home?.interests.find((entry) => entry.position === 'First')?.name ?? 'the mortgagee'} (escrow)` : `Down payment - ${input.paymentMethod || paymentMethod}` },
     ],
     documents,
     history: [
       { id: id('his'), date: day, event: 'Policy issued', detail: `${productLabel(key)} policy bound from Quote #${input.quoteNumber}. Effective ${effectiveDate}.` },
       { id: id('his'), date: day, event: 'Down payment received', detail: `${plan.dueToday.toFixed(2)} (${plan.name})` },
-      ...(rulesFor(stateName).reporting && ['auto', 'commercialAuto'].includes(key) ? [{ id: id('his'), date: day, event: 'Coverage reported to the state', detail: rulesFor(stateName).reporting!.text }] : []),
+      ...truckingFilings(input.source, key).map((detail) => ({ id: id('his'), date: day, event: 'Federal filing', detail })),
+      ...(rulesFor(stateName).reporting && ['auto', 'commercialAuto', 'trucking'].includes(key) ? [{ id: id('his'), date: day, event: 'Coverage reported to the state', detail: rulesFor(stateName).reporting!.text }] : []),
     ],
     esign: input.delivery === 'In person (print and sign)' ? 'Signed' : 'Pending',
     pendingCancel: null,
@@ -167,8 +173,21 @@ function newPolicy(input: { key: AnyProductKey; quoteNumber: string; policyNumbe
     nonRenewal: null,
     lapse: null,
     source: input.source,
-    lienholders: [],
+    lienholders: (home?.interests ?? []).map((entry) => ({ id: id('lh'), unit: rating.units[0]?.label ?? 'Dwelling', name: entry.name, address: entry.address, loanNumber: entry.loanNumber ?? '', kind: 'Mortgagee' as const, position: entry.position })),
+    ...(escrow ? { billTo: 'Mortgagee' as const } : {}),
   };
+}
+
+/** Filings an insurer makes for an interstate for-hire carrier (49 CFR 387 and FMCSA filing rules). */
+function truckingFilings(source: PolicySource, key: string): string[] {
+  if (key !== 'trucking' || source.kind !== 'commercial') return [];
+  const answers = source.quote.productQuotes.trucking?.answers ?? {};
+  if (answers.authority !== 'Own MC authority (for-hire)' || answers.operation === 'Intrastate only') return [];
+  return [
+    `MCS-90 endorsement attached (federal public liability, USDOT ${answers.usdot || 'on file'}).`,
+    `BMC-91X public liability filing sent to FMCSA for MC-${answers.mc || 'on file'}.`,
+    ...(answers.commodity === 'Household goods (moving)' ? ['BMC-34 cargo insurance filing sent to FMCSA (household goods carrier).'] : []),
+  ];
 }
 
 /** A personal policy keeps only its own product in the rating source. */

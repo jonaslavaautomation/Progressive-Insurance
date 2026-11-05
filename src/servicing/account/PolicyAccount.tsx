@@ -5,6 +5,7 @@ import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Car, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, Printer } from 'lucide-react';
 import type { UnitSnapshot } from '@/types/policy';
 import type { Driver } from '@/types/quote';
+import type { CommercialDriver } from '@/commercial/types';
 import { useQuote } from '@/context/useQuote';
 import { visualPrefsStore, TEXT_ZOOM } from '@/services/visualPrefs';
 import { productLabel, configFor } from '@/products/configs';
@@ -16,6 +17,7 @@ import { availableTypes, type ChangeType } from '@/servicing/changeTypes';
 import { TrainingClock } from '@/servicing/ServiceChrome';
 import { hasIdCards } from '@/servicing/portal/portalUtils';
 import { AccountDrawer } from '@/servicing/account/AccountDrawer';
+import { MORTGAGEE_PRODUCTS } from '@/products/property';
 import { PolicyHub, type HubActions, type HubPanel } from '@/servicing/account/PolicyHub';
 import { AutoPayFlow } from '@/servicing/account/AutoPayFlow';
 import { runWithSpinner } from '@/services/processing';
@@ -108,6 +110,31 @@ function PersonCard({ name, role, dob, driver, active, onRecord, onUpdate, onRem
   </div>;
 }
 
+/** Commercial named insured: the business itself (no date of birth or household details). */
+function BusinessCard({ name, business }: { name: string; business: Record<string, string> }) {
+  const [more, setMore] = useState(false);
+  return <div className={`${card} p-[22px]`}>
+    <div className="text-[15px] font-bold text-[#2f4a66]">{name}</div>
+    <div className="text-[12px] text-[#5c6670]">Named insured (business)</div>
+    <div className="mt-[14px]"><Item title="Business type">{business.industry || '—'}</Item></div>
+    <div><ShowMore open={more} onClick={() => setMore(!more)} /></div>
+    {more && <Details rows={[['Entity', business.entity || '—'], ['FEIN', business.fein ? `••-•••${business.fein.slice(-4)}` : '—'], ['Contact', [business.contact, business.contactTitle].filter(Boolean).join(', ') || '—'], ['Years in business', business.yearsInBusiness || '—'], ['Employees', business.employees || '—']]} />}
+  </div>;
+}
+
+/** Scheduled commercial driver (ACORD 127 driver schedule). */
+function CommercialDriverCard({ driver, active, onRemove }: { driver: CommercialDriver; active: boolean; onRemove?: () => void }) {
+  const [more, setMore] = useState(false);
+  return <div className={`${card} p-[22px]`}>
+    <div className="text-[15px] font-bold text-[#2f4a66]">{[driver.firstName, driver.lastName].join(' ')}</div>
+    <div className="text-[12px] text-[#5c6670]">Scheduled driver{driver.role ? ` · ${driver.role}` : ''}</div>
+    <div className="mt-[14px]"><Item title="License type">{driver.licenseType || '—'}</Item></div>
+    {active && onRemove && <div className="mt-[16px] flex gap-[22px]"><TextLink strong onClick={onRemove}>Remove</TextLink></div>}
+    <div><ShowMore open={more} onClick={() => setMore(!more)} /></div>
+    {more && <Details rows={[['Date hired', driver.hireDate || '—'], ['Commercial driving experience', driver.experience || '—'], ['Moving violations (3 years)', driver.violations || '0'], ['At-fault accidents (3 years)', driver.accidents || '0'], ['License state', driver.licenseState], ['License number', driver.licenseNumber ? `••••${driver.licenseNumber.slice(-4)}` : '']]} />}
+  </div>;
+}
+
 function UnitCard({ unit, details, actions, coveragesLabel, onCoverages }: { unit: UnitSnapshot; details: [string, string][]; actions: [string, () => void][]; coveragesLabel: string; onCoverages: () => void }) {
   const [more, setMore] = useState(false);
   return <div className={`${card} p-[22px]`}>
@@ -142,7 +169,9 @@ export function PolicyAccount() {
   const isAuto = policy.product === 'auto';
   const config = configFor(policy.product);
   const vehicles = policy.source.kind === 'personal' ? policy.source.quote.vehicles : [];
-  const drivers = driversOf(policy).filter((driver) => isAuto || policy.drivers.includes([driver.firstName, driver.lastName].join(' ')) || policy.product === 'commercialAuto');
+  const commercial = policy.source.kind === 'commercial' ? policy.source.quote : null;
+  const motorizedCommercial = policy.product === 'commercialAuto' || policy.product === 'trucking';
+  const drivers = driversOf(policy).filter((driver) => isAuto || policy.drivers.includes([driver.firstName, driver.lastName].join(' ')) || policy.product === 'trucking' || policy.product === 'commercialAuto');
   const messages = importantMessages(policy, day);
   const since = customerSinceDate(state.policies, policy);
   const loyalty = loyaltyLevel(since, day);
@@ -270,10 +299,13 @@ export function PolicyAccount() {
           </section>
         </div>
 
-        {(isAuto || drivers.length > 0) && can('addDriver') && <div className="mt-[26px] flex justify-end"><button type="button" onClick={() => change('addDriver')} className={bigButton}>Add a driver<ChevronRight size={16} strokeWidth={2.4} /></button></div>}
-        <h2 id="account-people" className={`${sectionTitle} mt-[14px] scroll-mt-[20px]`}>People</h2>
+        {(isAuto || drivers.length > 0 || motorizedCommercial) && can('addDriver') && <div className="mt-[26px] flex justify-end"><button type="button" onClick={() => change('addDriver')} className={bigButton}>Add a driver<ChevronRight size={16} strokeWidth={2.4} /></button></div>}
+        <h2 id="account-people" className={`${sectionTitle} mt-[14px] scroll-mt-[20px]`}>{commercial ? (motorizedCommercial ? 'Business and Drivers' : 'Business') : 'People'}</h2>
         <div className="mt-[12px] grid grid-cols-2 gap-[20px]">
-          {drivers.length ? drivers.map((driver, index) => <PersonCard key={driver.id} name={[driver.firstName, driver.lastName].join(' ')} role={driver.driverStatus === 'Excluded' ? 'Excluded driver' : index === 0 || driver.relationship === 'Insured' ? 'Named insured' : 'Insured driver'} dob={driver.dob} driver={driver} active={active} onRecord={() => setDialog({ kind: 'record', driver })} onUpdate={isAuto ? () => setDialog({ kind: 'driver', driver }) : undefined} onRemove={can('removeDriver') && index > 0 ? () => change('removeDriver') : undefined} />)
+          {commercial ? <>
+            <BusinessCard name={policy.insured.name} business={commercial.business} />
+            {motorizedCommercial && commercial.drivers.map((driver) => <CommercialDriverCard key={driver.id} driver={driver} active={active} onRemove={can('removeDriver') && commercial.drivers.length > 1 ? () => change('removeDriver') : undefined} />)}
+          </> : drivers.length ? drivers.map((driver, index) => <PersonCard key={driver.id} name={[driver.firstName, driver.lastName].join(' ')} role={driver.driverStatus === 'Excluded' ? 'Excluded driver' : index === 0 || driver.relationship === 'Insured' ? 'Named insured' : 'Insured driver'} dob={driver.dob} driver={driver} active={active} onRecord={() => setDialog({ kind: 'record', driver })} onUpdate={isAuto ? () => setDialog({ kind: 'driver', driver }) : undefined} onRemove={can('removeDriver') && index > 0 ? () => change('removeDriver') : undefined} />)
             : <PersonCard name={policy.insured.name} role="Named insured" dob={policy.insured.dob} active={false} />}
         </div>
 
@@ -287,13 +319,30 @@ export function PolicyAccount() {
             const lien = policy.lienholders.filter((entry) => entry.unit === unit.label);
             const actions: [string, () => void][] = isAuto
               ? [...(active && vehicle ? [['Update', () => setDialog({ kind: 'vehicle', index })] as [string, () => void]] : []), ...(can('replaceVehicle') ? [['Replace', () => change('replaceVehicle')] as [string, () => void]] : []), ...(can('removeVehicle') && policy.units.length > 1 ? [['Remove', () => change('removeVehicle')] as [string, () => void]] : [])]
-              : [...(can('coverages') ? [['Update', () => change('coverages')] as [string, () => void]] : []), ...(can('removeUnit') && policy.units.length > 1 ? [['Remove', () => change('removeUnit')] as [string, () => void]] : [])];
+              : [...(can('dwelling') ? [['Update', () => change('dwelling')] as [string, () => void]] : can('coverages') ? [['Update', () => change('coverages')] as [string, () => void]] : []), ...(can('removeUnit') && policy.units.length > 1 ? [['Remove', () => change('removeUnit')] as [string, () => void]] : [])];
             const details: [string, string][] = vehicle
               ? [['VIN', vehicle.vin], ['Body style', vehicle.bodyStyle], ['Primary use', vehicle.primaryUse], ['Annual miles', vehicle.annualMiles], ['Garaging ZIP', vehicle.garagingZip], ['Lienholder', lien.map((entry) => `${entry.name} (${entry.kind})`).join(', ') || 'None']]
               : unit.details.map((detail) => { const [term, ...rest] = detail.split(':'); return rest.length ? [term.trim(), rest.join(':').trim()] as [string, string] : ['Detail', detail] as [string, string]; });
             return <UnitCard key={`${unit.label}-${index}`} unit={unit} details={details} actions={actions} coveragesLabel={coveragesTitle} onCoverages={() => scrollTo(`coverage-${index}`)} />;
           })}
         </div>
+
+        {(MORTGAGEE_PRODUCTS as string[]).includes(policy.product) && <>
+          <div className="mt-[30px] flex items-center justify-between">
+            <h2 id="account-mortgagees" className={`${sectionTitle} scroll-mt-[20px]`}>Mortgagees</h2>
+            {can('mortgagee') && <button type="button" onClick={() => change('mortgagee')} className={bigButton}>Add or change mortgagee<ChevronRight size={16} strokeWidth={2.4} /></button>}
+          </div>
+          <div className="mt-[12px] grid grid-cols-2 gap-[20px]">
+            {policy.lienholders.filter((holder) => holder.kind === 'Mortgagee').map((holder) => <div key={holder.id} className={`${card} p-[22px]`}>
+              <div className="text-[14px] font-bold text-[#2f4a66]">{holder.position ?? 'First'} Mortgagee</div>
+              <div className="mt-[6px] text-[13px] font-medium text-[#1f2a33]">{holder.name}</div>
+              <div className="text-[12.5px] text-[#3d4b55]">{holder.address}</div>
+              <div className="mt-[8px] text-[12.5px] text-[#3d4b55]">Loan # {holder.loanNumber || '—'}</div>
+              {holder.position !== 'Second' && <div className="mt-[4px] text-[12.5px] text-[#3d4b55]">{policy.billTo === 'Mortgagee' ? 'Premium billed to this mortgagee (escrow)' : 'Receives a copy of the declarations and notices'}</div>}
+            </div>)}
+            {!policy.lienholders.some((holder) => holder.kind === 'Mortgagee') && <div className={`${card} p-[22px] text-[13px] text-[#5c6670]`}>No mortgagee on this policy. Add the mortgage company if the home is financed.</div>}
+          </div>
+        </>}
 
         <div className="mt-[30px] flex items-center justify-between">
           <h2 className={sectionTitle}>Coverages</h2>

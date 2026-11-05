@@ -71,7 +71,8 @@ export function queryFromText(text: string): PolicyQuery {
 export function roleFor(entry: PolicyRecord, viewed: PolicyRecord): string {
   if (samePerson(entry, viewed)) return 'Primary named insured';
   const driver = driversOf(viewed).find((person) => lower(`${person.firstName} ${person.lastName}`) === lower(entry.insured.name));
-  return driver?.relationship && driver.relationship !== 'Insured' ? driver.relationship : 'Household member';
+  if (driver?.relationship && driver.relationship !== 'Insured') return driver.relationship;
+  return entry.source.kind === 'commercial' || viewed.source.kind === 'commercial' ? 'Related account' : 'Household member';
 }
 
 export function statusText(policy: PolicyRecord): string {
@@ -181,7 +182,7 @@ export interface CoverageRow { label: string; value: string; premium: number; he
 
 const HELP: Record<string, string> = {
   'Bodily Injury & Property Damage Liability': "Pays for injuries and damage the driver causes to other people and their property, up to the limits shown. Required by state law.",
-  'Uninsured/Underinsured Motorist': 'Pays for injuries to the insured household when the at-fault driver has no insurance or not enough insurance.',
+  'Uninsured/Underinsured Motorist': 'Pays for injuries to the people in the insured vehicle when the at-fault driver has no insurance or not enough insurance.',
   'Uninsured Motorist Property Damage': 'Pays for damage to the insured vehicle caused by an uninsured driver.',
   'Personal Injury Protection': 'No-fault coverage for medical bills and lost wages for the insured, regardless of who caused the accident.',
   'Medical Payments': 'Pays medical bills for the driver and passengers after an accident, regardless of fault, up to the limit per person.',

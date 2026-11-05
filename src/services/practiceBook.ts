@@ -1,11 +1,16 @@
-// The agency's reference book of business: five fictitious customers (one a two-policy household), one in each of the states
+// The agency's reference book of business: fictitious personal customers (including the Whitfield
+// household with two auto policies, HO3, HO4, HO6 and a landlord policy) and a commercial account
+// (Commercial Auto, Trucking and Commercial Property), one in each of the states
 // where Progressive holds the largest auto share (TX, FL, WI, OR, NH). Every name, address, phone
 // number, email and VIN is invented. Each account is issued years ago and lived forward day by day
 // on the policy engine (bills, on-time payments, renewals, a late payment, claims, policy changes),
 // so its history, documents and current status are what a real account would show.
 import type { AgentProfile, BillPlan, QuoteData } from '@/types/quote';
 import type { ClaimRecord, PolicyRecord } from '@/types/policy';
-import type { ProductKey } from '@/products/types';
+import type { CommercialKey, ProductKey, ProductQuote } from '@/products/types';
+import type { CommercialDriver } from '@/commercial/types';
+import { createCommercialQuote, recalculateCommercial } from '@/commercial/engine';
+import { buildCommercialPolicies } from '@/services/policyBuilder';
 import { createDriver, createSampleQuote, generateQuoteNumber } from '@/context/quoteStore';
 import { createProductQuote } from '@/products/engine';
 import { buildPolicies, generatePolicyNumber } from '@/services/policyBuilder';
@@ -19,7 +24,7 @@ import { addMonths, formatDate, parseDate } from '@/utils/dates';
 /** Reference accounts are recognised by this email domain. */
 export const PRACTICE_DOMAIN = '@practice.example.com';
 /** Bumped when the reference accounts change, so saved books rebuild them. */
-export const PRACTICE_VERSION = 4;
+export const PRACTICE_VERSION = 8;
 
 interface AccountEvent {
   /** Days before today (negative numbers are not used). */
@@ -39,6 +44,12 @@ interface PracticeCustomer {
   priorTerms: number;
   autoPlan: BillPlan;
   renters?: BillPlan;
+  /** A Homeowners (HO3) policy on the mailing address, with a first mortgagee. */
+  home?: { yearBuilt: string; squareFeet: string; dwellingValue: string; roofYear: string; mortgagee: string; mortgageeAddress: string; loanNumber: string; escrow: boolean };
+  /** A Condo Unit Owners (HO6) policy on a second home. */
+  condo?: { street: string; city: string; zip: string; unitNumber: string; yearBuilt: string; unitValue: string; personalProperty: string; occupancy: string; mortgagee?: Mortgagee };
+  /** A Landlord (DP-3) policy on a rental property. */
+  landlord?: { street: string; city: string; zip: string; families: string; yearBuilt: string; squareFeet: string; roofYear: string; dwellingValue: string; mortgagee?: Mortgagee };
   scenario: 'nonpayment' | 'underwriting' | 'renewal' | 'active';
   /** Products whose current-term bills go unpaid (nonpayment scenario). */
   unpaid?: ProductKey[];
@@ -49,9 +60,11 @@ interface PracticeCustomer {
   household?: {
     spouse: { first: string; dob: string };
     vehicle: [year: string, make: string, model: string, body: string]; vin: string;
-    motorcycle: { year: string; make: string; model: string; type: string; cc: string; value: string; vin: string; startDaysAgo: number; cancelDaysAgo: number };
+    motorcycle?: { year: string; make: string; model: string; type: string; cc: string; value: string; vin: string; startDaysAgo: number; cancelDaysAgo: number };
   };
 }
+
+interface Mortgagee { name: string; address: string; loanNumber: string }
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 const uid = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -76,6 +89,21 @@ function claim(input: Omit<ClaimRecord, 'id' | 'lossDate' | 'reportedOn' | 'clai
 }
 
 const CUSTOMERS: PracticeCustomer[] = [
+  // The Whitfield household (North Carolina): Avery holds Auto #1 (with spouse Robin), the home (HO3),
+  // a beach condo (HO6) and a duplex rental (Landlord); son Parker, at college, holds Auto #2 and Renters.
+  {
+    state: 'North Carolina', first: 'Avery', last: 'Whitfield', dob: '06/14/1977', street: '2240 Sample Oak Dr', city: 'Raleigh', zip: '27606', phone: '919-555-0173', vehicle: ['2021', 'Ford', 'F-150', 'SuperCrew Pickup'], vin: '1FTFW1E52MF000808',
+    producer: 'Lane, Parker', currentTermDaysAgo: fixed(60), priorTerms: 10, autoPlan: 'EFT', scenario: 'active',
+    household: { spouse: { first: 'Robin', dob: '02/03/1979' }, vehicle: ['2022', 'Honda', 'Accord', 'Sedan 4D'], vin: '1HGCV1F14NA000909' },
+    home: { yearBuilt: '2008', squareFeet: '2600', dwellingValue: '480000', roofYear: '2019', mortgagee: 'Triangle Sample Bank, ISAOA/ATIMA', mortgageeAddress: 'PO Box 3300, Raleigh, NC 27602', loanNumber: 'TSB-7720115', escrow: true },
+    condo: { street: '15 Practice Dunes Way', city: 'Wilmington', zip: '28403', unitNumber: '4B', yearBuilt: '2001', unitValue: '60000', personalProperty: '40000', occupancy: 'Owner occupied (secondary/seasonal)', mortgagee: { name: 'Coastal Sample Credit Union, ISAOA', address: '800 Harbor Example Rd, Wilmington, NC 28401', loanNumber: 'CSC-301442' } },
+    landlord: { street: '612 Example Mill St', city: 'Durham', zip: '27701', families: '2 (duplex)', yearBuilt: '1994', squareFeet: '2100', roofYear: '2015', dwellingValue: '285000' },
+    events: [{ daysAgo: 500, product: 'auto', apply: note('Policy change processed', 'Added 2022 Honda Accord for Robin Whitfield. Additional premium $212.40.') }],
+  },
+  {
+    state: 'North Carolina', first: 'Parker', last: 'Whitfield', dob: '09/22/2004', street: '1180 Campus Sample Ave Apt 3C', city: 'Greensboro', zip: '27403', phone: '336-555-0148', vehicle: ['2018', 'Honda', 'Civic', 'Sedan 4D'], vin: '19XFC2F56JE001010',
+    producer: 'Lane, Parker', currentTermDaysAgo: fixed(25), priorTerms: 3, autoPlan: 'CARD', renters: 'MAIL', scenario: 'active',
+  },
   {
     state: 'Texas', first: 'Jordan', last: 'Rivers', dob: '03/14/1988', street: '410 Maple Practice Ct', city: 'Austin', zip: '78745', phone: '512-555-0181', vehicle: ['2022', 'Honda', 'Accord', 'Sedan 4D'], vin: '1HGCV1F30NA000101',
     producer: 'Lane, Parker', currentTermDaysAgo: fixed(45), priorTerms: 8, autoPlan: 'MAIL', scenario: 'nonpayment', unpaid: ['auto'], lateMonth: '03/2024',
@@ -102,6 +130,7 @@ const CUSTOMERS: PracticeCustomer[] = [
   {
     state: 'New Hampshire', first: 'Morgan', last: 'Ellis', dob: '09/09/1990', street: '15 Harbor Demo St', city: 'Manchester', zip: '03104', phone: '603-555-0119', vehicle: ['2020', 'Honda', 'CR-V', 'Utility 4D'], vin: '5J6RW2H50LA000505',
     producer: 'Reyes, Dana', currentTermDaysAgo: fixed(30), priorTerms: 12, autoPlan: 'EFT', scenario: 'active',
+    home: { yearBuilt: '2004', squareFeet: '1850', dwellingValue: '365000', roofYear: '2018', mortgagee: 'Granite Sample Mortgage Co., ISAOA/ATIMA', mortgageeAddress: 'PO Box 4400, Concord, NH 03302', loanNumber: 'GSM-4471209', escrow: true },
     household: {
       spouse: { first: 'Jamie', dob: '05/17/1991' },
       vehicle: ['2017', 'Hyundai', 'Tucson', 'Utility 4D'], vin: 'KM8J3CA46HU000606',
@@ -138,7 +167,7 @@ function quoteFor(customer: PracticeCustomer, agent: AgentProfile, effectiveDate
       ? { ...base.additional, continuousInsurance: 'Yes', priorCarrier: 'Other standard carrier', priorLimits: '100/300', priorYears: '3 years or more' }
       : { ...base.additional, continuousInsurance: 'No', priorCarrier: '', priorLimits: '', priorYears: '' },
     pointOfSale: { ...base.pointOfSale, billPlan: customer.autoPlan, paymentMethod: customer.autoPlan.startsWith('EFT') ? 'Bank account (EFT)' : 'Credit/debit card via secure IVR', documentDelivery: 'In person (print and sign)' },
-    products: customer.renters ? ['auto', 'renters'] : ['auto'],
+    products: ['auto', ...(customer.renters ? ['renters' as const] : []), ...(customer.home ? ['homeowners' as const] : []), ...(customer.condo ? ['condo' as const] : []), ...(customer.landlord ? ['landlord' as const] : [])],
     productQuotes: {},
   };
   if (customer.renters) {
@@ -146,7 +175,36 @@ function quoteFor(customer: PracticeCustomer, agent: AgentProfile, effectiveDate
     renters.units[0].values = { ...renters.units[0].values, sameAsMailing: 'Yes', garagingZip: customer.zip, dwelling: 'Apartment', dogBreed: 'No', verifiedNone: 'Yes', personalProperty: '20000' };
     renters.answers = { priorInsurer: 'State Farm', priorLiability: '$300,000', claims: '0 Claims', esign: 'Yes', packagePolicy: 'LAVA Auto 100/300', securedSubdivision: 'No', paperless: 'Yes' };
     renters.billPlan = customer.renters;
-    quote.productQuotes = { renters };
+    quote.productQuotes = { ...quote.productQuotes, renters };
+  }
+  if (customer.home) {
+    const home = customer.home;
+    const homeowners = createProductQuote('homeowners', generateQuoteNumber(), customer.zip);
+    homeowners.units[0].values = { ...homeowners.units[0].values, sameAsMailing: 'Yes', garagingZip: customer.zip, yearBuilt: home.yearBuilt, squareFeet: home.squareFeet, construction: 'Frame', stories: '2', roofType: 'Architectural Shingle', roofYear: home.roofYear, protection: 'Protected (hydrant within 1,000 ft, fire station within 5 miles)', alarm: 'Yes', dwellingValue: home.dwellingValue };
+    homeowners.answers = { priorInsurer: 'Other', claims: '0 Claims', occupancy: 'No', hazards: 'No', mortgageeBilled: home.escrow ? 'Yes' : 'No' };
+    homeowners.interests = [{ id: uid('mg'), name: home.mortgagee, address: home.mortgageeAddress, loanNumber: home.loanNumber, position: 'First' }];
+    homeowners.billPlan = 'PIF';
+    quote.productQuotes = { ...quote.productQuotes, homeowners };
+    quote.additional = { ...quote.additional, primaryResidence: 'Single Family Home' };
+  }
+  const mortgagees = (mortgagee?: Mortgagee): ProductQuote['interests'] => (mortgagee ? [{ id: uid('mg'), name: mortgagee.name, address: mortgagee.address, loanNumber: mortgagee.loanNumber, position: 'First' }] : []);
+  if (customer.condo) {
+    const unit = customer.condo;
+    const condo = createProductQuote('condo', generateQuoteNumber(), unit.zip);
+    condo.units[0].values = { ...condo.units[0].values, sameAsMailing: 'No', street: unit.street, city: unit.city, garagingZip: unit.zip, unitNumber: unit.unitNumber, yearBuilt: unit.yearBuilt, construction: 'Masonry', floor: '2nd - 4th floor', occupancy: unit.occupancy, sprinklered: 'Yes', unitValue: unit.unitValue, personalProperty: unit.personalProperty };
+    condo.answers = { priorInsurer: 'Other', claims: '0 Claims', masterPolicy: 'Yes', mortgageeBilled: 'No' };
+    condo.interests = mortgagees(unit.mortgagee);
+    condo.billPlan = 'PIF';
+    quote.productQuotes = { ...quote.productQuotes, condo };
+  }
+  if (customer.landlord) {
+    const rental = customer.landlord;
+    const landlord = createProductQuote('landlord', generateQuoteNumber(), rental.zip);
+    landlord.units[0].values = { ...landlord.units[0].values, sameAsMailing: 'No', street: rental.street, city: rental.city, garagingZip: rental.zip, families: rental.families, yearBuilt: rental.yearBuilt, squareFeet: rental.squareFeet, construction: 'Frame', roofType: 'Asphalt Shingle', roofYear: rental.roofYear, protection: 'Protected (hydrant within 1,000 ft, fire station within 5 miles)', lease: 'Annual lease (12 months or longer)', dwellingValue: rental.dwellingValue };
+    landlord.answers = { priorInsurer: 'Other', claims: '0 Claims', vacant: 'No', tenantsScreened: 'Yes', mortgageeBilled: 'No' };
+    landlord.interests = mortgagees(rental.mortgagee);
+    landlord.billPlan = 'EFT';
+    quote.productQuotes = { ...quote.productQuotes, landlord };
   }
   return { ...quote, ratedSignature: ratingSignature(quote) };
 }
@@ -154,7 +212,7 @@ function quoteFor(customer: PracticeCustomer, agent: AgentProfile, effectiveDate
 /** The spouse's own motorcycle policy at the same address (household account). */
 function motorcycleQuoteFor(customer: PracticeCustomer, agent: AgentProfile, effectiveDate: string, agentCode: string): QuoteData {
   const household = customer.household!;
-  const bike = household.motorcycle;
+  const bike = household.motorcycle!;
   const base = quoteFor({ ...customer, household: undefined }, agent, effectiveDate, agentCode);
   const first = household.spouse.first;
   const motorcycle = createProductQuote('motorcycle', generateQuoteNumber(), customer.zip);
@@ -196,6 +254,66 @@ function live(policy: PolicyRecord, customer: PracticeCustomer, start: string, d
   return next;
 }
 
+// ------------------------------------------------------------------ Commercial account
+
+const BUSINESS = {
+  name: 'Sample Ridge Logistics LLC', dba: '', entity: 'Limited Liability Company (LLC)', fein: '000000000', industry: 'Courier/Local Delivery', operations: 'Local delivery, regional dry-van freight (for-hire, own MC authority) and a warehouse/distribution building',
+  yearsInBusiness: 'More than 5 years', street: '4100 Example Commerce Blvd', city: 'Charlotte', state: 'North Carolina', zip: '28208', contact: 'Morgan Example', contactTitle: 'Owner', phone: '704-555-0191', email: `dispatch.sampleridge${PRACTICE_DOMAIN}`,
+  revenue: '3200000', employees: '18', payroll: '1100000',
+};
+
+function commercialDriver(first: string, last: string, dob: string, licenseType: string, experience: string, role: string, hireDate: string): CommercialDriver {
+  return { id: uid('cdr'), firstName: first, lastName: last, dob, licenseState: 'North Carolina', licenseNumber: `000${dob.slice(-4)}${first.length}`, licenseType, experience, violations: '0', accidents: '0', role, hireDate };
+}
+
+/** Sample Ridge Logistics: Commercial Auto (service fleet), Trucking (for-hire) and Commercial Property (warehouse). */
+function commercialPracticeQuote(effectiveDate: string) {
+  const keys: CommercialKey[] = ['commercialAuto', 'trucking', 'property'];
+  const quote = createCommercialQuote(keys);
+  const unit = (key: CommercialKey, values: Record<string, string>, coverages: Record<string, string> = {}) => ({ id: uid('unit'), values, coverages });
+  const product = (key: CommercialKey, patch: Partial<ProductQuote>) => ({ ...quote.productQuotes[key]!, ...patch, coverages: { ...quote.productQuotes[key]!.coverages, ...(patch.coverages ?? {}) } });
+  return recalculateCommercial({
+    ...quote,
+    business: { ...quote.business, ...BUSINESS },
+    drivers: [commercialDriver('Morgan', 'Example', '03/11/1975', 'CDL - Class A', 'More than 5 years', 'Owner / Officer', '03/01/2015'), commercialDriver('Taylor', 'Sample', '07/29/1983', 'CDL - Class A', 'More than 5 years', 'Employee', '06/15/2018'), commercialDriver('Jesse', 'Practice', '12/02/1990', 'Standard (Class C)', '2 to 5 years', 'Employee', '09/01/2021')],
+    answers: {
+      priorCoverage: 'Yes', priorCarrier: 'Sample Mutual Insurance Co.', priorPremium: '24000', losses: '0', cancelled: 'No', bankruptcy: 'No',
+      subsidiaryOf: 'No', subsidiaries: 'No', safetyProgram: 'Yes', flammables: 'No', otherVentures: 'No', abuse: 'No', fraud: 'No', codeViolations: 'No', judgment: 'No', trust: 'No', foreign: 'No', drones: 'No',
+    },
+    effectiveDate,
+    paymentMethod: 'Bank account (EFT)',
+    paymentAuthorized: 'Yes',
+    signedApplication: true,
+    confirmedAccuracy: true,
+    productQuotes: {
+      commercialAuto: product('commercialAuto', {
+        units: [
+          unit('commercialAuto', { type: 'Pickup Truck', vin: '1FTEW1EP0NK001111', year: '2022', make: 'Ford', model: 'F-150', gvw: 'Light (10,000 lbs or less)', radius: 'Local (up to 50 miles)', use: 'Service (carries tools/equipment to job sites)', value: '42000', garagingZip: '28208' }, { comp: '1000', coll: '1000', rental: 'None', towing: 'Yes' }),
+          unit('commercialAuto', { type: 'Box Truck', vin: '54DC4W1B7MS001212', year: '2021', make: 'Isuzu', model: 'NPR-HD', gvw: 'Medium (10,001 - 20,000 lbs)', radius: 'Local (up to 50 miles)', use: 'Retail (delivers to households)', value: '58000', garagingZip: '28208' }, { comp: '1000', coll: '1000', rental: '100', towing: 'Yes' }),
+        ],
+        coverages: { liability: '1000000', um: '300000', medpay: '5000', hnoa: 'Yes' },
+        answers: { hazmat: 'No', interstate: 'No', mvrReview: 'Yes', notOwned: 'No', employeeAutos: 'No', maintenance: 'Yes', leasedToOthers: 'No', customized: 'No', familyUse: 'No', hiringStandard: 'Yes', noWorkComp: 'No', unscheduled: 'No', passengers: 'No', holdHarmless: 'No' },
+        billPlan: 'EFT',
+      }),
+      trucking: product('trucking', {
+        units: [
+          unit('trucking', { type: 'Tractor (Semi)', vin: '1FUJHHDR2NLN01313', year: '2022', make: 'Freightliner', model: 'Cascadia', gvw: '33,001 - 80,000 lbs', radius: '101 - 300 miles (regional)', value: '135000', garagingZip: '28208' }, { comp: '2500', coll: '2500' }),
+          unit('trucking', { type: 'Dry Van Trailer', vin: '1GRAA0621MB701414', year: '2021', make: 'Great Dane', model: 'Champion 53 ft', gvw: '33,001 - 80,000 lbs', radius: '101 - 300 miles (regional)', value: '38000', garagingZip: '28208' }, { comp: '1000', coll: '1000' }),
+        ],
+        coverages: { liability: '1000000', um: '300000', cargo: '100000', cargoDeductible: '2500', interchange: '30000' },
+        answers: { authority: 'Own MC authority (for-hire)', operation: 'Interstate (crosses state lines)', usdot: '0000001', mc: '000001', commodity: 'General freight (dry van)', authorityYears: '3 years or more', eld: 'Yes', csaAlerts: 'No', safetyRating: 'Satisfactory', drugTesting: 'Yes', screening: 'Yes', turnover: '0 - 1', ownerOperators: 'No', broker: 'No', priorAuthority: 'No', area: 'East of the Rocky Mountains' },
+        billPlan: 'EFT',
+      }),
+      property: product('property', {
+        units: [unit('property', { street: '4100 Example Commerce Blvd', city: 'Charlotte', garagingZip: '28208', occupancy: 'Warehouse / storage', construction: 'Masonry Non-Combustible (ISO 4)', yearBuilt: '1999', squareFeet: '18000', stories: '1', interest: 'Owner', occupiedPct: '100%', roofType: 'Single-ply membrane (TPO/EPDM)', roofYear: '2016', wiringYear: '2012', plumbingYear: '2012', heatingYear: '2019', floodZone: 'X (minimal risk)', sprinklered: 'Yes', protectionClass: '2', alarm: 'Central Station Monitored', buildingValue: '1850000', bppValue: '320000', biLimit: '250000' })],
+        coverages: { causes: 'Special', valuation: 'Replacement Cost', coinsurance: '90', deductible: '2500', windDeductible: 'Same', equipmentBreakdown: 'Yes' },
+        answers: { vacancy: 'No', knobTube: 'No', otherTenants: 'No other tenants', cooking: 'No commercial cooking' },
+        billPlan: 'PIF',
+      }),
+    },
+  });
+}
+
 /** Issues the reference accounts and lives them forward to `day`. */
 export function buildPracticeBook(agent: AgentProfile, agentCode: string, day: string): PolicyRecord[] {
   const records: PolicyRecord[] = [];
@@ -215,7 +333,7 @@ export function buildPracticeBook(agent: AgentProfile, agentCode: string, day: s
         records.push({ ...next, practiceVersion: PRACTICE_VERSION });
       }
       const bike = customer.household?.motorcycle;
-      if (bike) {
+      if (bike && customer.household) {
         const bikeStart = shiftDate(day, -bike.startDaysAgo);
         setClock(parseDate(bikeStart));
         const quote = motorcycleQuoteFor(customer, agent, bikeStart, agentCode);
@@ -225,6 +343,14 @@ export function buildPracticeBook(agent: AgentProfile, agentCode: string, day: s
           records.push({ ...live(opened, { ...customer, scenario: 'active', unpaid: [] }, bikeStart, day, day, [cancel]), practiceVersion: PRACTICE_VERSION });
         }
       }
+    }
+    // The commercial account: issued four years ago, renewed each year, paid on time.
+    const commercialStart = shiftDate(day, -(365 * 3 + 120));
+    setClock(parseDate(commercialStart));
+    const stub = { ...CUSTOMERS[CUSTOMERS.length - 1], scenario: 'active' as const, unpaid: [], lateMonth: undefined };
+    for (const record of buildCommercialPolicies(commercialPracticeQuote(commercialStart), agentCode, 'Reyes, Dana', commercialStart)) {
+      const opened = { ...record, claims: [], history: [...record.history, { id: uid('his'), date: commercialStart, event: 'Reference account', detail: 'Fictitious commercial customer included in the agency book for reference and practice.' }] };
+      records.push({ ...live(opened, stub, commercialStart, day, day, []), practiceVersion: PRACTICE_VERSION });
     }
   } finally {
     setClock(parseDate(day));

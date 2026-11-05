@@ -15,6 +15,7 @@ import { ProductModal } from '@/components/ProductModal';
 import { currentProduct } from '@/products/active';
 import { productLabel, productTab } from '@/products/configs';
 import { activeProducts } from '@/utils/ratingEngine';
+import { PracticeCaseBar } from '@/training/PracticeCaseBar';
 
 const focusable = 'outline-none focus-visible:shadow-[0_0_0_2px_#fff,0_0_0_4px_#e87722]';
 
@@ -159,6 +160,7 @@ export function WizardLayout({ children, stepHeader = false, keyboardToggle = fa
         <main ref={main} className="min-w-0 flex-1 overflow-auto print:overflow-visible">
           <div className="mx-auto w-fit max-w-full print:w-auto">
             {stepHeader && <StepHeader />}
+            {!flow && <PracticeCaseBar />}
             {strip}
             <div className={`px-[20px] print:p-0 ${contentClassName}`}>
               {hint && <StepHint text={hint} />}

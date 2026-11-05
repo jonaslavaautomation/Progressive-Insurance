@@ -6,7 +6,7 @@ import { BUSINESS_FIELDS, COMMERCIAL_CONFIGS, YEARS_FACTOR } from '@/commercial/
 import { createUnit, newUnitId } from '@/products/engine';
 import { round2 } from '@/products/helpers';
 import { buildBillPlans, territoryFactor } from '@/utils/ratingEngine';
-import { ageOn, ratingDate } from '@/utils/dates';
+import { ageOn, parseDate, ratingDate } from '@/utils/dates';
 
 export const COMMERCIAL_STEPS = ['BUSINESS INFORMATION', 'PRODUCTS', 'DRIVERS', 'UNDERWRITING', 'COVERAGES/BILL PLANS', 'FINAL SALE'] as const;
 
@@ -15,7 +15,7 @@ export function generateCommercialQuoteNumber(): string {
 }
 
 export function createCommercialDriver(): CommercialDriver {
-  return { id: `cdr-${Math.random().toString(36).slice(2, 9)}`, firstName: '', lastName: '', dob: '', licenseState: 'North Carolina', licenseNumber: '', licenseType: '', experience: '', violations: '', accidents: '' };
+  return { id: `cdr-${Math.random().toString(36).slice(2, 9)}`, firstName: '', lastName: '', dob: '', licenseState: 'North Carolina', licenseNumber: '', licenseType: '', experience: '', violations: '', accidents: '', role: '', hireDate: '' };
 }
 
 function createCommercialProduct(key: CommercialKey, zip: string): ProductQuote {
@@ -31,7 +31,7 @@ export function createCommercialQuote(products: CommercialKey[]): CommercialQuot
   return {
     products,
     business,
-    drivers: products.includes('commercialAuto') ? [createCommercialDriver()] : [],
+    drivers: products.some((key) => COMMERCIAL_CONFIGS[key].motorized) ? [createCommercialDriver()] : [],
     productQuotes: Object.fromEntries(products.map((key) => [key, createCommercialProduct(key, '')])),
     answers: {},
     effectiveDate: '',
@@ -50,7 +50,7 @@ export function addCommercialProducts(quote: CommercialQuote, keys: CommercialKe
   const fresh = keys.filter((key) => !quote.products.includes(key));
   const productQuotes = { ...quote.productQuotes };
   for (const key of fresh) productQuotes[key] = createCommercialProduct(key, quote.business.zip ?? '');
-  return { ...quote, products: [...quote.products, ...fresh], productQuotes, drivers: fresh.includes('commercialAuto') && !quote.drivers.length ? [createCommercialDriver()] : quote.drivers, active: fresh[0] ?? quote.active };
+  return { ...quote, products: [...quote.products, ...fresh], productQuotes, drivers: fresh.some((key) => COMMERCIAL_CONFIGS[key].motorized) && !quote.drivers.length ? [createCommercialDriver()] : quote.drivers, active: fresh[0] ?? quote.active };
 }
 
 export function newCommercialUnitId(): string {
@@ -58,15 +58,19 @@ export function newCommercialUnitId(): string {
 }
 
 export function commercialContext(quote: CommercialQuote, values: Record<string, string>): FieldContext {
-  return { values, autoVehicles: [], mailingZip: quote.business.zip ?? '' };
+  return { values, autoVehicles: [], mailingZip: quote.business.zip ?? '', business: quote.business };
 }
 
 export function commercialDriverFactor(driver: CommercialDriver, effectiveDate: string): number {
   const age = ageOn(driver.dob, ratingDate(effectiveDate));
   let value = age === null ? 1 : age < 25 ? 1.6 : age < 30 ? 1.15 : age >= 65 ? 1.1 : 1;
-  value *= ({ 'Less than 3 years': 1.3, '3 to 5 years': 1.08 } as Record<string, number>)[driver.experience] ?? 1;
+  value *= ({ 'Less than 2 years': 1.35, '2 to 5 years': 1.08 } as Record<string, number>)[driver.experience] ?? 1;
   value *= ({ '1': 1.2, '2': 1.45, '3 or more': 1.8 } as Record<string, number>)[driver.violations] ?? 1;
   value *= ({ '1': 1.3, '2 or more': 1.7 } as Record<string, number>)[driver.accidents] ?? 1;
+  // Drivers hired in the last 12 months have no driving record with the business yet.
+  const hired = parseDate(driver.hireDate);
+  const rated = parseDate(effectiveDate) ?? new Date();
+  if (hired && rated.getTime() - hired.getTime() < 365 * 864e5) value *= 1.05;
   return value;
 }
 

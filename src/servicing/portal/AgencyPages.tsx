@@ -16,6 +16,7 @@ import { formatCurrency } from '@/utils/masks';
 import { SUPPORTED_STATES, rulesFor, type StateRules } from '@/data/states';
 import { notify } from '@/services/activity';
 import { parseDate } from '@/utils/dates';
+import { PracticeCases } from '@/training/PracticeCases';
 
 // ------------------------------------------------------------------ Product guides
 
@@ -203,6 +204,7 @@ export function SupportPage() {
   return <PortalLayout crumbs={[{ label: 'Support' }, { label: 'Help & Contact' }]}>
     <PageTitle title="Help & Contact" />
     <Notice text={notice} onDismiss={() => setNotice('')} />
+    <PracticeCases />
     <div className="mt-5 grid max-w-[980px] grid-cols-2 gap-6">
       <section className="rounded-[3px] border border-[#cfdbe3] p-4 text-[13px] leading-[20px]"><h2 className="mb-2 text-[15px] font-bold text-[#003865]">Agency support</h2><p>Phone: <b>1-800-555-0123</b> (training line)</p><p>Hours: Monday - Friday 8 a.m. - 9 p.m., Saturday 9 a.m. - 5 p.m. ET</p><p>Claims 24/7: <b>1-800-555-0199</b> (training line)</p></section>
       <section className="rounded-[3px] border border-[#cfdbe3] p-4 text-[13px] leading-[20px]"><h2 className="mb-2 text-[15px] font-bold text-[#003865]">Trainer Mode</h2><p>Shows the training clock (move time forward to run bills, late fees, notices and renewals), training hints, sample customers and trainer tools.</p>

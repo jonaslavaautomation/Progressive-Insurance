@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { BI_PD, COLL_DEDUCTIBLES, ETE, MED_PAY, OTC_DEDUCTIBLES, TOWING, UMPD, UM_BI, optionLabel } from '@/data/options';
 import { useQuote } from '@/context/useQuote';
 import { formatCurrency } from '@/utils/masks';
-import { SCORE_TIER_NAMES, TERM_MONTHS, driverName, incidentLabel, vehicleName } from '@/utils/ratingEngine';
+import { SCORE_TIER_NAMES, driverName, incidentLabel, vehicleName } from '@/utils/ratingEngine';
 import { paymentSchedule, planPaymentText } from '@/utils/paymentSchedule';
 import { activeProducts, hasAuto } from '@/utils/ratingEngine';
 import { PRODUCT_CONFIGS } from '@/products/configs';
@@ -54,7 +54,7 @@ export function QuoteSheet({ kind = 'binder', agencyAddress = 'Agency default' }
     <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
       <Field name="Quote Number" value={summary.quoteNumber} />
       <Field name="Policy Number" value={summary.policyNumber || '—'} />
-      <Field name={`Policy Period (${TERM_MONTHS} months)`} value={`${summary.effectiveDate} – ${summary.expirationDate}`} />
+      <Field name={`Policy Period (${summary.termMonths} months)`} value={`${summary.effectiveDate} – ${summary.expirationDate}`} />
       <Field name={bound ? 'Bound On' : 'Prepared On'} value={policy.boundAt || new Date().toLocaleDateString('en-US')} />
     </div>
 

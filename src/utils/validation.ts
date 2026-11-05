@@ -7,8 +7,10 @@ import { ageOn, daysBetween, parseDate, ratingDate, today } from '@/utils/dates'
 import { activeProducts, driverName, hasAuto, isRated, ratedDrivers, vehicleLabel } from '@/utils/ratingEngine';
 import type { FieldDef, OtherProductKey } from '@/products/types';
 import { PRODUCT_CONFIGS } from '@/products/configs';
+import { MORTGAGEE_PRODUCTS } from '@/products/property';
 import { fieldContext, isProductRated } from '@/products/engine';
 import { DEFAULT_STATE, rulesFor } from '@/data/states';
+import { practiceError } from '@/training/homeCases';
 
 export type FieldErrors = Record<string, string>;
 
@@ -206,6 +208,9 @@ function validateCoverages(quote: QuoteData, errors: FieldErrors) {
   const productsUnrated = otherProducts(quote).filter((key) => !isProductRated(key, quote));
   if (!hasAuto(quote)) {
     if (productsUnrated.length && !Object.keys(errors).length) errors.rate = 'Click RECALCULATE to rate the quote before continuing to PORTFOLIO.';
+    // Practice cases: a rated quote with the wrong premium cannot continue.
+    const practice = !Object.keys(errors).length ? practiceError(quote) : '';
+    if (practice) errors['training.check'] = practice;
     return;
   }
   const { coverages } = quote;
@@ -233,6 +238,8 @@ function validateCoverages(quote: QuoteData, errors: FieldErrors) {
   });
   if ((!isRated(quote) || productsUnrated.length) && !Object.keys(errors).length) errors.rate = 'Click RECALCULATE to rate the quote before continuing to PORTFOLIO.';
   required(errors, 'pos.billPlan', quote.pointOfSale.billPlan, 'Select a Bill Plan.');
+  const practice = !Object.keys(errors).length ? practiceError(quote) : '';
+  if (practice) errors['training.check'] = practice;
 }
 
 function validatePointOfSale(quote: QuoteData, errors: FieldErrors) {
@@ -322,6 +329,8 @@ function validateQuestions(quote: QuoteData, key: OtherProductKey, errors: Field
     if (!answers[question.key]) errors[fieldId] = `${config.name}: answer "${question.label.replace(/[:*]+$/, '').replace(/[:*]+$/, '')}"`;
     else if (question.ineligibleIf && answers[question.key] === question.ineligibleIf) errors[fieldId] = `${config.name}: ${question.ineligibleMessage}`;
   }
+  // Escrow billing goes to the first mortgagee, so one must be on the quote.
+  if (MORTGAGEE_PRODUCTS.includes(key) && answers.mortgageeBilled === 'Yes' && !quote.productQuotes[key]?.interests.some((entry) => entry.position === 'First')) errors[`answer.${key}.mortgageeBilled`] = `${config.name}: escrow billing needs a First Mortgagee. Add it on the Products page.`;
 }
 
 function validateProductCoverages(quote: QuoteData, key: OtherProductKey, errors: FieldErrors) {
@@ -336,6 +345,8 @@ function validateProductCoverages(quote: QuoteData, key: OtherProductKey, errors
     // Collision requires Comprehensive, as on Auto.
     if (unit.coverages.coll && unit.coverages.coll !== 'None' && unit.coverages.comp === 'None') errors[`coverage.${key}.${unit.id}.comp`] = `${config.unitLabel} ${index + 1}: Collision requires Comprehensive coverage.`;
   });
+  // The mortgage company pays escrowed premium once a year.
+  if (MORTGAGEE_PRODUCTS.includes(key) && product.answers.mortgageeBilled === 'Yes' && product.billPlan !== 'PIF') errors[`billPlan.${key}`] = `${config.name}: a mortgagee-billed (escrow) policy is paid in full by the mortgage company. Select Pay In Full.`;
 }
 
 const validators = [validateNamedInsured, validateProducts, validateHousehold, validateAdditional, validateCoverages, () => undefined, validatePointOfSale, validateFinalSale];

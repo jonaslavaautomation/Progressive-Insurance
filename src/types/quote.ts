@@ -111,7 +111,7 @@ export interface Driver {
   incidents: Incident[];
 }
 
-export const CROSS_SELL_PRODUCTS = ['Renters', 'Motorcycle', 'Boat', 'Motor Home', 'Travel Trailer', 'Commercial Lines'] as const;
+export const CROSS_SELL_PRODUCTS = ['Auto', 'Homeowners', 'Renters', 'Motorcycle', 'Boat', 'Motor Home', 'Travel Trailer', 'Commercial Lines'] as const;
 export type CrossSellProduct = (typeof CROSS_SELL_PRODUCTS)[number];
 
 export interface AdditionalDetails {
@@ -190,6 +190,8 @@ export interface PolicyInfo {
   policyNumber: string;
   boundAt: string;
   comment: string;
+  /** Practice quote case this quote is graded against (Training Center). */
+  trainingCase?: string;
 }
 
 export interface PointOfSale {
@@ -221,6 +223,8 @@ export interface QuoteData {
 }
 
 export interface QuoteSummary {
+  /** Policy term in months (6 for Auto, 12 for the other products). */
+  termMonths: number;
   quoteNumber: string;
   policyNumber: string;
   effectiveDate: string;

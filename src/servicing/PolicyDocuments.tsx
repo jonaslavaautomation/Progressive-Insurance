@@ -53,7 +53,7 @@ function IdCards({ policy }: { policy: PolicyRecord }) {
 function DeclarationsBody({ policy }: { policy: PolicyRecord }) {
   return <>
     <Block title="Policy information"><Rows rows={[['Policy number', policy.policyNumber], ['Product', policy.productName], ['Policy period', `${policy.effectiveDate} to ${policy.expirationDate} (12:01 a.m. standard time)`], ['Term', `${policy.termNumber} (${policy.termMonths} months)`], ['Bill plan', policy.billPlanName], ['Total policy premium', money(policy.termPremium)], ['Agent', `${policy.agentName} · ${policy.agentCode}`]]} /></Block>
-    <Block title="Named insured"><Rows rows={[['Name', policy.insured.name], ['Mailing address', `${policy.insured.street}, ${policy.insured.cityStateZip}`], ...(policy.drivers.length ? [['Rated drivers/operators', policy.drivers.join(', ')] as [string, string]] : [])]} /></Block>
+    <Block title="Named insured"><Rows rows={[['Name', policy.insured.name], ['Mailing address', `${policy.insured.street}, ${policy.insured.cityStateZip}`], ...(policy.drivers.length ? [[policy.source.kind === 'commercial' ? 'Scheduled drivers' : 'Rated drivers/operators', policy.drivers.join(', ')] as [string, string]] : [])]} /></Block>
     <Block title="Coverages and premium"><Coverages policy={policy} /></Block>
     <Block title="Discounts">{policy.discounts.length ? policy.discounts.join(' · ') : 'None'}</Block>
   </>;
@@ -69,14 +69,14 @@ function DocumentBody({ policy, document }: { policy: PolicyRecord; document: Po
       return <DeclarationsBody policy={policy} />;
     case 'Policy Packet':
       return <>
-        <Block title="Policy packet"><Rows rows={[['Copy', String(data.copy)], ['Issued', document.date], ['Contents', ['Declarations Page', ...(['auto', 'motorcycle', 'motorhome', 'trailer', 'commercialAuto'].includes(policy.product) && data.copy !== 'Lienholder Copy' ? ['Insurance Identification Cards'] : []), ...(data.copy !== 'Lienholder Copy' ? ['Application for Insurance (summary)'] : [])].join(' · ')]]} /></Block>
+        <Block title="Policy packet"><Rows rows={[['Copy', String(data.copy)], ['Issued', document.date], ['Contents', ['Declarations Page', ...(['auto', 'motorcycle', 'motorhome', 'trailer', 'snowmobile', 'commercialAuto', 'trucking'].includes(policy.product) && data.copy !== 'Lienholder Copy' ? ['Insurance Identification Cards'] : []), ...(data.copy !== 'Lienholder Copy' ? ['Application for Insurance (summary)'] : [])].join(' · ')]]} /></Block>
         <DeclarationsBody policy={policy} />
       </>;
     case 'ID Cards':
       return <Block title="Identification cards"><IdCards policy={policy} /></Block>;
     case 'Application':
       return <>
-        <Block title="Application summary"><Rows rows={[['Applicant', policy.insured.name], ['Date of birth', policy.insured.dob], ['Product', policy.productName], ['Requested effective date', policy.effectiveDate], ['Document delivery', String(data.delivery || '—')], ['e-Signature status', policy.esign]]} /></Block>
+        <Block title="Application summary"><Rows rows={[['Applicant', policy.insured.name], ...(policy.source.kind === 'commercial' ? [['Entity', policy.source.quote.business.entity || '—'], ['Business type', policy.source.quote.business.industry || '—']] as [string, string][] : [['Date of birth', policy.insured.dob]] as [string, string][]), ['Product', policy.productName], ['Requested effective date', policy.effectiveDate], ['Document delivery', String(data.delivery || '—')], ['e-Signature status', policy.esign]]} /></Block>
         <Block title="Applicant statement">I have read this application and the statements in it are true to the best of my knowledge. I understand the policy may be void if any material information is misrepresented.</Block>
         <section className="mt-6 grid grid-cols-2 gap-8 text-[10px] text-[#52616c]"><div className="border-t border-[#28343c] pt-1">{policy.esign === 'Signed' ? `e-Signed by ${policy.insured.name}` : 'Applicant signature / date'}</div><div className="border-t border-[#28343c] pt-1">Producer signature / date</div></section>
       </>;

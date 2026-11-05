@@ -51,7 +51,7 @@ export interface QuoteContextValue {
   loadSampleQuote: () => void;
   resetQuote: () => void;
   /** Starts a fresh quote for the products chosen in Select Product(s). */
-  startQuote: (products: ProductKey[]) => void;
+  startQuote: (products: ProductKey[], options?: { quoteState?: StateName; trainingCase?: string }) => void;
   addProducts: (products: ProductKey[]) => void;
   suspendProduct: (key: ProductKey) => void;
   setActiveProduct: (key: ProductKey) => void;

@@ -1,7 +1,7 @@
 // Commercial Lines quote wizard: Business Information → Products → Drivers → Underwriting →
 // Coverages/Bill Plans → Final Sale. Reuses the personal-lines wizard chrome and product editors.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BriefcaseBusiness, CheckCircle2, ClipboardList, Lightbulb, RotateCw, Store, Truck, UserRound, type LucideIcon } from 'lucide-react';
+import { BriefcaseBusiness, CheckCircle2, Container, Factory, ClipboardList, Lightbulb, RotateCw, Store, Truck, UserRound, type LucideIcon } from 'lucide-react';
 import type { CommercialKey, ProductUnit } from '@/products/types';
 import type { CommercialDriver, CommercialQuote } from '@/commercial/types';
 import { useQuote } from '@/context/useQuote';
@@ -10,7 +10,7 @@ import { runWithSpinner } from '@/services/processing';
 import { notify } from '@/services/activity';
 import { NotificationBell } from '@/components/NotificationBell';
 import { PacketButtons } from '@/servicing/PacketButtons';
-import { BUSINESS_FIELDS, COMMERCIAL_CONFIGS, DRIVER_ACCIDENTS, DRIVER_EXPERIENCE, DRIVER_LICENSE_TYPES, DRIVER_VIOLATIONS, SHARED_QUESTIONS } from '@/commercial/configs';
+import { BUSINESS_FIELDS, COMMERCIAL_CONFIGS, DRIVER_ACCIDENTS, DRIVER_EXPERIENCE, DRIVER_LICENSE_TYPES, DRIVER_ROLES, DRIVER_VIOLATIONS, GENERAL_QUESTIONS, SHARED_QUESTIONS } from '@/commercial/configs';
 import { COMMERCIAL_STEPS, addCommercialProducts, commercialContext, commercialTotals, createCommercialDriver, isCommercialRated, rateCommercial, recalculateCommercial } from '@/commercial/engine';
 import { incompleteCommercialSteps, validateCommercialStep } from '@/commercial/validation';
 import { createUnit } from '@/products/engine';
@@ -22,13 +22,13 @@ import { useFieldError, useStepValidation } from '@/components/wizard/stepValida
 import { ConfigField, CoveragesEditor, QuestionsCard, UnitsEditor } from '@/components/products/Editors';
 import { BillPlansCard } from '@/steps/CoveragesStep';
 
-const ICONS: Record<CommercialKey, LucideIcon> = { commercialAuto: Truck, bop: Store, mgmt: BriefcaseBusiness };
+const ICONS: Record<CommercialKey, LucideIcon> = { commercialAuto: Truck, trucking: Container, bop: Store, property: Factory, mgmt: BriefcaseBusiness };
 const focusable = 'outline-none focus-visible:shadow-[0_0_0_2px_#fff,0_0_0_4px_#e87722]';
 const HINTS = [
   'Commercial Lines starts with the business, not a person. Enter the legal name from the business registration, the entity type and the industry class. The class drives eligibility and rates for every product.',
   'Schedule every vehicle titled to the business (Commercial Auto), every premises location (BOP/GL) and the organization details (Management Liability). VINs can be added now or at Final Sale.',
-  'List every employee who drives a business vehicle. Vehicles over 26,000 lbs GVW need at least one CDL driver, and drivers with 3 or more violations are not acceptable.',
-  'Underwriting questions decide eligibility. A "Yes" to hazardous materials, prior cancellation or bankruptcy means the risk must be referred to underwriting.',
+  'List every owner, employee and family member who drives a business vehicle, with the date hired. Interstate drivers must be 21 or older. Vehicles over 26,000 lbs GVW need at least one CDL driver, and drivers with 3 or more violations are not acceptable.',
+  'These are the commercial application questions (ACORD 125 general information plus each product section). Answer every one with the business owner. A referral answer stops the quote for underwriting review.',
   'Choose limits that meet the customer’s contract requirements (often $1,000,000), then click RECALCULATE. Commercial policies are written for 12 months.',
   'Collect VINs, confirm the down payment and have an authorized officer or owner sign the application before binding. Each product is issued as its own policy.',
 ];
@@ -37,7 +37,7 @@ const HINTS = [
 function sampleBusiness(quote: CommercialQuote): CommercialQuote {
   let next: CommercialQuote = {
     ...quote,
-    business: { ...quote.business, name: 'Sample Contracting LLC', dba: '', entity: 'Limited Liability Company (LLC)', fein: '000000000', industry: quote.business.industry || 'Artisan Contractor - Carpentry', operations: 'Residential remodeling and repair', yearsInBusiness: '3 to 5 years', street: '200 Practice Avenue', city: 'Raleigh', state: 'North Carolina', zip: '27604', contact: 'Sam Example', phone: '919-555-0199', email: 'office@example.com', revenue: '850000', employees: '6', payroll: '310000' },
+    business: { ...quote.business, name: 'Sample Contracting LLC', dba: '', entity: 'Limited Liability Company (LLC)', fein: '000000000', industry: quote.business.industry || 'Artisan Contractor - Carpentry', operations: 'Residential remodeling and repair', yearsInBusiness: '3 to 5 years', street: '200 Practice Avenue', city: 'Raleigh', state: 'North Carolina', zip: '27604', contact: 'Sam Example', contactTitle: 'Owner', phone: '919-555-0199', email: 'office@example.com', revenue: '850000', employees: '6', payroll: '310000', subcontractCost: '60000' },
     effectiveDate: quote.effectiveDate,
   };
   next = { ...next, productQuotes: Object.fromEntries(Object.entries(next.productQuotes).map(([key, product]) => [key, { ...product!, units: product!.units.map((unit) => ({ ...unit, values: { ...unit.values, garagingZip: unit.values.garagingZip || '27604' } })) }])) };
@@ -110,7 +110,7 @@ function ProductsContent({ quote }: { quote: CommercialQuote }) {
   if (!product) return null;
   const config = COMMERCIAL_CONFIGS[key];
   const mapUnits = unitSetter(updateCommercial, key);
-  return <div className="mt-[20px]"><UnitsEditor key={key} config={config} quote={product} ctxFor={(values) => commercialContext(quote, values)} idPrefix={`cunit.${key}`} icon={ICONS[key]}
+  return <div className="mt-[20px]"><UnitsEditor key={key} config={config} quote={product} listTitle={`Scheduled ${config.unitPlural}`} ctxFor={(values) => commercialContext(quote, values)} idPrefix={`cunit.${key}`} icon={ICONS[key]}
     onValues={(unitId, values) => mapUnits((units) => units.map((unit) => (unit.id === unitId ? { ...unit, values: { ...unit.values, ...values } } : unit)))}
     onAdd={() => { const unit = createUnit(config, quote.business.zip ?? ''); mapUnits((units) => [...units, unit]); return unit.id; }}
     onRemove={(unitId) => mapUnits((units) => (units.length > 1 ? units.filter((unit) => unit.id !== unitId) : units))} /></div>;
@@ -126,6 +126,8 @@ function DriverCard({ driver, index, count, onChange, onRemove }: { driver: Comm
     <WizardSelect id={id('licenseState')} label="License State:*" options={US_STATES} value={driver.licenseState} onChange={(licenseState) => onChange({ licenseState })} divider />
     <WizardField id={id('licenseNumber')} label="License Number:*" value={driver.licenseNumber} onChange={(licenseNumber) => onChange({ licenseNumber: licenseNumber.toUpperCase() })} />
     <WizardSelect id={id('licenseType')} label="License Type:*" options={DRIVER_LICENSE_TYPES} value={driver.licenseType} onChange={(licenseType) => onChange({ licenseType })} tag />
+    <WizardSelect id={id('role')} label="Relationship to Business:*" options={DRIVER_ROLES} value={driver.role} onChange={(role) => onChange({ role })} divider />
+    <WizardField id={id('hireDate')} label="Date Hired:*" mask="date" placeholder="MM/DD/YYYY" value={driver.hireDate} onChange={(hireDate) => onChange({ hireDate })} />
     <WizardSelect id={id('experience')} label="Commercial Driving Experience:*" options={DRIVER_EXPERIENCE} value={driver.experience} onChange={(experience) => onChange({ experience })} tag />
     <WizardSelect id={id('violations')} label="Moving Violations (3 years):*" options={DRIVER_VIOLATIONS} value={driver.violations} onChange={(violations) => onChange({ violations })} tag divider />
     <WizardSelect id={id('accidents')} label="At-Fault Accidents (3 years):*" options={DRIVER_ACCIDENTS} value={driver.accidents} onChange={(accidents) => onChange({ accidents })} tag />
@@ -136,7 +138,7 @@ function DriversContent({ quote }: { quote: CommercialQuote }) {
   const { updateCommercial } = useQuote();
   const noneError = useFieldError('cdriver.none');
   const cdlError = useFieldError('cdriver.cdl');
-  if (!quote.products.includes('commercialAuto')) return <div className="max-w-[880px] rounded-[3px] border border-[#cfdbe3] bg-white px-[20px] py-[18px] text-[14px]"><div className="flex items-center gap-2 font-bold"><UserRound size={18} />No driver schedule required</div><p className="mt-1 text-[#5c6670]">A driver schedule is only needed when Commercial Auto is on the quote. Continue to Underwriting.</p></div>;
+  if (!quote.products.some((key) => COMMERCIAL_CONFIGS[key].motorized)) return <div className="max-w-[880px] rounded-[3px] border border-[#cfdbe3] bg-white px-[20px] py-[18px] text-[14px]"><div className="flex items-center gap-2 font-bold"><UserRound size={18} />No driver schedule required</div><p className="mt-1 text-[#5c6670]">A driver schedule is only needed when Commercial Auto is on the quote. Continue to Underwriting.</p></div>;
   const setDriver = (driverId: string, patch: Partial<CommercialDriver>) => updateCommercial((current) => ({ ...current, drivers: current.drivers.map((driver) => (driver.id === driverId ? { ...driver, ...patch } : driver)) }));
   return <div className="max-w-[880px] space-y-[20px]">
     {(noneError || cdlError) && <div id={noneError ? 'cdriver.none' : 'cdriver.cdl'} tabIndex={-1} className="rounded-[3px] border border-[#c8102e] bg-[#fdf0f1] px-[16px] py-[10px] text-[14px] outline-none"><InlineError message={noneError ?? cdlError} /></div>}
@@ -148,7 +150,8 @@ function DriversContent({ quote }: { quote: CommercialQuote }) {
 function UnderwritingContent({ quote }: { quote: CommercialQuote }) {
   const { updateCommercial } = useQuote();
   return <div className="max-w-[880px] space-y-[20px]">
-    <QuestionsCard title="Business History" icon={ClipboardList} questions={SHARED_QUESTIONS} answers={quote.answers} ctx={commercialContext(quote, quote.answers)} idPrefix="cq.shared" onAnswer={(key, value) => updateCommercial((current) => ({ ...current, answers: { ...current.answers, [key]: value } }))} />
+    <QuestionsCard title="General Information" icon={BriefcaseBusiness} questions={GENERAL_QUESTIONS} answers={quote.answers} ctx={commercialContext(quote, quote.answers)} idPrefix="cq.shared" onAnswer={(key, value) => updateCommercial((current) => ({ ...current, answers: { ...current.answers, [key]: value } }))} />
+    <QuestionsCard title="Prior Carrier and Loss History" icon={ClipboardList} questions={SHARED_QUESTIONS} answers={quote.answers} ctx={commercialContext(quote, quote.answers)} idPrefix="cq.shared" onAnswer={(key, value) => updateCommercial((current) => ({ ...current, answers: { ...current.answers, [key]: value } }))} />
     {quote.products.map((key) => {
       const answers = quote.productQuotes[key]?.answers ?? {};
       return <QuestionsCard key={key} title={`${COMMERCIAL_CONFIGS[key].name} Underwriting`} icon={ICONS[key]} questions={COMMERCIAL_CONFIGS[key].questions} answers={answers} ctx={commercialContext(quote, answers)} idPrefix={`cq.${key}`} onAnswer={(question, value) => updateCommercial((current) => ({ ...current, productQuotes: { ...current.productQuotes, [key]: { ...current.productQuotes[key]!, answers: { ...current.productQuotes[key]!.answers, [question]: value } } } }))} />;
@@ -212,10 +215,10 @@ function FinalSaleContent({ quote }: { quote: CommercialQuote }) {
   const openAccount = useOpenAccount();
   const { errors, reveal } = useStepValidation();
   const totals = commercialTotals(quote);
-  const vehicles = quote.productQuotes.commercialAuto?.units ?? [];
+  const vehicles = (['commercialAuto', 'trucking'] as const).flatMap((key) => (quote.productQuotes[key]?.units ?? []).map((unit, index) => ({ key, unit, index })));
   const bound = quote.boundPolicyIds.map((id) => state.policies.find((policy) => policy.id === id)).filter((policy) => !!policy);
   const set = (patch: Partial<CommercialQuote>) => updateCommercial((current) => ({ ...current, ...patch }));
-  const setVin = (unitId: string, vin: string) => updateCommercial((current) => ({ ...current, productQuotes: { ...current.productQuotes, commercialAuto: { ...current.productQuotes.commercialAuto!, units: current.productQuotes.commercialAuto!.units.map((unit) => (unit.id === unitId ? { ...unit, values: { ...unit.values, vin } } : unit)) } } }));
+  const setVin = (key: 'commercialAuto' | 'trucking', unitId: string, vin: string) => updateCommercial((current) => ({ ...current, productQuotes: { ...current.productQuotes, [key]: { ...current.productQuotes[key]!, units: current.productQuotes[key]!.units.map((unit) => (unit.id === unitId ? { ...unit, values: { ...unit.values, vin } } : unit)) } } }));
   const incomplete = incompleteCommercialSteps(quote).filter((step) => step < 5);
   const bind = () => {
     if (incomplete.length) { window.alert(`Complete ${incomplete.map((step) => COMMERCIAL_STEPS[step]).join(', ')} before binding.`); return; }
@@ -229,7 +232,7 @@ function FinalSaleContent({ quote }: { quote: CommercialQuote }) {
   </div>;
   return <div className="max-w-[880px] space-y-[20px]">
     <WizardCard title="Premium Summary" split={false}>{totals.map((entry) => <WizardRow key={entry.key} label={`${COMMERCIAL_CONFIGS[entry.key].name} (Quote #${entry.quoteNumber})`} value={entry.rated ? `${formatCurrency(entry.plan.total)} · ${entry.plan.name} · ${entry.termMonths} months` : 'Needs RECALCULATE on Coverages/Bill Plans'} />)}<WizardRow strong label="Total premium, all products" value={formatCurrency(totals.reduce((sum, entry) => sum + entry.plan.total, 0))} /></WizardCard>
-    {vehicles.length > 0 && <WizardCard title="Vehicle VINs" subtitle="Required before binding Commercial Auto">{vehicles.map((unit, index) => <WizardField key={unit.id} id={`cfinal.vin.${unit.id}`} label={`Vehicle ${index + 1}: ${COMMERCIAL_CONFIGS.commercialAuto.describe(unit)}`} mask="vin" value={unit.values.vin ?? ''} onChange={(vin) => setVin(unit.id, vin)} />)}</WizardCard>}
+    {vehicles.length > 0 && <WizardCard title="Vehicle VINs" subtitle="Required before binding Commercial Auto and Trucking">{vehicles.map(({ key, unit, index }) => <WizardField key={unit.id} id={`cfinal.vin.${unit.id}`} label={`${COMMERCIAL_CONFIGS[key].unitLabel} ${index + 1}: ${COMMERCIAL_CONFIGS[key].describe(unit)}`} mask="vin" value={unit.values.vin ?? ''} onChange={(vin) => setVin(key, unit.id, vin)} />)}</WizardCard>}
     <WizardCard title="Payment" subtitle="Down payment for every product on this quote">
       <WizardSelect id="cfinal.paymentMethod" label="Down Payment Method:*" options={PAYMENT_METHODS} value={quote.paymentMethod} onChange={(paymentMethod) => set({ paymentMethod })} />
       <WizardSelect id="cfinal.paymentAuthorized" label="Payment authorized by the business?*" options={YES_NO} value={quote.paymentAuthorized} onChange={(paymentAuthorized) => set({ paymentAuthorized })} />
@@ -256,7 +259,7 @@ export function CommercialFlow() {
   };
   // An error on another product's tab switches the tab so the field can be focused.
   const onRevealField = (id: string) => {
-    const match = /^c(?:unit|cov|q)\.(commercialAuto|bop|mgmt)\./.exec(id);
+    const match = /^c(?:unit|cov|q)\.(commercialAuto|trucking|bop|property|mgmt)\./.exec(id);
     if (match && match[1] !== quote.active) updateCommercial((current) => ({ ...current, active: match[1] as CommercialKey }));
   };
   const Content = CONTENT[quote.step];

@@ -11,7 +11,7 @@ import { AddButton, AddLink, HelpDot, InlineError, RemoveButton, SelectControl, 
 import { useFieldError } from '@/components/wizard/stepValidation';
 
 const MASKS: Partial<Record<FieldDef['type'], Mask>> = { money: 'money', digits: 'number', zip: 'zip', vin: 'vin', hin: 'hin' };
-const EXTRA_LABELS: Record<string, string> = { hull: 'Physical Damage (Hull):', trailer: 'Boat Trailer:', fullTimer: "Full-Timer's Coverage:", filing: 'State/Federal Filing Fee:', minimum: 'Minimum Premium Adjustment:', property: 'Property (Building & Contents):', equipmentBreakdown: 'Equipment Breakdown:' };
+const EXTRA_LABELS: Record<string, string> = { dwelling: 'Dwelling (Coverages A-D):', unitValue: 'Dwelling / Walls-In (Coverage A):', personalProperty: 'Personal Property (Coverage C):', building: 'Building:', bpp: 'Business Personal Property:', businessIncome: 'Business Income & Extra Expense:', hull: 'Physical Damage (Hull):', trailer: 'Boat Trailer:', fullTimer: "Full-Timer's Coverage:", filing: 'State/Federal Filing Fee:', minimum: 'Minimum Premium Adjustment:', property: 'Property (Building & Contents):', equipmentBreakdown: 'Equipment Breakdown:' };
 
 export type ContextFor = (values: Record<string, string>) => FieldContext;
 
@@ -42,6 +42,37 @@ export function InterestedPartiesCard({ interests, onChange, title = 'Interested
       <input aria-label={`${title} address`} placeholder="Mailing address" value={draft.address} onChange={(event) => setDraft({ ...draft, address: event.target.value })} className={input} />
       {error && <InlineError message={error} />}
       <AddLink label={`Add ${title.replace(/s$/, '')}`} onClick={add} />
+    </div>
+  </WizardCard>;
+}
+
+/** Homeowners: the mortgage companies on the home, with loan number and lien position (first, second). */
+export function MortgageesCard({ mortgagees, onChange }: { mortgagees: InterestedParty[]; onChange: (mortgagees: InterestedParty[]) => void }) {
+  const open = (['First', 'Second'] as const).filter((position) => !mortgagees.some((entry) => entry.position === position));
+  const [draft, setDraft] = useState({ name: '', address: '', loanNumber: '' });
+  const [error, setError] = useState('');
+  const position = open[0];
+  const add = () => {
+    if (!position) return;
+    if (!draft.name.trim() || !draft.address.trim()) { setError('Enter the mortgage company name and mailing address.'); return; }
+    if (!/^[A-Za-z0-9-]{4,20}$/.test(draft.loanNumber.trim())) { setError('Enter the loan number (4 to 20 letters, digits or dashes).'); return; }
+    onChange([...mortgagees, { id: `mg-${Math.random().toString(36).slice(2, 9)}`, name: draft.name.trim(), address: draft.address.trim(), loanNumber: draft.loanNumber.trim(), position }]);
+    setDraft({ name: '', address: '', loanNumber: '' });
+    setError('');
+  };
+  const input = 'h-[38px] w-full rounded-[4px] border border-[#7b8a95] px-[12px] text-[14px] outline-none focus:border-[#003865] focus:shadow-[inset_0_0_0_1px_#003865,0_0_0_2px_#fff,0_0_0_4px_#e87722]';
+  return <WizardCard title="Mortgagees" split={false} className="w-[450px]">
+    <div className="space-y-[10px] px-[21px] py-[14px] text-[14px]">
+      <p className="text-[13px] text-[#5c6670]">Add the mortgage company in lien order. Use the exact mortgagee clause from the loan documents (for example &ldquo;Sample Bank, ISAOA/ATIMA&rdquo;). Mortgagees receive a copy of the declarations and every renewal or cancellation notice.</p>
+      {mortgagees.map((entry) => <div key={entry.id} className="flex items-start justify-between gap-2 rounded-[3px] border border-[#cfdbe3] px-3 py-2"><span><b>{entry.position} Mortgagee: {entry.name}</b><span className="block text-[13px] text-[#5c6670]">{entry.address}</span><span className="block text-[13px] text-[#5c6670]">Loan # {entry.loanNumber}</span></span><RemoveButton label={`Remove ${entry.name}`} onClick={() => onChange(mortgagees.filter((item) => item.id !== entry.id).map((item) => (entry.position === 'First' && item.position === 'Second' ? { ...item, position: 'First' } : item)))} /></div>)}
+      {position ? <>
+        <div className="text-[13px] font-bold text-[#003865]">{position} Mortgagee</div>
+        <input aria-label="Mortgagee name" placeholder="Mortgagee name and clause" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} className={input} />
+        <input aria-label="Mortgagee address" placeholder="Mailing address" value={draft.address} onChange={(event) => setDraft({ ...draft, address: event.target.value })} className={input} />
+        <input aria-label="Loan number" placeholder="Loan number" value={draft.loanNumber} onChange={(event) => setDraft({ ...draft, loanNumber: event.target.value })} className={input} />
+        {error && <InlineError message={error} />}
+        <AddLink label={`Add ${position} Mortgagee`} onClick={add} />
+      </> : <p className="text-[13px] text-[#5c6670]">First and second mortgagees are on file.</p>}
     </div>
   </WizardCard>;
 }

@@ -13,7 +13,7 @@ import { lookupVehicleDetails } from '@/data/vehicleCatalog';
 import type { Coverages, Vehicle } from '@/types/quote';
 import { kindForEvent, notify, setActivityContext } from '@/services/activity';
 import { noteSessionStart } from '@/services/session';
-import { productLabel } from '@/products/configs';
+import { productLabel, termMonthsFor } from '@/products/configs';
 import * as engine from '@/services/policyEngine';
 import { setClock } from '@/utils/clock';
 import { loadWithCar, loaderIconFor } from '@/services/carLoader';
@@ -130,16 +130,19 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
 
   const summary = useMemo<QuoteSummary>(() => {
     const effective = parseDate(state.policy.effectiveDate);
+    const products = state.products ?? ['auto'];
+    const months = products.includes('auto') ? TERM_MONTHS : termMonthsFor(products[0]);
     return {
       quoteNumber: state.policy.quoteNumber,
       policyNumber: state.policy.policyNumber,
       effectiveDate: state.policy.effectiveDate,
-      expirationDate: effective ? formatDate(addMonths(effective, TERM_MONTHS)) : '',
+      expirationDate: effective ? formatDate(addMonths(effective, months)) : '',
+      termMonths: months,
       totalPremium: plan.total,
       billPlanName: plan.name,
       discountsApplied: rating.appliedDiscounts,
     };
-  }, [state.policy, plan, rating]);
+  }, [state.policy, state.products, plan, rating]);
 
   const orderPointOfSale = useCallback(async () => {
     const requestId = stateRef.current.reports.requestId + 1;
@@ -198,10 +201,13 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'policiesIssued', records, boundAt: `${current.simDate} ${new Date().toLocaleTimeString('en-US')}` });
       for (const record of records) notify({ kind: 'bind', title: 'Policy issued', detail: `${record.productName} Policy #${record.policyNumber} bound for ${record.insured.name} (${record.state}), ${record.billPlanName}, ${record.termPremium.toFixed(2)}. Policy packet issued: Insured and Agent copies.`, target: { view: 'policy', policyId: record.id } });
     },
-    startQuote: (products) => {
+    startQuote: (products, options = {}) => {
       const zip = '';
-      dispatch({ type: 'startQuote', products, productQuotes: buildProductQuotes(products, zip), ...autoDefaults(stateRef.current.ui.quoteState) });
-      notify({ kind: 'quote', title: 'New quote started', detail: `${products.map(productLabel).join(', ')} quote started in ${stateRef.current.ui.quoteState}.`, target: { view: 'wizard' } });
+      const quoteState = options.quoteState ?? stateRef.current.ui.quoteState;
+      if (options.quoteState) dispatch({ type: 'setQuoteState', state: options.quoteState });
+      dispatch({ type: 'startQuote', products, productQuotes: buildProductQuotes(products, zip), ...autoDefaults(quoteState) });
+      if (options.trainingCase) dispatch({ type: 'updatePolicy', patch: { trainingCase: options.trainingCase } });
+      notify({ kind: 'quote', title: options.trainingCase ? 'Practice quote started' : 'New quote started', detail: `${options.trainingCase ? `Case ${options.trainingCase}: ` : ''}${products.map(productLabel).join(', ')} quote started in ${quoteState}.`, target: { view: 'wizard' } });
     },
     addProducts: (products) => {
       const current = stateRef.current;

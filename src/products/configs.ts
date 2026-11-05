@@ -2,6 +2,8 @@
 // Base premiums are annual (12-month term) training rates; factors mirror common carrier practice.
 import type { AnyProductKey, CommercialKey, CoverageDef, FieldDef, OtherProductKey, ProductConfig, ProductQuote, ProductRateResult, QuestionDef, RateContext, UnitPremium } from '@/products/types';
 import { COMMERCIAL_CONFIGS } from '@/commercial/configs';
+import { homeowners } from '@/products/homeowners';
+import { condo, landlord } from '@/products/property';
 import { YEAR_CHOICES, YES_NO_CHOICES, band, baseOf, choices, clamp, factor, money, pct, round2 } from '@/products/helpers';
 
 // ------------------------------------------------------------------ shared building blocks
@@ -416,7 +418,7 @@ const snowmobile: ProductConfig = {
   },
 };
 
-export const PRODUCT_CONFIGS: Record<OtherProductKey, ProductConfig> = { motorcycle, boat, motorhome, trailer, snowmobile, renters };
+export const PRODUCT_CONFIGS: Record<OtherProductKey, ProductConfig> = { motorcycle, boat, motorhome, trailer, snowmobile, renters, homeowners, condo, landlord };
 export const OTHER_PRODUCTS = Object.keys(PRODUCT_CONFIGS) as OtherProductKey[];
 
 /** Config for any non-Auto product, personal or commercial. */
