@@ -190,6 +190,8 @@ export interface PolicyInfo {
   policyNumber: string;
   boundAt: string;
   comment: string;
+  /** Practice quote case this quote is graded against (Training Center). */
+  trainingCase?: string;
 }
 
 export interface PointOfSale {

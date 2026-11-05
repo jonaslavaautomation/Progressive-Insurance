@@ -10,6 +10,7 @@ import { PRODUCT_CONFIGS } from '@/products/configs';
 import { MORTGAGEE_PRODUCTS } from '@/products/property';
 import { fieldContext, isProductRated } from '@/products/engine';
 import { DEFAULT_STATE, rulesFor } from '@/data/states';
+import { practiceError } from '@/training/homeCases';
 
 export type FieldErrors = Record<string, string>;
 
@@ -207,6 +208,9 @@ function validateCoverages(quote: QuoteData, errors: FieldErrors) {
   const productsUnrated = otherProducts(quote).filter((key) => !isProductRated(key, quote));
   if (!hasAuto(quote)) {
     if (productsUnrated.length && !Object.keys(errors).length) errors.rate = 'Click RECALCULATE to rate the quote before continuing to PORTFOLIO.';
+    // Practice cases: a rated quote with the wrong premium cannot continue.
+    const practice = !Object.keys(errors).length ? practiceError(quote) : '';
+    if (practice) errors['training.check'] = practice;
     return;
   }
   const { coverages } = quote;
@@ -234,6 +238,8 @@ function validateCoverages(quote: QuoteData, errors: FieldErrors) {
   });
   if ((!isRated(quote) || productsUnrated.length) && !Object.keys(errors).length) errors.rate = 'Click RECALCULATE to rate the quote before continuing to PORTFOLIO.';
   required(errors, 'pos.billPlan', quote.pointOfSale.billPlan, 'Select a Bill Plan.');
+  const practice = !Object.keys(errors).length ? practiceError(quote) : '';
+  if (practice) errors['training.check'] = practice;
 }
 
 function validatePointOfSale(quote: QuoteData, errors: FieldErrors) {
